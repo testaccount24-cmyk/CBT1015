@@ -1,0 +1,78 @@
+/* --------------------------*  REXX  *----------------------------- */
+/*                                                                   */
+/*  ERSTELLEN IEBUPDTE DATASET AUS PODATEI                           */
+/*  UBRAEUER   : 16.06.1997                                          */
+/*                                                                   */
+/* --------------------------*  REXX  *----------------------------- */
+
+PARSE SOURCE SRC.1  , /* ENVIRONMENT  (TSO)            */
+             SRC.2  , /* AUFRUF ALS (COMMAND)          */
+             SRC.3  , /* Program NAME (LUW97000)       */
+             SRC.4  , /* SYS00186 (TEMP FILE)          */
+             SRC.5  , /* AUFRUF AUS LIB (X.X.CLISTUDB) */
+             SRC.6  , /* ?                             */
+             SRC.7  , /* TSO                           */
+             SRC.8  , /* ISPF                          */
+             SRC.9  , /* ?                             */
+             SRC.10   /* ?                             */
+
+OK = MSG('OFF')
+DROP UPD.
+UPD.0 = 0
+RUN_ENV = LISTDSI(SYSUT1 FILE)
+PODSN = SRC.5
+OUT   = SRC.5 || '(SKELOUT)'
+
+OK = OUTTRAP('MEMLIST.')
+ADDRESS TSO  "LISTDS '"PODSN"' MEMBERS"
+ADDRESS TSO "FREE FI(PODSN)"
+DO I = 7 TO MEMLIST.0
+   MEM = STRIP(MEMLIST.I)
+   SELECT
+     WHEN STRIP(MEM)        =  SRC.3 THEN ITERATE
+     WHEN SUBSTR(MEM, 1, 2) =  'SK'  THEN NOP
+     WHEN SUBSTR(MEM, 1, 1) =  'P'   THEN NOP
+     OTHERWISE ITERATE
+    END
+
+   DSN    = SPACE(PODSN"("MEMLIST.I")", 0)
+   ADDRESS TSO "ALLOCATE FI(PODSN) DSN('"DSN"') SHR"
+   DROP POMEM.
+   ADDRESS TSO "EXECIO * DISKR PODSN (STEM POMEM. FINIS"
+   ADDRESS TSO "FREE FI(PODSN)"
+   IF  SUBSTR(MEM, 1, 2) =  'SK' THEN DO
+        OK = ADDLIST("SKEL_" || SPACE(MEMLIST.I,0) || ":" )
+    END
+   ELSE DO
+        OK = ADDLIST("PAN_" || SPACE(MEMLIST.I,0) || ":" )
+    END
+   DO POI = 1 TO POMEM.0
+      POMEM.POI = STRIP(POMEM.POI, "T")
+      IF LENGTH(POMEM.POI) > 64 THEN DO
+           OK = ADDLIST('Z="'SUBSTR(POMEM.POI, 1,64)'" ||,')
+           OK = ADDLIST('"' || SUBSTR(POMEM.POI, 65,16) || '"')
+           CZ = "OK=WL(Z)"
+           OK = ADDLIST(CZ)
+       END
+      ELSE DO
+           OK = ADDLIST('Z="'SUBSTR(POMEM.POI, 1,64)'"')
+           CZ = "OK=WL(Z)"
+           OK = ADDLIST(CZ)
+       END
+    END
+   OK = ADDLIST("    ")
+   OK = ADDLIST("RETURN")
+   OK = ADDLIST("    ")
+ END
+
+ADDRESS TSO "FREE FI(PODSN)"
+ADDRESS TSO "ALLOCATE FI(OUTDSN) DSN('"OUT"') SHR"
+ADDRESS TSO "EXECIO * DISKW OUTDSN (STEM UPD. FINIS"
+ADDRESS TSO "FREE FI(OUTDSN)"
+
+RETURN
+ADDLIST:
+  UPD.0    = UPD.0 + 1
+  UPDI     = UPD.0
+  UPD.UPDI = ARG(1)
+RETURN 0

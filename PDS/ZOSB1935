@@ -1,0 +1,3017 @@
+/* REXX */
+/*******************************************************************/
+/*                                                                 */
+/* ProgramNAME      : ZOSB1935                                     */
+/* AUSRUF           : Procedure  x=ZOSB1935(ssid,loc,ausw,obj)     */
+/* AUTHER           : ULRICH BRAEUER                               */
+/* FUNKTION         : AG : Performance SQL's anzeigen, ausfuehren  */
+/*                                                                 */
+/*******************************************************************/
+
+SIGNAL ON ERROR
+SIGNAL OFF FAILURE
+SIGNAL OFF ERROR
+
+PARSE SOURCE SRC.1  , /* ENVIRONMENT  (TSO)            */
+             SRC.2  , /* AUFRUF ALS (COMMAND)          */
+             SRC.3  , /* Program NAME (LUW97000)       */
+             SRC.4  , /* SYS00186 (TEMP FILE)          */
+             SRC.5  , /* AUFRUF AUS LIB (X.X.CLISTUDB) */
+             SRC.6  , /* ?                             */
+             SRC.7  , /* TSO                           */
+             SRC.8  , /* ISPF                          */
+             SRC.9  , /* ?                             */
+
+
+ENV        = "TSO"
+X          = MSG('OFF')
+USER       = USERID()
+SYSCATS    = "SYSCAT"
+SYSIBMS    = "SYSIBM"
+SYSIBMA    = "SYSIBMADM"
+SYSPROCA   = "SYSPROC"
+RECLEN     = 4096
+TRACKS     = 60
+DSNRECON   = "N"
+
+ADDRESS ISPEXEC 'VGET (DSNRECON) PROFILE'
+ADDRESS ISPEXEC 'VGET (TRACKS) PROFILE'
+ADDRESS ISPEXEC 'VGET (RECLEN) PROFILE'
+ADDRESS ISPEXEC 'VGET (SYSIBMS) PROFILE'
+ADDRESS ISPEXEC 'VGET (SYSCATS) PROFILE'
+ADDRESS ISPEXEC 'VGET (SYSIBMA) PROFILE'
+ADDRESS ISPEXEC 'VGET (SYSPROCA) PROFILE'
+ADDRESS ISPEXEC 'VGET (CURSQLID) PROFILE'
+ADDRESS ISPEXEC 'VGET (CURSCHEM) PROFILE'
+
+ADDRESS ISPEXEC 'VGET (UDBTRACE) PROFILE'
+IF UDBTRACE = 'ON' THEN TRACE R
+ELSE                    TRACE
+
+ssid        = arg(1)
+location    = arg(2)
+auswkz      = arg(3)
+lnr         = arg(4)
+tabnr       = arg(5)
+Do_All      = arg(6)
+eingabe     = arg(7)
+eingabe2    = arg(8)
+statement   = arg(9)
+object1     = arg(10)
+object2     = arg(11)
+object3     = arg(12)
+object4     = arg(13)
+object5     = arg(14)
+EDIT        = arg(15)
+Object_list = arg(16)
+DB2Vers     = arg(17)
+proclib     = arg(18)
+curnr       = arg(19)
+obj         = ""
+tablespace  = ""
+DBNAME      = ""
+STGROUP     = ""
+DB2_SSID    = SSID
+
+ANZAHL_ROWS       = 0
+
+parse value DB2Vers with DBENV 4 DBVers 6 DBRel 8 DBMod
+parse value Object1 with DB2_CREATOR1 '.' DB2_NAME1
+parse value Object2 with DB2_CREATOR2 '.' DB2_NAME2
+parse value Object3 with DB2_CREATOR3 '.' DB2_NAME3
+parse value Object4 with DB2_CREATOR4 '.' DB2_NAME4
+parse value Object5 with DB2_CREATOR5 '.' DB2_NAME5
+
+ADDRESS ISPEXEC 'VGET (CURSQLID) PROFILE'
+ADDRESS ISPEXEC 'VGET ('STRIP(SSID)'SQID) PROFILE'
+
+
+red   = '01'x                              /* Assign colors to       */
+blue  = '02'x                              /*   Attribute bytes      */
+green = '03'x                              /*   found in the data    */
+white = '04'x
+in1   = '05'x
+in2   = '06'x
+in3   = '07'x
+uid   = '08'x
+pwd   = '09'x
+endin = '3a'x
+keyw  = '3b'x
+keytab.0 = 5
+keytab.1 = in1
+keytab.2 = in2
+keytab.3 = in3
+keytab.4 = uid
+keytab.5 = pwd
+maxlines = 0                               /* set max number of lines*/
+dyndata  = ''                              /* initialize data        */
+cmddata  = ''                              /* initialize data        */
+curline = 1                                /* set current line #     */
+
+call Anzeige_Uebersicht
+
+Return 0
+
+Anzeige_Uebersicht:
+
+
+EnterBack = "Y"
+InitArea  = "Y"
+Do Forever
+   MSGLINE = ""
+   anzcols = 0
+   Drop  SL.
+   Sl.0    = 0
+   Auswahl          = "     "
+   Auswahl_Val      = ""
+
+   area.0  = 27
+   area.1  = white"Performance SQL :   "
+   area.2  = white" "
+   area.3  = white" "keyw"Auswahl    :  "in1 ||Auswahl ||endin
+   area.4  = white"      1 .)  Foreignkeys without Indexes          "
+   area.5  = white"      2 .)  Foreignkeys without Indexes with Create",
+                  "Index Statement "
+   area.6  = white"      3 .)  Tablespaces without FULL ImageCopy   "
+   area.7  = white"      4 .)  Tables without Clustering index      "
+   area.8  = white"      5 .)  Identify objects that prevent a " ,
+                  " drop column "
+   area.9  = white"      6 .)  Free Older Package Versions          "
+   area.10 = white"      7 .)  tablespace that are not UTS        "
+   area.11 = white"      71.)  ALTER Tablespaces that are not UTS "
+   area.12 = white"      8 .)  Tablespaces without Tables           "
+   area.13 = white"      9 .)  Tablespaces in a Pending state "
+   area.14 = white"     10 .)  Tables without Index                 "
+   area.15 = white"     11 .)  Genarate Grant on table              "
+   area.16 = white"     111.)  copy permissions                     "
+   area.17 = white"     12 .)  Generate Compress Tablespace         "
+   area.18 = white"     13 .)  more changes from last runstats    "
+   area.19 = white"     14 .)  Copy Runstats from a table to a other "
+   area.20 = white"     15 .)  Generate Crossload                     "
+   area.21 = white"     16 .)  ADD  RESTRICT ON DROP                  "
+   area.22 = white"     17 .)  DROP RESTRICT ON DROP                  "
+   area.23 = white"     18 .)  Generate REORG on Directory TS         "
+   area.24 = white"     19 .)  Generate INSERT SELECT FROM            "
+   area.25 = white"  "
+   area.26 = white"  "
+   area.27 = white"  "
+
+   Call Anzeige_Dyn_Panel
+
+   Select
+      when  PF   = 'PF03'               THEN RETURN 4
+      when  PF   = 'PF04'               THEN EXIT 4
+      when  RESP = "ENTER"              Then NOP
+      Otherwise Iterate
+    End
+
+   EDIT     = "Y"
+                                   SQLADMAUTH
+   select
+       when Auswahl_Val   =  1  Then Call Auswahl_1
+       when Auswahl_Val   =  2  Then Call Auswahl_2
+       when Auswahl_Val   =  3  Then Call Auswahl_3
+       when Auswahl_Val   =  4  Then Call Auswahl_4
+       when Auswahl_Val   =  5  Then Call Auswahl_5
+       when Auswahl_Val   =  6  Then Call Auswahl_6
+       when Auswahl_Val   =  7  Then Call Auswahl_7
+       when Auswahl_Val   =  71 Then Call Auswahl_71
+       when Auswahl_Val   =  8  Then Call Auswahl_8
+       when Auswahl_Val   =  9  Then Call Auswahl_9
+       when Auswahl_Val   = 10  Then Call Auswahl_10
+       when Auswahl_Val   = 11  Then Call Auswahl_11
+       when Auswahl_Val   = 111 Then Call Auswahl_111
+       when Auswahl_Val   = 12  Then Call Auswahl_12
+       when Auswahl_Val   = 13  Then Call Auswahl_13
+       when Auswahl_Val   = 14  Then Call Auswahl_14
+       when Auswahl_Val   = 15  Then Call Auswahl_15
+       when Auswahl_Val   = 16  Then Call Auswahl_16
+       when Auswahl_Val   = 17  Then Call Auswahl_17
+       when Auswahl_Val   = 18  Then Call Auswahl_18
+       when Auswahl_Val   = 19  Then Call Auswahl_19
+       otherwise EDIT     = "N"
+    End
+
+   IF EDIT ="Y"  THEN Do
+      Call Edit_Stmt
+    End
+End
+
+Return
+
+Auswahl_1:     /*  Foreignkeys without Indexes */
+
+OPF   = PF
+ORESP = RESP
+
+Schema = Left(' ', 30, ' '   )
+
+area.0  = 4
+area.2  = white"Foreignkeys without Indexes : "
+area.3  = white" "keyw"Schema     :  "in1 ||Schema ||endin
+area.4  = white"  "
+
+Call Anzeige_Dyn_Panel
+
+If PF   = 'PF03'  | PF = 'PF04' Then do
+   PF   = OPF
+   RESP = ORESP
+   EDIT = "N"
+   return
+ End
+
+PF   = OPF
+RESP = ORESP
+
+Schema_val  = Strip(Schema_val)
+ok = NSL("WITH   CREATOR_TAB ( CREATOR                                ")
+ok = NSL("              ) AS                                          ")
+ok = NSL("              ( SELECT '"Schema_val"' FROM SYSIBM.SYSDUMMY1 ")
+ok = NSL("              )                                             ")
+ok = NSL(",  FKTAB (TBCREATOR                                         ")
+ok = NSL("         ,TBNAME                                            ")
+ok = NSL("         ,RELNAME                                           ")
+ok = NSL("         ,FK_COLS                                           ")
+ok = NSL("          ) AS  (                                           ")
+ok = NSL("          SELECT CREATOR                                    ")
+ok = NSL("               , TBNAME                                     ")
+ok = NSL("               , RELNAME                                    ")
+ok = NSL("     ,  REPLACE(                                            ")
+ok = NSL("            REPLACE(                                        ")
+ok = NSL("           CAST(XMLSERIALIZE(XMLAGG(XMLELEMENT(NAME "COLS", ")
+ok = NSL("                                         COLNAME CONCAT ' ' ")
+ok = NSL("                                        )                   ")
+ok = NSL("                                 ORDER BY  CREATOR          ")
+ok = NSL("                                         , TBNAME           ")
+ok = NSL("                                         , RELNAME          ")
+ok = NSL("                                         , COLSEQ           ")
+ok = NSL("                        ) AS CLOB(32000)                    ")
+ok = NSL("                    )                                       ")
+ok = NSL("               AS VARCHAR(32000) )                          ")
+ok = NSL("           , '</COLS>','')                                  ")
+ok = NSL("           , '<COLS>','')                                   ")
+ok = NSL("   FROM SYSIBM.SYSFOREIGNKEYS                               ")
+ok = NSL("   WHERE   CREATOR IN (SELECT CREATOR                       ")
+ok = NSL("                       FROM   CREATOR_TAB                   ")
+ok = NSL("                                     )                      ")
+ok = NSL("   GROUP BY CREATOR                                         ")
+ok = NSL("          , TBNAME                                          ")
+ok = NSL("          , RELNAME                                         ")
+ok = NSL("   )                                                        ")
+ok = NSL("                                                            ")
+ok = NSL("                                                            ")
+ok = NSL(",  INDEXTAB (TBCREATOR, TBNAME                              ")
+ok = NSL("        , IXNAME, IXCREATOR, IX_COLS)   AS (                ")
+ok = NSL("       SELECT  IX.TBCREATOR                                 ")
+ok = NSL("             , IX.TBNAME                                    ")
+ok = NSL("            , KEY.IXNAME                                    ")
+ok = NSL("            , KEY.IXCREATOR                                 ")
+ok = NSL(" ,  REPLACE(                                                ")
+ok = NSL("        REPLACE(                                            ")
+ok = NSL("       CAST(XMLSERIALIZE(XMLAGG(XMLELEMENT(NAME "COLS",     ")
+ok = NSL("                                    KEY.COLNAME CONCAT ' '  ")
+ok = NSL("                                        )                   ")
+ok = NSL("                                  ORDER BY IX.TBCREATOR     ")
+ok = NSL("                                         , IX.TBNAME        ")
+ok = NSL("                                         , KEY.IXNAME       ")
+ok = NSL("                                         , KEY.IXCREATOR    ")
+ok = NSL("                                         , KEY.COLSEQ       ")
+ok = NSL("                        ) AS CLOB(32000)                    ")
+ok = NSL("                    )                                       ")
+ok = NSL("               AS VARCHAR(32000) )                          ")
+ok = NSL("           , '</COLS>','')                                  ")
+ok = NSL("           , '<COLS>','')                                   ")
+ok = NSL("  FROM SYSIBM.SYSKEYS KEY                                   ")
+ok = NSL("  INNER JOIN SYSIBM.SYSINDEXES IX                           ")
+ok = NSL("  ON  IX.CREATOR  = KEY.IXCREATOR                           ")
+ok = NSL("  AND IX.NAME     = KEY.IXNAME                              ")
+ok = NSL("  WHERE   TBCREATOR IN (SELECT CREATOR                      ")
+ok = NSL("                        FROM   CREATOR_TAB                  ")
+ok = NSL("                       )                                    ")
+ok = NSL("  And Exists (select 1 from SYSIBM.SYSFOREIGNKEYS fk        ")
+ok = NSL("              Where fk.creator     = ix.tbcreator           ")
+ok = NSL("              and  fk.tbname      = ix.tbname               ")
+ok = NSL("              )                                             ")
+ok = NSL("                                                            ")
+ok = NSL("   GROUP BY IX.TBCREATOR, IX.TBNAME                         ")
+ok = NSL("          , KEY.IXNAME, KEY.IXCREATOR                       ")
+ok = NSL("   )                                                        ")
+ok = NSL("                                                            ")
+ok = NSL("                                                            ")
+ok = NSL("SELECT DISTINCT fkt.TBCREATOR                               ")
+ok = NSL("              , fkt.TBNAME                                  ")
+ok = NSL("              , fkt.RELNAME                                 ")
+ok = NSL("              , fkt.FK_COLS                                 ")
+ok = NSL("              , BIGINT(TB.CARDF) AS CARDF                   ")
+ok = NSL("  FROM FKTAB FKT                                            ")
+ok = NSL("   INNER JOIN INDEXTAB IX                                   ")
+ok = NSL("   ON    FKT.TBCREATOR = IX.TBCREATOR                       ")
+ok = NSL("   AND   FKT.TBNAME    = IX.TBNAME                          ")
+ok = NSL("   INNER JOIN SYSIBM.SYSTABLES TB                           ")
+ok = NSL("   ON    FKT.TBCREATOR = TB.CREATOR                         ")
+ok = NSL("   AND   FKT.TBNAME    = TB.NAME                            ")
+ok = NSL("   WHERE NOT EXISTS (SELECT 1                               ")
+ok = NSL("                     FROM  INDEXTAB IXT                     ")
+ok = NSL("                     WHERE FKT.TBCREATOR = IXT.TBCREATOR    ")
+ok = NSL("                     AND   FKT.TBNAME    = IXT.TBNAME       ")
+ok = NSL("        AND FKT.FK_COLS =" || ,
+         " SUBSTR(IX_COLS, 1, LENGTH(FKT.FK_COLS ))  ")
+
+ok = NSL("        )                                                   ")
+ok = NSL("-- AND TB.CARDF > 1000                                      ")
+ok = NSL("  ORDER BY 1, 2, 3                                          ")
+ok = NSL("  ;                                                         ")
+
+
+Return
+
+
+Auswahl_2:     /*  Foreignkeys without Indexes mit create */
+
+OPF   = PF
+ORESP = RESP
+
+Schema = Left(' ', 30, ' '   )
+
+area.0  = 4
+area.2  = white"Foreignkeys without Indexes mit Create Index : "
+area.3  = white" "keyw"Schema     :  "in1 ||Schema ||endin
+area.4  = white"  "
+
+Call Anzeige_Dyn_Panel
+
+If PF   = 'PF03'  | PF = 'PF04' Then do
+   PF   = OPF
+   RESP = ORESP
+   EDIT = "N"
+   return
+ End
+
+PF   = OPF
+RESP = ORESP
+
+Schema_val  = Strip(Schema_val)
+OK = NSL("WITH   CREATOR_TAB ( CREATOR                                ")
+OK = NSL("              ) AS                                          ")
+OK = NSL("              ( SELECT '"SCHEMA_VAL"' FROM SYSIBM.SYSDUMMY1 ")
+OK = NSL("              )                                             ")
+OK = NSL(",  FKTAB (TBCREATOR                                         ")
+OK = NSL("         ,TBNAME                                            ")
+OK = NSL("         ,RELNAME                                           ")
+OK = NSL("         ,FK_COLS                                           ")
+OK = NSL("         ,MAXCOLSEQ                                         ")
+OK = NSL("          ) AS  (                                           ")
+OK = NSL("          SELECT CREATOR                                    ")
+OK = NSL("               , TBNAME                                     ")
+OK = NSL("               , RELNAME                                    ")
+OK = NSL("     ,  REPLACE(                                            ")
+OK = NSL("            REPLACE(                                        ")
+OK = NSL("           CAST(XMLSERIALIZE(XMLAGG(XMLELEMENT(NAME "COLS", ")
+OK = NSL("                                         COLNAME CONCAT ' ' ")
+OK = NSL("                                        )                   ")
+OK = NSL("                                 ORDER BY  CREATOR          ")
+OK = NSL("                                         , TBNAME           ")
+OK = NSL("                                         , RELNAME          ")
+OK = NSL("                                         , COLSEQ           ")
+OK = NSL("                        ) AS CLOB(32000)                    ")
+OK = NSL("                    )                                       ")
+OK = NSL("               AS VARCHAR(32000) )                          ")
+OK = NSL("           , '</COLS>','')                                  ")
+OK = NSL("           , '<COLS>','')                                   ")
+OK = NSL("           , MAX(COLSEQ)                                    ")
+OK = NSL("   FROM SYSIBM.SYSFOREIGNKEYS                               ")
+OK = NSL("   WHERE   CREATOR IN (SELECT CREATOR                       ")
+OK = NSL("                       FROM   CREATOR_TAB                   ")
+OK = NSL("                                     )                      ")
+OK = NSL("   GROUP BY CREATOR                                         ")
+OK = NSL("          , TBNAME                                          ")
+OK = NSL("          , RELNAME                                         ")
+OK = NSL("   )                                                        ")
+OK = NSL("                                                            ")
+OK = NSL("                                                            ")
+OK = NSL(",  INDEXTAB (TBCREATOR, TBNAME                              ")
+OK = NSL("        , IXNAME, IXCREATOR, IX_COLS)   AS (                ")
+OK = NSL("       SELECT  IX.TBCREATOR                                 ")
+OK = NSL("             , IX.TBNAME                                    ")
+OK = NSL("            , KEY.IXNAME                                    ")
+OK = NSL("            , KEY.IXCREATOR                                 ")
+OK = NSL(" ,  REPLACE(                                                ")
+OK = NSL("        REPLACE(                                            ")
+OK = NSL("       CAST(XMLSERIALIZE(XMLAGG(XMLELEMENT(NAME "COLS",     ")
+OK = NSL("                                    KEY.COLNAME CONCAT ' '  ")
+OK = NSL("                                        )                   ")
+OK = NSL("                                  ORDER BY IX.TBCREATOR     ")
+OK = NSL("                                         , IX.TBNAME        ")
+OK = NSL("                                         , KEY.IXNAME       ")
+OK = NSL("                                         , KEY.IXCREATOR    ")
+OK = NSL("                                         , KEY.COLSEQ       ")
+OK = NSL("                        ) AS CLOB(32000)                    ")
+OK = NSL("                    )                                       ")
+OK = NSL("               AS VARCHAR(32000) )                          ")
+OK = NSL("           , '</COLS>','')                                  ")
+OK = NSL("           , '<COLS>','')                                   ")
+OK = NSL("  FROM SYSIBM.SYSKEYS KEY                                   ")
+OK = NSL("  INNER JOIN SYSIBM.SYSINDEXES IX                           ")
+OK = NSL("  ON  IX.CREATOR  = KEY.IXCREATOR                           ")
+OK = NSL("  AND IX.NAME     = KEY.IXNAME                              ")
+OK = NSL("  WHERE   TBCREATOR IN (SELECT CREATOR                      ")
+OK = NSL("                        FROM   CREATOR_TAB                  ")
+OK = NSL("                       )                                    ")
+OK = NSL("  AND EXISTS (SELECT 1 FROM SYSIBM.SYSFOREIGNKEYS FK        ")
+OK = NSL("              WHERE FK.CREATOR     = IX.TBCREATOR           ")
+OK = NSL("              AND  FK.TBNAME      = IX.TBNAME               ")
+OK = NSL("              )                                             ")
+OK = NSL("                                                            ")
+OK = NSL("   GROUP BY IX.TBCREATOR, IX.TBNAME                         ")
+OK = NSL("          , KEY.IXNAME, KEY.IXCREATOR                       ")
+OK = NSL("   )                                                        ")
+OK = NSL("                                                            ")
+OK = NSL(" , KEYTAB      ( TBCREATOR                                  ")
+OK = NSL("               , TBNAME                                     ")
+OK = NSL("               , RELNAME                                    ")
+OK = NSL("               , FK_COLS                                    ")
+OK = NSL("               , CARDF                                      ")
+OK = NSL("               , MAXCOLSEQ                                  ")
+OK = NSL("               ) AS  (                                      ")
+OK = NSL("   SELECT DISTINCT FKT.TBCREATOR                            ")
+OK = NSL("                 , FKT.TBNAME                               ")
+OK = NSL("                 , FKT.RELNAME                              ")
+OK = NSL("                 , FKT.FK_COLS                              ")
+OK = NSL("                 , BIGINT(TB.CARDF) AS CARDF                ")
+OK = NSL("                 , MAXCOLSEQ                                ")
+OK = NSL("     FROM FKTAB FKT                                         ")
+OK = NSL("     INNER JOIN INDEXTAB IX                                 ")
+OK = NSL("     ON    FKT.TBCREATOR = IX.TBCREATOR                     ")
+OK = NSL("     AND   FKT.TBNAME    = IX.TBNAME                        ")
+OK = NSL("     INNER JOIN SYSIBM.SYSTABLES TB                         ")
+OK = NSL("     ON    FKT.TBCREATOR = TB.CREATOR                       ")
+OK = NSL("     AND   FKT.TBNAME    = TB.NAME                          ")
+OK = NSL("     WHERE NOT EXISTS (SELECT 1                             ")
+OK = NSL("                      FROM  INDEXTAB IXT                    ")
+OK = NSL("                      WHERE FKT.TBCREATOR = IXT.TBCREATOR   ")
+OK = NSL("                      AND   FKT.TBNAME    = IXT.TBNAME      ")
+OK = NSL("AND FKT.FK_COLS = SUBSTR(IX_COLS, 1, LENGTH(FKT.FK_COLS ))  ")
+OK = NSL("                      )                                     ")
+OK = NSL("     ORDER BY FKT.TBCREATOR, FKT.TBNAME, FKT.RELNAME        ")
+OK = NSL("    )                                                       ")
+OK = NSL("                                                            ")
+OK = NSL("SELECT  CASE WHEN FK.COLSEQ = 1 THEN                        ")
+OK = NSL("            'CREATE INDEX ' || RTRIM(FK.CREATOR) || '.'     ")
+OK = NSL("          || 'XFK'                                          ")
+OK = NSL("          || RTRIM(CHAR(ROWNUMBER() OVER (PARTITION BY      ")
+OK = NSL("                                   FK.CREATOR, FK.TBNAME    ")
+OK = NSL("                                         )                  ")
+OK = NSL("                       )                                    ")
+OK = NSL("                  )                                         ")
+OK = NSL("          || RTRIM(FK.TBNAME )                              ")
+OK = NSL("            ELSE '--'                                       ")
+OK = NSL("        END AS CR1                                          ")
+OK = NSL("                                                            ")
+OK = NSL("     ,  CASE WHEN FK.COLSEQ = 1 THEN                        ")
+OK = NSL("            '   ON    '     || RTRIM(FK.CREATOR) || '.' ||  ")
+OK = NSL("                               RTRIM(FK.TBNAME ) ||         ")
+OK = NSL("                               ' ('                         ")
+OK = NSL("            ELSE '--'                                       ")
+OK = NSL("        END AS CR2                                          ")
+OK = NSL("     ,  CASE WHEN FK.COLSEQ = 1 THEN                        ")
+OK = NSL("            '      ' || RTRIM(FK.COLNAME) || ' ASC '        ")
+OK = NSL("            ELSE '    , ' || RTRIM(FK.COLNAME) || ' ASC '   ")
+OK = NSL("        END AS CR3                                          ")
+OK = NSL("     ,  CASE WHEN FK.COLSEQ = MAXCOLSEQ THEN ' ) '          ")
+OK = NSL("                              ELSE '--' END AS ENDREC1      ")
+OK = NSL("                                                            ")
+OK = NSL("     ,  CASE WHEN FK.COLSEQ = MAXCOLSEQ THEN                ")
+OK = NSL("                             ' USING STOGROUP ' ||          ")
+OK = NSL("                              (SELECT RTRIM(STGROUP)        ")
+OK = NSL("                              FROM SYSIBM.SYSDATABASE DB    ")
+OK = NSL("                              INNER JOIN SYSIBM.SYSTABLES TB")
+OK = NSL("                              ON DB.NAME = TB.DBNAME        ")
+OK = NSL("                           WHERE TB.CREATOR  = KT.TBCREATOR ")
+OK = NSL("                           AND TB.NAME     = KT.TBNAME      ")
+OK = NSL("                               FETCH FIRST 1 ROWS ONLY      ")
+OK = NSL("                            )                               ")
+OK = NSL("                    ELSE '--' END AS ENDREC2                ")
+OK = NSL("                                                            ")
+OK = NSL("     ,  CASE WHEN FK.COLSEQ = MAXCOLSEQ THEN                ")
+OK = NSL("                                    ' PRIQTY   -1 ' ||      ")
+OK = NSL("                                    ' SECQTY   -1 ' ||      ")
+OK = NSL("                                    ' ERASE    NO '         ")
+OK = NSL("                               ELSE '--' END AS ENDREC2     ")
+OK = NSL("                                                            ")
+OK = NSL("     ,  CASE WHEN FK.COLSEQ = MAXCOLSEQ THEN                ")
+OK = NSL("                             ' BUFFERPOOL     ' ||          ")
+OK = NSL("                              (SELECT RTRIM(INDEXBP)        ")
+OK = NSL("                              FROM SYSIBM.SYSDATABASE DB    ")
+OK = NSL("                              INNER JOIN SYSIBM.SYSTABLES TB")
+OK = NSL("                              ON DB.NAME = TB.DBNAME        ")
+OK = NSL("                           WHERE TB.CREATOR  = KT.TBCREATOR ")
+OK = NSL("                           AND TB.NAME     = KT.TBNAME      ")
+OK = NSL("                               FETCH FIRST 1 ROWS ONLY      ")
+OK = NSL("                            )                               ")
+OK = NSL("                    ELSE '--' END AS ENDREC3                ")
+OK = NSL("                                                            ")
+OK = NSL("     ,  CASE WHEN FK.COLSEQ = MAXCOLSEQ THEN                ")
+OK = NSL("                                       ' FREEPAGE 10 ' ||   ")
+OK = NSL("                                       ' PCTFREE  10 ' ||   ")
+OK = NSL("                                       ' DEFINE   YES'      ")
+OK = NSL("                                  ELSE '--' END AS ENDREC4  ")
+OK = NSL("                                                            ")
+cK = NSL("     ,  CASE WHEN FK.COLSEQ = MAXCOLSEQ THEN                ")
+OK = NSL("                                    ' DEFER    NO ' ||      ")
+OK = NSL("                                    ' CLOSE    YES' ||      ")
+OK = NSL("                                    ' COMPRESS NO '         ")
+OK = NSL("                               ELSE '--' END AS ENDREC5     ")
+OK = NSL("                                                            ")
+cK = NSL("     ,  CASE WHEN FK.COLSEQ = MAXCOLSEQ THEN                ")
+OK = NSL("                                    ' ;           '         ")
+OK = NSL("                               ELSE '--' END AS ENDREC6     ")
+OK = NSL("                                                            ")
+OK = NSL("                                                            ")
+OK = NSL("FROM KEYTAB KT                                              ")
+OK = NSL("INNER JOIN SYSIBM.SYSFOREIGNKEYS FK                         ")
+OK = NSL("ON FK.CREATOR = KT.TBCREATOR                                ")
+OK = NSL("AND FK.TBNAME = KT.TBNAME                                   ")
+OK = NSL("AND FK.RELNAME = KT.RELNAME                                 ")
+OK = NSL("-- AND KT.CARDF > 1000                                      ")
+OK = NSL("ORDER BY FK.CREATOR, FK.TBNAME, FK.RELNAME, FK.COLSEQ       ")
+ok = NSL("  ;                                                         ")
+
+EINGABE  = "WWR"
+OBJ      = "EDIT_DIREKT"
+
+Return
+
+Auswahl_3:     /*  Tablespaces without FullIC */
+
+ok = NSL("SELECT DISTINCT                                             ")
+ok = NSL("  RTrim(TSS.DBNAME) || '.' || RTrim(TSS.NAME)               ")
+ok = NSL("  , TSS.PARTITION                                           ")
+ok = NSL("FROM SYSIBM.SYSTABLESPACESTATS  TSS                         ")
+ok = NSL("INNER JOIN SYSIBM.SYSTABLESPACE TS                          ")
+ok = NSL("ON  TSS.DBNAME = TS.DBNAME                                  ")
+ok = NSL("AND TSS.NAME   = TS.NAME                                    ")
+ok = NSL("INNER JOIN SYSIBM.SYSTABLEPART  TP                          ")
+ok = NSL("ON  TSS.DBNAME = TP.DBNAME                                  ")
+ok = NSL("AND TSS.NAME   = TP.TSNAME                                  ")
+ok = NSL("AND TSS.PARTITION = TP.PARTITION                            ")
+ok = NSL("INNER JOIN SYSIBM.SYSDATABASE   DB                          ")
+ok = NSL("ON  TSS.DBNAME = DB.NAME                                    ")
+ok = NSL("WHERE (   COPYLASTTIME IS NULL                              ")
+ok = NSL("--     OR COPYLASTTIME < CURRENT TIMESTAMP - 3 MONTH        ")
+ok = NSL("      )                                                     ")
+ok = NSL("AND TP.SPACE    >= 0                                        ")
+ok = NSL("AND TS.NTABLES  >  0                                        ")
+ok = NSL("AND DB.TYPE    <> 'W'                                       ")
+ok = NSL("ORDER BY 1, TSS.PARTITION                                   ")
+ok = NSL("FOR FETCH ONLY                                              ")
+ok = NSL("WITH UR                                                     ")
+ok = NSL(" ;                                                          ")
+
+Return
+
+Auswahl_4:     /*  Tables without clusterning Index */
+
+OPF   = PF
+ORESP = RESP
+
+Creator = Left(' ', 30, ' '  )
+
+area.0  = 4
+area.2  = white"Tables without clustering Index :"
+area.3  = white" "keyw"Creator    :  "in1 ||Creator ||endin
+area.4  = white"  "
+
+Call Anzeige_Dyn_Panel
+
+If PF   = 'PF03'  | PF = 'PF04' Then do
+   PF   = OPF
+   RESP = ORESP
+   EDIT = "N"
+   return
+ End
+
+PF   = OPF
+RESP = ORESP
+
+Creator_Val = Strip(Creator_val)
+If Creator_Val = "" Then Creator_Val = "%"
+Creator_Val   = TRANSLATE(Creator_Val, '%', '*')
+
+ok = NSL("SELECT 'ALTER INDEX '                                       ")
+ok = NSL("    || (SELECT RTRIM(CREATOR) || '.' || RTRIM(NAME)         ")
+ok = NSL("        FROM SYSIBM.SYSINDEXES IX                           ")
+ok = NSL("        WHERE IX.TBCREATOR  = T1.CREATOR                    ")
+ok = NSL("        AND   IX.TBNAME     = T1.NAME                       ")
+ok = NSL("        ORDER BY  CASE WHEN IX.UNIQUERULE  = 'P' THEN 1     ")
+ok = NSL("                       WHEN IX.UNIQUERULE  = 'C' THEN 2     ")
+ok = NSL("                       WHEN IX.UNIQUERULE  = 'U' THEN 3     ")
+ok = NSL("                       WHEN IX.UNIQUERULE  = 'R' THEN 4     ")
+ok = NSL("                       ELSE                           5 END ")
+ok = NSL("        FETCH FIRST 1 ROWS ONLY                             ")
+ok = NSL("       )                                                    ")
+ok = NSL("    || ' CLUSTER  ;'                                        ")
+ok = NSL("FROM   (                                                    ")
+ok = NSL("SELECT TB.CREATOR, TB.NAME                                  ")
+ok = NSL("     , BIGINT(TB.CARDF) AS CARDF                            ")
+ok = NSL("FROM SYSIBM.SYSTABLES  TB                                   ")
+ok = NSL("WHERE NOT EXISTS  (SELECT 1                                 ")
+ok = NSL("                   FROM SYSIBM.SYSINDEXES IX                ")
+ok = NSL("                   WHERE TB.CREATOR    = IX.TBCREATOR       ")
+ok = NSL("                   AND   TB.NAME       = IX.TBNAME          ")
+ok = NSL("                   AND   IX.CLUSTERING = 'Y'                ")
+ok = NSL("                  )                                         ")
+ok = NSL("AND       EXISTS  (SELECT 1                                 ")
+ok = NSL("                   FROM SYSIBM.SYSINDEXES IX                ")
+ok = NSL("                   WHERE TB.CREATOR    = IX.TBCREATOR       ")
+ok = NSL("                   AND   TB.NAME       = IX.TBNAME          ")
+ok = NSL("                   AND   IX.UNIQUERULE IN ('C'              ")
+ok = NSL("                                          ,'U'              ")
+ok = NSL("                                          ,'P'              ")
+ok = NSL("                                          ,'N'              ")
+ok = NSL("                                          ,'R'              ")
+ok = NSL("                                          ,'G'              ")
+ok = NSL("                                          ,'X'              ")
+ok = NSL("                                          )                 ")
+ok = NSL("                  )                                         ")
+ok = NSL("AND TB.TYPE IN (    'H'                                     ")
+ok = NSL("                  , 'M'                                     ")
+ok = NSL("                  , 'R'                                     ")
+ok = NSL("                  , 'T'                                     ")
+ok = NSL("               )                                            ")
+If Creator_Val <> "" Then Do
+   IF POS('%', Creator_Val) > 0 THEN DO
+      ok = NSL("AND   TB.Creator  LIKE '"Creator_Val"'              ")
+    END
+   Else Do
+      ok = NSL("AND   TB.Creator  =    '"Creator_Val"'              ")
+    END
+ End
+ok = NSL(") T1                                                        ")
+
+Return
+
+Auswahl_5:     /*  Infos fuer Drop Columns       */
+
+OPF   = PF
+ORESP = RESP
+
+Schema = Left(' ', 30, ' '   )
+Column = Left(' ', 33, ' '   )
+Table  = Left(' ', 60, ' '   )
+
+area.0  = 6
+area.1  = white"  "
+area.2  = white"Drop Columns Check :"
+area.3  = white" "keyw"Schema     :  "in1 ||Schema ||endin
+area.4  = white" "keyw"Table      :  "in1 ||Table  ||endin
+area.5  = white" "keyw"Column     :  "in1 ||Column ||endin
+area.6  = white"  "
+
+Call Anzeige_Dyn_Panel
+
+If PF   = 'PF03'  | PF = 'PF04' Then do
+   PF   = OPF
+   RESP = ORESP
+   EDIT = "N"
+   return
+ End
+
+PF   = OPF
+RESP = ORESP
+
+Schema_val  = Strip(Schema_val)
+Column_val  = Strip(Column_val)
+Table_Val   = Strip(Table_Val )
+If Table_Val = "" Then Table_Val = "%"
+
+ok = NSL("-- schema festlegen                                         ")
+ok = NSL("With Schema (CREATOR)                                       ")
+ok = NSL("         AS (SELECT '"Schema_VAL"'                          ")
+ok = NSL("             FROM SYSIBM.SYSDUMMY1)                         ")
+ok = NSL("-- Column festlegen                                         ")
+ok = NSL("   , COLN   (COLNAME)                                       ")
+ok = NSL("         AS (SELECT '"Column_Val"'                          ")
+ok = NSL("             FROM  SYSIBM.SYSDUMMY1)                        ")
+ok = NSL("-- Tabellen festlegen                                       ")
+ok = NSL("   , TABLE  (TBCREATOR, TBNAME)                             ")
+ok = NSL("        AS  (SELECT TB.CREATOR, TB.NAME                     ")
+ok = NSL("             FROM SYSIBM.SYSTABLES TB                       ")
+ok = NSL("             INNER JOIN  Schema SC                          ")
+ok = NSL("             ON TB.CREATOR  = SC.CREATOR                    ")
+ok = NSL("             WHERE TB.NAME Like '"Table_Val"'               ")
+ok = NSL("             AND   EXISTS (SELECT 1                         ")
+ok = NSL("                           FROM SYSIBM.SYSCOLUMNS  COL      ")
+ok = NSL("                           , COLN C                         ")
+ok = NSL("                           WHERE COL.NAME =    C.COLNAME    ")
+ok = NSL("                           AND   COL.TBCREATOR = TB.CREATOR ")
+ok = NSL("                           AND   COL.TBNAME    = TB.NAME    ")
+ok = NSL("                           )                                ")
+ok = NSL("             )                                              ")
+ok = NSL("                                                            ")
+ok = NSL("-- Trigger                                                  ")
+ok = NSL("    , TG1 (TYPE, SCHEMA, NAME, TBOWNER, TBNAME)             ")
+ok = NSL("       AS ( SELECT DISTINCT 'TG'                            ")
+ok = NSL("                 , TG.SCHEMA                                ")
+ok = NSL("                 , TG.NAME                                  ")
+ok = NSL("                 , TG.TBOWNER                               ")
+ok = NSL("                 , TG.TBNAME                                ")
+ok = NSL("            FROM  SYSIBM.SYSTRIGGERS  TG                    ")
+ok = NSL("            INNER JOIN TABLE TB                             ")
+ok = NSL("            ON TG.TBOWNER = TB.TBCREATOR                    ")
+ok = NSL("            AND TG.TBNAME = TB.TBNAME                       ")
+ok = NSL("          )                                                 ")
+ok = NSL("                                                            ")
+ok = NSL("-- Function / StoredProcedure                               ")
+ok = NSL("    , RT (TYPE, SCHEMA, NAME, TBOWNER, TBNAME)              ")
+ok = NSL("      AS (Select DISTINCT  'RT'                             ")
+ok = NSL("               , RT.SCHEMA                                  ")
+ok = NSL("               , RT.NAME                                    ")
+ok = NSL("               , PD.BQUALIFIER                              ")
+ok = NSL("               , PD.BNAME                                   ")
+ok = NSL("          FROM SYSIBM.SYSROUTINES RT                        ")
+ok = NSL("          INNER JOIN  SYSIBM.SYSPACKDEP PD                  ")
+ok = NSL("          ON PD.DCOLLID = SCHEMA                            ")
+ok = NSL("          AND PD.DNAME   = NAME                             ")
+ok = NSL("          INNER JOIN TABLE TB                               ")
+ok = NSL("          ON  PD.BQUALIFIER = TB.TBCREATOR                  ")
+ok = NSL("          AND PD.BNAME      = TB.TBNAME                     ")
+ok = NSL("         )                                                  ")
+ok = NSL("                                                            ")
+ok = NSL("-- Indexes                                                  ")
+ok = NSL("     , IX (TYPE, SCHEMA, NAME, TBOWNER, TBNAME)             ")
+ok = NSL("       AS (SELECT  'IX'                                     ")
+ok = NSL("                  , IX.CREATOR                              ")
+ok = NSL("                  , IX.NAME                                 ")
+ok = NSL("                  , IX.TBCREATOR                            ")
+ok = NSL("                  , IX.TBNAME                               ")
+ok = NSL("           FROM SYSIBM.SYSINDEXES IX                        ")
+ok = NSL("              , COLN C                                      ")
+ok = NSL("           INNER JOIN TABLE TB                              ")
+ok = NSL("             ON  IX.TBCREATOR  = TB.TBCREATOR               ")
+ok = NSL("            AND  IX.TBNAME     = TB.TBNAME                  ")
+ok = NSL("           INNER JOIN SYSIBM.SYSKEYS KEY                    ")
+ok = NSL("           ON  IX.CREATOR  = KEY.IXCREATOR                  ")
+ok = NSL("           AND IX.NAME     = KEY.IXNAME                     ")
+ok = NSL("           Where KEY.COLNAME =    C.COLNAME                 ")
+ok = NSL("          )                                                 ")
+ok = NSL("                                                            ")
+ok = NSL("-- Keytargets                                               ")
+ok = NSL("     , EXTIX (TYPE, SCHEMA, NAME, TBOWNER, TBNAME)          ")
+ok = NSL("       AS (SELECT 'EXTIX'                                   ")
+ok = NSL("                , IX.CREATOR                                ")
+ok = NSL("                , IX.NAME                                   ")
+ok = NSL("                , IX.TBCREATOR                              ")
+ok = NSL("                , IX.TBNAME                                 ")
+ok = NSL("           FROM SYSIBM.SYSINDEXES IX                        ")
+ok = NSL("           INNER JOIN TABLE TB                              ")
+ok = NSL("             ON  IX.TBCREATOR  = TB.TBCREATOR               ")
+ok = NSL("            AND  IX.TBNAME     = TB.TBNAME                  ")
+ok = NSL("           INNER JOIN SYSIBM.SYSKEYTARGETS KT               ")
+ok = NSL("           ON  IX.CREATOR  = KT.IXSCHEMA                    ")
+ok = NSL("           AND IX.NAME     = KT.IXNAME                      ")
+ok = NSL("          )                                                 ")
+ok = NSL("                                                            ")
+ok = NSL("-- Foreign Keys                                             ")
+ok = NSL("     , REL (TYPE, SCHEMA, NAME, TBOWNER, TBNAME)            ")
+ok = NSL("       AS (SELECT 'REL'                                     ")
+ok = NSL("                , FK.CREATOR                                ")
+ok = NSL("                , FK.RELNAME                                ")
+ok = NSL("                , FK.CREATOR                                ")
+ok = NSL("                , FK.TBNAME                                 ")
+ok = NSL("           FROM SYSIBM.SYSFOREIGNKEYS FK                    ")
+ok = NSL("              , COLN C                                      ")
+ok = NSL("           INNER JOIN TABLE TB                              ")
+ok = NSL("             ON  FK.CREATOR  = TB.TBCREATOR                 ")
+ok = NSL("            AND  FK.TBNAME     = TB.TBNAME                  ")
+ok = NSL("           Where FK.COLNAME =    C.COLNAME                  ")
+ok = NSL("          )                                                 ")
+ok = NSL("                                                            ")
+ok = NSL("-- Check Constraints                                        ")
+ok = NSL("     , CHECK (TYPE, SCHEMA, NAME, TBOWNER, TBNAME)          ")
+ok = NSL("       AS (SELECT  'CHECK'                                  ")
+ok = NSL("                  , CHECK.CREATOR                           ")
+ok = NSL("                  , CHECK.CHECKNAME                         ")
+ok = NSL("                  , CHECK.TBOWNER                           ")
+ok = NSL("                  , CHECK.TBNAME                            ")
+ok = NSL("           FROM SYSIBM.SYSCHECKS CHECK                      ")
+ok = NSL("           INNER JOIN TABLE TB                              ")
+ok = NSL("             ON  CHECK.TBOWNER  = TB.TBCREATOR              ")
+ok = NSL("            AND  CHECK.TBNAME   = TB.TBNAME                 ")
+ok = NSL("          )                                                 ")
+ok = NSL("                                                            ")
+ok = NSL("-- Views                                                    ")
+ok = NSL("     , VW (TYPE, SCHEMA, NAME, TBOWNER, TBNAME)             ")
+ok = NSL("       AS (SELECT 'VW'                                      ")
+ok = NSL("                , VW.DCREATOR                               ")
+ok = NSL("                , VW.DNAME                                  ")
+ok = NSL("                , VW.BCREATOR                               ")
+ok = NSL("                , VW.BNAME                                  ")
+ok = NSL("           FROM SYSIBM.SYSVIEWDEP  VW                       ")
+ok = NSL("           INNER JOIN TABLE TB                              ")
+ok = NSL("             ON  VW.BCREATOR   = TB.TBCREATOR               ")
+ok = NSL("            AND  VW.BNAME      = TB.TBNAME                  ")
+ok = NSL("          )                                                 ")
+ok = NSL("                                                            ")
+ok = NSL("                                                            ")
+ok = NSL("Select DISTINCT TYPE                                        ")
+ok = NSL("     , SCHEMA                                               ")
+ok = NSL("     , NAME                                                 ")
+ok = NSL("     , TBOWNER                                              ")
+ok = NSL("     , TBNAME                                               ")
+ok = NSL("from (                                                      ")
+ok = NSL("select 'TB' AS TYPE                                         ")
+ok = NSL("      , '' AS SCHEMA                                        ")
+ok = NSL("      , '' AS NAME                                          ")
+ok = NSL("      , TBCREATOR AS TBOWNER                                ")
+ok = NSL("      ,TBNAME                                               ")
+ok = NSL("from table                                                  ")
+ok = NSL("Union All                                                   ")
+ok = NSL("Select * from TG1                                           ")
+ok = NSL("Union All                                                   ")
+ok = NSL("select * from RT                                            ")
+ok = NSL("Union All                                                   ")
+ok = NSL("select * from IX                                            ")
+ok = NSL("Union All                                                   ")
+ok = NSL("select * from EXTIX                                         ")
+ok = NSL("Union All                                                   ")
+ok = NSL("select * from REL                                           ")
+ok = NSL("Union All                                                   ")
+ok = NSL("select * from CHECK                                         ")
+ok = NSL("Union All                                                   ")
+ok = NSL("select * from VW                                            ")
+ok = NSL(") T1                                                        ")
+ok = NSL("order by TBOWNER, TBNAME, TYPE                              ")
+ok = NSL(";                                                           ")
+
+Return
+
+Auswahl_6:     /*  Free Older Package Versions   */
+
+OPF   = PF
+ORESP = RESP
+
+Anzahl   = Left('10',  7 , ' '   )
+Location = Left(' ' , 50 , ' '   )
+Collid   = Left(' ' , 50 , ' '   )
+Name     = Left(' ' , 50 , ' '   )
+
+area.0  = 7
+area.1  = white"  "
+area.2  = white"Free Old Packages  :"
+area.3  = white" "keyw"Anzahl     :  "in1 ||Anzahl   || endin
+area.4  = white" "keyw"Location   :  "in1 ||Location || endin
+area.5  = white" "keyw"Collid     :  "in1 ||Collid   || endin
+area.6  = white" "keyw"Name       :  "in1 ||Name     || endin
+area.7  = white"  "
+
+
+Call Anzeige_Dyn_Panel
+
+If PF   = 'PF03'  | PF = 'PF04' Then do
+   PF   = OPF
+   RESP = ORESP
+   EDIT = "N"
+   return
+ End
+
+PF   = OPF
+RESP = ORESP
+
+Anzahl_val   = Strip(Anzahl_val)
+Location_Val = Strip(Location_Val)
+Collid_Val   = Strip(Collid_Val)
+Name_Val     = Strip(Name_Val)
+
+If Datatype(Anzahl_Val) <> "NUM" Then Return
+
+ok = NSL("WITH PGHOLD ( ANZAHL_GENERATIONEN  )                        ")
+ok = NSL("      AS (SELECT "Anzahl_Val" FROM SYSIBM.SYSDUMMY1 )       ")
+ok = NSL("                                                            ")
+ok = NSL("   , PG ( ON                                                ")
+ok = NSL("        , PN                                                ")
+ok = NSL("        , LOCATION                                          ")
+ok = NSL("        , COLLID                                            ")
+ok = NSL("        , NAME                                              ")
+ok = NSL("        , VERSION                                           ")
+ok = NSL("        , VALID                                             ")
+ok = NSL("        , OPERATIVE                                         ")
+ok = NSL("        , TIMESTAMP                                         ")
+ok = NSL("        , BINDTIME                                          ")
+ok = NSL("        )                                                   ")
+ok = NSL("      AS (SELECT ROWNUMBER() OVER(ORDER  BY  LOCATION       ")
+ok = NSL("                                          ,  COLLID         ")
+ok = NSL("                                          ,  NAME           ")
+ok = NSL("                                          ,  TIMESTAMP DESC ")
+ok = NSL("                                 )                          ")
+ok = NSL("         ,       ROWNUMBER() OVER(PARTITION BY LOCATION     ")
+ok = NSL("                                             , COLLID       ")
+ok = NSL("                                             , NAME         ")
+ok = NSL("                                 )                          ")
+ok = NSL("         ,       LOCATION                                   ")
+ok = NSL("         ,       COLLID                                     ")
+ok = NSL("         ,       NAME                                       ")
+ok = NSL("         ,       VERSION                                    ")
+ok = NSL("         ,       VALID                                      ")
+ok = NSL("         ,       OPERATIVE                                  ")
+ok = NSL("         ,       TIMESTAMP                                  ")
+ok = NSL("         ,       BINDTIME                                   ")
+ok = NSL("          FROM SYSIBM.SYSPACKAGE  PG                        ")
+ok = NSL("         )                                                  ")
+ok = NSL("                                                            ")
+ok = NSL("SELECT '  FREE PACKAGE ('                                   ")
+ok = NSL("|| CASE WHEN LOCATION = '' THEN ''                          ")
+ok = NSL("        ELSE RTRIM(LOCATION) || '.' END                     ")
+ok = NSL("|| RTRIM(COLLID)                                            ")
+ok = NSL("|| '.'                                                      ")
+ok = NSL("|| RTRIM(NAME)                                              ")
+ok = NSL("|| CASE WHEN VERSION = '' THEN ' )  '                       ")
+ok = NSL("        ELSE '.(' || RTRIM(VERSION) || ')) '                ")
+ok = NSL("    END AS REBIND                                           ")
+ok = NSL("FROM PG, PGHOLD                                             ")
+ok = NSL("WHERE PN > ANZAHL_GENERATIONEN                              ")
+ok = NSL("  AND VERSION <> ''                                         ")
+If Location_Val <> "" Then Do
+   Location_Val = TRANSLATE(Location_Val, '%', '*')
+   IF POS('%', Location_Val) > 0 THEN DO
+      ok = NSL("  AND LOCATION LIKE '"Location_Val"'              ")
+    END
+   Else Do
+      ok = NSL("  AND LOCATION =    '"Location_Val"'              ")
+    END
+ End
+If Collid_Val   <> "" Then Do
+   Collid_Val = TRANSLATE(Collid_Val, '%', '*')
+   IF POS('%', Collid_Val) > 0 THEN DO
+      ok = NSL("  AND COLLID   LIKE '"Collid_Val"'                ")
+    END
+   Else Do
+      ok = NSL("  AND COLLID   =    '"Collid_Val"'                ")
+    END
+ End
+If Name_Val     <> "" Then Do
+   Name_val = TRANSLATE(Name_val, '%', '*')
+   IF POS('%', Name_val) > 0 THEN DO
+      ok = NSL("  AND NAME     LIKE '"Name_val"'                  ")
+    END
+   Else Do
+      ok = NSL("  AND NAME     =    '"Name_val"'                  ")
+    END
+ End
+ok = NSL("--AND (VALID = 'N' OR   OPERATIVE  = 'N' )                  ")
+ok = NSL("ORDER BY LOCATION                                           ")
+ok = NSL("       , COLLID                                             ")
+ok = NSL("       , NAME                                               ")
+ok = NSL("       , PN                                                 ")
+ok = NSL("FOR FETCH ONLY WITH UR                                      ")
+ok = NSL(" ;                                                          ")
+
+Return
+
+Auswahl_7:     /*  Tablespaces die kein UTS sind   */
+
+Creator = Left(' ', 60, ' '   )
+
+area.0  = 4
+area.2  = white"Tablespaces die kein UTS sind : "
+area.3  = white" "keyw"Creator    :  "in1 ||Creator ||endin
+area.4  = white"  "
+
+Call Anzeige_Dyn_Panel
+
+If PF   = 'PF03'  | PF = 'PF04' Then do
+   PF   = OPF
+   RESP = ORESP
+   EDIT = "N"
+   return
+ End
+
+PF   = OPF
+RESP = ORESP
+
+Creator_val = Strip(Creator_val)
+
+If Creator_Val = "" Then Creator_Val = "%"
+Creator_Val = TRANSLATE(Creator_Val, '%', '*')
+
+ok = NSL("-- SELECT TABLESPACES  die kein UTS sind                    ")
+ok = NSL("SELECT CHAR(RTRIM(TB.DBNAME)  CONCAT '.'                    ")
+ok = NSL("CONCAT RTRIM(TB.TSNAME), 20)                                ")
+ok = NSL("       AS TSNAME                                            ")
+ok = NSL("     , CHAR(RTRIM(TB.CREATOR) CONCAT '.'                    ")
+ok = NSL("     CONCAT RTRIM(TB.NAME), 50)                             ")
+ok = NSL("       AS TBNAME                                            ")
+ok = NSL("     , TB.PARTKEYCOLNUM                                     ")
+ok = NSL("     , TS.MAXPARTITIONS                                     ")
+ok = NSL("FROM SYSIBM.SYSTABLES TB                                    ")
+ok = NSL("INNER JOIN SYSIBM.SYSTABLESPACE  TS                         ")
+ok = NSL("ON  TS.DBNAME   = TB.DBNAME                                 ")
+ok = NSL("AND TS.NAME     = TB.TSNAME                                 ")
+ok = NSL("WHERE TB.TYPE = 'T'                                         ")
+ok = NSL("AND   TS.TYPE  NOT IN ('G', 'R', 'O'   )                    ")
+ok = NSL("AND   (TS.MAXPARTITIONS  = 0 AND TB.PARTKEYCOLNUM  = 0 )    ")
+If Creator_Val <> "" Then Do
+   IF POS('%', Creator_Val) > 0 THEN DO
+      ok = NSL("AND   TB.Creator  LIKE '"Creator_Val"'              ")
+    END
+   Else Do
+      ok = NSL("AND   TB.Creator  =    '"Creator_Val"'              ")
+    END
+ End
+ok = NSL("                                                            ")
+ok = NSL(";                                                           ")
+
+Return
+
+Auswahl_71:    /*  ALTER Tablespaces die kein UTS sind   */
+
+Creator = Left(' ', 60, ' '   )
+
+area.0  = 4
+area.2  = white"Alter Tablespaces die kein UTS sind : "
+area.3  = white" "keyw"Creator    :  "in1 ||Creator ||endin
+area.4  = white"  "
+
+Call Anzeige_Dyn_Panel
+
+If PF   = 'PF03'  | PF = 'PF04' Then do
+   PF   = OPF
+   RESP = ORESP
+   EDIT = "N"
+   return
+ End
+
+PF   = OPF
+RESP = ORESP
+
+Creator_val = Strip(Creator_val)
+
+If Creator_Val = "" Then Creator_Val = "%"
+Creator_Val = TRANSLATE(Creator_Val, '%', '*')
+
+ok = NSL("-- Generate Alter TABLESPACES TO UTS                        ")
+ok = NSL("SELECT 'ALTER TABLESPACE '                                  ")
+ok = NSL("CONCAT CHAR(RTRIM(TB.DBNAME)  CONCAT '.'                    ")
+ok = NSL("CONCAT RTRIM(TB.TSNAME), 20)                                ")
+ok = NSL("       AS TSNAME                                            ")
+ok = NSL("     , '      MAXPARTITIONS  10 ; '                         ")
+ok = NSL("FROM SYSIBM.SYSTABLES TB                                    ")
+ok = NSL("INNER JOIN SYSIBM.SYSTABLESPACE  TS                         ")
+ok = NSL("ON  TS.DBNAME   = TB.DBNAME                                 ")
+ok = NSL("AND TS.NAME     = TB.TSNAME                                 ")
+ok = NSL("WHERE TB.TYPE = 'T'                                         ")
+ok = NSL("AND   TS.TYPE  NOT IN ('G', 'R', 'O'   )                    ")
+ok = NSL("AND   (TS.MAXPARTITIONS  = 0 AND TB.PARTKEYCOLNUM  = 0 )    ")
+If Creator_Val <> "" Then Do
+   IF POS('%', Creator_Val) > 0 THEN DO
+      ok = NSL("AND   TB.Creator  LIKE '"Creator_Val"'              ")
+    END
+   Else Do
+      ok = NSL("AND   TB.Creator  =    '"Creator_Val"'              ")
+    END
+ End
+ok = NSL("                                                            ")
+ok = NSL(";                                                           ")
+
+EINGABE  = "WWR"
+OBJ      = "EDIT_DIREKT"
+
+Return
+
+Auswahl_8:     /*  Tablespaces without tables      */
+
+ok = NSL("-- SELECT TABLESPACES  without Tables                       ")
+ok = NSL("SELECT CHAR(RTRIM(TS.DBNAME)  CONCAT '.'                    ")
+ok = NSL("CONCAT RTRIM(TS.NAME), 20)  AS TSNAME                       ")
+ok = NSL("FROM  SYSIBM.SYSTABLESPACE  TS                              ")
+ok = NSL("INNER JOIN SYSIBM.SYSDATABASE  DB                           ")
+ok = NSL("ON   TS.DBNAME   = DB.NAME                                  ")
+ok = NSL("WHERE DB.TYPE <> 'W'                                        ")
+ok = NSL("AND   TS.NTABLES  = 0                                       ")
+ok = NSL(";                                                           ")
+
+Return
+
+Auswahl_9:     /*  Tablespaces mit pending Status  */
+
+ok = NSL("-- SELECT TABLESPACES  without Tables                       ")
+ok = NSL("SELECT CHAR(RTRIM(TS.DBNAME)  CONCAT '.'                    ")
+ok = NSL("CONCAT RTRIM(TS.NAME), 20)  AS TSNAME                       ")
+ok = NSL("     , TS.STATUS                                            ")
+ok = NSL("     , CASE WHEN TS.STATUS = 'T'   THEN                     ")
+ok = NSL("'Definition is incomplete because no table has been created'")
+ok = NSL("            WHEN TS.STATUS = 'P'   THEN                     ")
+ok = NSL("'Table space is in a check pending status. '                ")
+ok = NSL("            WHEN TS.STATUS = 'S'   THEN                     ")
+ok = NSL("'Table space is in a check pending status. '                ")
+ok = NSL("|| ' with the scope less than the entire table space. '     ")
+ok = NSL("            WHEN TS.STATUS = 'C'   THEN                     ")
+ok = NSL("    'Definition is incomplete because the tablespace '      ")
+ok = NSL(" || 'does not use table-controlled partitioning and a '     ")
+ok = NSL(" || 'partitioning index has not been created. '             ")
+ok = NSL("            ELSE '' END AS PENDING_TEXT                     ")
+ok = NSL("FROM  SYSIBM.SYSTABLESPACE  TS                              ")
+ok = NSL("INNER JOIN SYSIBM.SYSDATABASE  DB                           ")
+ok = NSL("ON   TS.DBNAME   = DB.NAME                                  ")
+ok = NSL("WHERE DB.TYPE <> 'W'                                        ")
+ok = NSL("AND   TS.STATUS in('C', 'P', 'S', 'T'  )                    ")
+ok = NSL(";                                                           ")
+
+Return
+
+Auswahl_10:    /*  Tables without Index          */
+
+
+OPF   = PF
+ORESP = RESP
+
+Creator = Left(' ', 60, ' '   )
+Table   = Left(' ', 60, ' '   )
+
+area.0  = 5
+area.1  = white"  "
+area.2  = white"Tables without Index :"
+area.3  = white" "keyw"Creator    :  "in1 ||Creator ||endin
+area.4  = white" "keyw"Table      :  "in1 ||Table  ||endin
+area.5  = white"  "
+
+Call Anzeige_Dyn_Panel
+
+If PF   = 'PF03'  | PF = 'PF04' Then do
+   PF   = OPF
+   RESP = ORESP
+   EDIT = "N"
+   return
+ End
+
+PF   = OPF
+RESP = ORESP
+
+Creator_val = Strip(Creator_val)
+Table_Val   = Strip(Table_Val )
+
+If Table_Val   = "" Then Table_Val   = "%"
+If Creator_Val = "" Then Creator_Val = "%"
+Table_Val   = TRANSLATE(Table_Val, '%', '*')
+Creator_Val = TRANSLATE(Creator_Val, '%', '*')
+
+ok = NSL("-- SELECT TABLES without INDEX                              ")
+ok = NSL("SELECT RTRIM(TB.CREATOR) || '.'                             ")
+ok = NSL("    || RTRIM(TB.NAME)                                       ")
+ok = NSL("FROM SYSIBM.SYSTABLES  TB                                   ")
+ok = NSL("LEFT OUTER JOIN SYSIBM.SYSINDEXES IX                        ")
+ok = NSL("ON  TB.CREATOR = IX.TBCREATOR                               ")
+ok = NSL("AND TB.NAME    = IX.TBNAME                                  ")
+ok = NSL("WHERE TB.TYPE  = 'T'                                        ")
+If Creator_Val <> "" Then Do
+   IF POS('%', Creator_Val) > 0 THEN DO
+      ok = NSL("AND   TB.Creator  LIKE '"Creator_Val"'              ")
+    END
+   Else Do
+      ok = NSL("AND   TB.Creator  =    '"Creator_Val"'              ")
+    END
+ End
+If Table_Val   <> "" Then Do
+   IF POS('%', Table_Val) > 0 THEN DO
+      ok = NSL("AND   TB.Name     LIKE '"Table_Val"'              ")
+    END
+   Else Do
+      ok = NSL("AND   TB.Name     =    '"Table_Val"'              ")
+    END
+ End
+ok = NSL("AND   IX.TBCREATOR IS NULL                                  ")
+ok = NSL(";                                                           ")
+
+Return
+
+Auswahl_11:    /*  Genarate Grant on Table / View   */
+
+
+OPF   = PF
+ORESP = RESP
+
+Grantee = Left(' ', 60, ' '   )
+Creator = Left(' ', 60, ' '   )
+Table   = Left(' ', 60, ' '   )
+
+area.0  = 6
+area.1  = white"  "
+area.2  = white"Generate Grant on Table / View :"
+area.3  = white" "keyw"Grantee    :  "in1 ||Grantee ||endin
+area.4  = white" "keyw"Creator    :  "in1 ||Creator ||endin
+area.5  = white" "keyw"Table      :  "in1 ||Table   ||endin
+area.6  = white"  "
+
+Call Anzeige_Dyn_Panel
+
+If PF   = 'PF03'  | PF = 'PF04' Then do
+   PF   = OPF
+   RESP = ORESP
+   EDIT = "N"
+   return
+ End
+
+PF   = OPF
+RESP = ORESP
+
+Grantee_val = Strip(Grantee_val)
+Creator_val = Strip(Creator_val)
+Table_Val   = Strip(Table_Val )
+
+If Table_Val   = "" Then Table_Val   = "%"
+If Creator_Val = "" Then Creator_Val = "%"
+Creator_Val = TRANSLATE(Creator_Val, '%', '*')
+Table_Val   = TRANSLATE(Table_Val, '%', '*')
+
+ok = NSL("-- Generate GRANT on Table or VIEW                          ")
+ok = NSL("SELECT DISTINCT 'GRANT SELECT, INSERT, UPDATE, DELETE '     ")
+ok = NSL("    , ' ON TABLE ' || RTRIM(CREATOR) || '.' || RTRIM(NAME)  ")
+ok = NSL("    ||          ' TO "Grantee_val" ; '                      ")
+ok = NSL("FROM SYSIBM.SYSTABLES  TB                                   ")
+ok = NSL("WHERE NOT EXISTS (SELECT 1  FROM SYSIBM.SYSTABAUTH TA       ")
+ok = NSL("                  WHERE  TA.TCREATOR  = TB.CREATOR          ")
+ok = NSL("                    AND  TA.TTNAME    = TB.NAME             ")
+ok = NSL("                    AND  TA.GRANTEE   = '"Grantee_val"'     ")
+ok = NSL("--                  AND  TA.SELECTAUTH    IN ('G', 'Y')     ")
+ok = NSL("--                  AND  TA.INSERTAUTH    IN ('G', 'Y')     ")
+ok = NSL("--                  AND  TA.UPDATEAUTH    IN ('G', 'Y')     ")
+ok = NSL("--                  AND  TA.DELETEAUTH    IN ('G', 'Y')     ")
+ok = NSL("                )                                           ")
+If Creator_Val <> "" Then Do
+   IF POS('%', Creator_Val) > 0 THEN DO
+      ok = NSL("AND   TB.Creator  LIKE '"Creator_Val"'              ")
+    END
+   Else Do
+      ok = NSL("AND   TB.Creator  =    '"Creator_Val"'              ")
+    END
+ End
+If Table_Val   <> "" Then Do
+   IF POS('%', Table_Val) > 0 THEN DO
+      ok = NSL("AND   TB.Name     LIKE '"Table_Val"'              ")
+    END
+   Else Do
+      ok = NSL("AND   TB.Name     =    '"Table_Val"'              ")
+    END
+ End
+ok = NSL("AND TB.TYPE IN ('T', 'V')                                   ")
+ok = NSL(";                                                           ")
+
+EINGABE  = "WWR"
+OBJ      = "EDIT_DIREKT"
+
+Return
+
+Auswahl_111:   /*  Kopieren on Table / View   */
+
+
+OPF   = PF
+ORESP = RESP
+
+Grantee = Left(' ', 60, ' '   )
+Creator = Left(' ', 60, ' '   )
+Table   = Left(' ', 60, ' '   )
+
+area.0  = 6
+area.1  = white"  "
+area.2  = white"Generate Grant on Table / View :"
+area.3  = white" "keyw"Grantee    :  "in1 ||Grantee ||endin
+area.4  = white" "keyw"Creator    :  "in1 ||Creator ||endin
+area.5  = white" "keyw"Table      :  "in1 ||Table   ||endin
+area.6  = white"  "
+
+Call Anzeige_Dyn_Panel
+
+If PF   = 'PF03'  | PF = 'PF04' Then do
+   PF   = OPF
+   RESP = ORESP
+   EDIT = "N"
+   return
+ End
+
+PF   = OPF
+RESP = ORESP
+
+Grantee_val = Strip(Grantee_val)
+Creator_val = Strip(Creator_val)
+Table_Val   = Strip(Table_Val )
+
+If Table_Val   = "" Then Table_Val   = "%"
+If Creator_Val = "" Then Creator_Val = "%"
+Creator_Val = TRANSLATE(Creator_Val, '%', '*')
+Table_Val   = TRANSLATE(Table_Val, '%', '*')
+
+ok = NSL("                                                            ")
+ok = NSL("-- BERECHTIGUNGEN KOPIEREN                                  ")
+ok = NSL(" SELECT DISTINCT                                            ")
+ok = NSL("        ' GRANT SELECT ON TABLE '                           ")
+ok = NSL("     || RTRIM(RTRIM(TCREATOR) || '.'                        ")
+ok = NSL("     || RTRIM(TTNAME) )                                     ")
+ok = NSL("     ,  '        TO ' || RTRIM(GRANTEE)                     ")
+ok = NSL("     || ' ;'                                                ")
+ok = NSL(" FROM SYSIBM.SYSTABAUTH TA                                  ")
+ok = NSL("WHERE SELECTAUTH IN ('G', 'Y')                              ")
+ok = NSL("AND TCREATOR = '"Creator_Val"'                              ")
+ok = NSL("UNION ALL                                                   ")
+ok = NSL(" SELECT DISTINCT                                            ")
+ok = NSL("        ' GRANT INSERT ON TABLE '                           ")
+ok = NSL("     || RTRIM(RTRIM(TCREATOR) || '.'                        ")
+ok = NSL("     || RTRIM(TTNAME) )                                     ")
+ok = NSL("     ,  '         TO ' || RTRIM(GRANTEE)                    ")
+ok = NSL("     || ' ;'                                                ")
+ok = NSL(" FROM SYSIBM.SYSTABAUTH TA                                  ")
+ok = NSL("WHERE INSERTAUTH IN ('G', 'Y')                              ")
+ok = NSL("AND TCREATOR = '"Creator_Val"'                              ")
+ok = NSL("UNION ALL                                                   ")
+ok = NSL(" SELECT DISTINCT                                            ")
+ok = NSL("        ' GRANT UPDATE ON TABLE '                           ")
+ok = NSL("     || RTRIM(RTRIM(TCREATOR) || '.'                        ")
+ok = NSL("     || RTRIM(TTNAME) )                                     ")
+ok = NSL("     ,  '         TO ' || RTRIM(GRANTEE)                    ")
+ok = NSL("     || ' ;'                                                ")
+ok = NSL(" FROM SYSIBM.SYSTABAUTH TA                                  ")
+ok = NSL("WHERE UPDATEAUTH IN ('G', 'Y')                              ")
+ok = NSL("AND TCREATOR = '"Creator_Val"'                              ")
+ok = NSL("UNION ALL                                                   ")
+ok = NSL(" SELECT DISTINCT                                            ")
+ok = NSL("        ' GRANT DELETE ON TABLE '                           ")
+ok = NSL("     || RTRIM(RTRIM(TCREATOR) || '.'                        ")
+ok = NSL("     || RTRIM(TTNAME) )                                     ")
+ok = NSL("     ,  '         TO ' || RTRIM(GRANTEE)                    ")
+ok = NSL("     || ' ;'                                                ")
+ok = NSL(" FROM SYSIBM.SYSTABAUTH TA                                  ")
+ok = NSL("WHERE DELETEAUTH IN ('G', 'Y')                              ")
+ok = NSL("AND TCREATOR = '"Creator_Val"'                              ")
+ok = NSL("UNION ALL                                                   ")
+ok = NSL(" SELECT DISTINCT                                            ")
+ok = NSL("        ' GRANT INDEX  ON TABLE '                           ")
+ok = NSL("     || RTRIM(RTRIM(TCREATOR) || '.'                        ")
+ok = NSL("     || RTRIM(TTNAME) )                                     ")
+ok = NSL("     ,  '         TO ' || RTRIM(GRANTEE)                    ")
+ok = NSL("     || ' ;'                                                ")
+ok = NSL(" FROM SYSIBM.SYSTABAUTH TA                                  ")
+ok = NSL("WHERE INDEXAUTH IN ('G', 'Y')                               ")
+ok = NSL("AND TCREATOR = '"Creator_Val"'                              ")
+ok = NSL("UNION ALL                                                   ")
+ok = NSL(" SELECT DISTINCT                                            ")
+ok = NSL("        ' GRANT ALTER  ON TABLE '                           ")
+ok = NSL("     || RTRIM(RTRIM(TCREATOR) || '.'                        ")
+ok = NSL("     || RTRIM(TTNAME) )                                     ")
+ok = NSL("     ,  '         TO ' || RTRIM(GRANTEE)                    ")
+ok = NSL("     || ' ;'                                                ")
+ok = NSL(" FROM SYSIBM.SYSTABAUTH TA                                  ")
+ok = NSL("WHERE ALTERAUTH IN ('G', 'Y')                               ")
+ok = NSL("AND TCREATOR = '"Creator_Val"'                              ")
+ok = NSL("UNION ALL                                                   ")
+ok = NSL(" SELECT DISTINCT                                            ")
+ok = NSL("        ' GRANT DROPIN  ON SCHEMA '                         ")
+ok = NSL("     || RTRIM(SCHEMANAME)                                   ")
+ok = NSL("     ,  '         TO ' || RTRIM(GRANTEE)                    ")
+ok = NSL("     || ' ;'                                                ")
+ok = NSL(" FROM SYSIBM.SYSSCHEMAAUTH                                  ")
+ok = NSL("WHERE DROPINAUTH   IN ('G', 'Y')                            ")
+ok = NSL("AND SCHEMANAME = '"Creator_Val"'                            ")
+ok = NSL("UNION ALL                                                   ")
+ok = NSL(" SELECT DISTINCT                                            ")
+ok = NSL("        ' GRANT CREATEIN  ON SCHEMA '                       ")
+ok = NSL("     || RTRIM(SCHEMANAME)                                   ")
+ok = NSL("     ,  '         TO ' || RTRIM(GRANTEE)                    ")
+ok = NSL("     || ' ;'                                                ")
+ok = NSL(" FROM SYSIBM.SYSSCHEMAAUTH                                  ")
+ok = NSL("WHERE CREATEINAUTH   IN ('G', 'Y')                          ")
+ok = NSL("AND SCHEMANAME = '"Creator_Val"'                            ")
+ok = NSL("UNION ALL                                                   ")
+ok = NSL(" SELECT DISTINCT                                            ")
+ok = NSL("        ' GRANT ALTERIN  ON SCHEMA '                        ")
+ok = NSL("     || RTRIM(SCHEMANAME)                                   ")
+ok = NSL("     ,  '         TO ' || RTRIM(GRANTEE)                    ")
+ok = NSL("     || ' ;'                                                ")
+ok = NSL(" FROM SYSIBM.SYSSCHEMAAUTH                                  ")
+ok = NSL("WHERE ALTERINAUTH   IN ('G', 'Y')                           ")
+ok = NSL("AND SCHEMANAME = '"Creator_Val"'                            ")
+ok = NSL(" ORDER BY 1                                                 ")
+ok = NSL(" FOR FETCH ONLY                                             ")
+ok = NSL(" WITH UR                                                    ")
+ok = NSL(";                                                           ")
+
+EINGABE  = "WWR"
+OBJ      = "EDIT_DIREKT"
+
+Return
+
+Auswahl_12:    /*  Genarate Compress TABLESPACE     */
+
+
+OPF   = PF
+ORESP = RESP
+
+TBCreator = Left(' ', 60, ' ' )
+DBNAME    = Left(' ', 60, ' '   )
+
+area.0  = 5
+area.1  = white"  "
+area.2  = white"Generate COMPRESS TABLESPACE   :"
+area.3  = white" "keyw"TBCreator  :  "in1 ||TBCreator ||endin
+area.4  = white" "keyw"DBNAME     :  "in1 ||DBName    ||endin
+area.5  = white"  "
+
+Call Anzeige_Dyn_Panel
+
+If PF   = 'PF03'  | PF = 'PF04' Then do
+   PF   = OPF
+   RESP = ORESP
+   EDIT = "N"
+   return
+ End
+
+PF   = OPF
+RESP = ORESP
+
+TBCreator_val = Strip(TBCreator_val)
+DBNAME_VAL    = Strip(DBNAME_Val )
+
+If TBCreator_Val = "" Then TBCreator_Val = "%"
+If DBNAME_Val    = "" Then DBNAME_VAL    = "%"
+TBCreator_Val = TRANSLATE(TBCreator_Val, '%', '*')
+DBNAME_VAL    = TRANSLATE(DBNAME_VAL   , '%', '*')
+
+ok = NSL("-- Generate COMPRESS Tablespace                             ")
+ok = NSL("SELECT DISTINCT 'ALTER TABLESPACE '                         ")
+ok = NSL("CONCAT RTRIM(TS.DBNAME) CONCAT '.'                          ")
+ok = NSL("CONCAT RTRIM(TS.NAME)                                       ")
+ok = NSL("CONCAT ' COMPRESS YES ; '                                   ")
+ok = NSL("FROM  SYSIBM.SYSTABLESPACE     TS                           ")
+ok = NSL("INNER JOIN SYSIBM.SYSTABLEPART TP                           ")
+ok = NSL("ON   TS.DBNAME   = TP.DBNAME                                ")
+ok = NSL("AND  TS.NAME     = TP.TSNAME                                ")
+ok = NSL("INNER JOIN SYSIBM.SYSTABLES    TB                           ")
+ok = NSL("ON   TS.DBNAME   = TB.DBNAME                                ")
+ok = NSL("AND  TS.NAME     = TB.TSNAME                                ")
+ok = NSL("WHERE TP.COMPRESS <> 'Y'                                    ")
+ok = NSL("AND TS.TYPE NOT IN ('O', 'P'  )                             ")
+ok = NSL("AND TS.NACTIVEF > 2000                                      ")
+ok = NSL("AND TB.CARDF    > 2000                                      ")
+If TBCreator_Val <> "" Then Do
+   IF POS('%', TBCreator_Val) > 0 THEN DO
+      ok = NSL("AND   TB.Creator  LIKE '"TBCreator_Val"'            ")
+    END
+   Else Do
+      ok = NSL("AND   TB.Creator  =    '"TBCreator_Val"'            ")
+    END
+ End
+If DBNAME_Val  <> "" Then Do
+   IF POS('%', DBNAME_Val) > 0 THEN DO
+      ok = NSL("AND   TB.DBNAME   LIKE '"DBNAME_Val"'             ")
+    END
+   Else Do
+      ok = NSL("AND   TB.DBNAME   =    '"DBNAME_Val"'             ")
+    END
+ End
+ok = NSL("FOR FETCH ONLY WITH UR                                      ")
+ok = NSL(";                                                           ")
+
+EINGABE  = "WWR"
+OBJ      = "EDIT_DIREKT"
+
+Return
+
+Auswahl_13:    /*  Genarate Compress TABLESPACE     */
+
+
+OPF   = PF
+ORESP = RESP
+
+DBNAME    = Left(' ', 60, ' '   )
+TSNAME    = Left(' ', 60, ' ' )
+
+area.0  = 5
+area.1  = white"  "
+area.2  = white"Generate COMPRESS TABLESPACE   :"
+area.3  = white" "keyw"DBNAME     :  "in1 ||DBName    ||endin
+area.4  = white" "keyw"TSNAME     :  "in1 ||TSNAME    ||endin
+area.5  = white"  "
+
+Call Anzeige_Dyn_Panel
+
+If PF   = 'PF03'  | PF = 'PF04' Then do
+   PF   = OPF
+   RESP = ORESP
+   EDIT = "N"
+   return
+ End
+
+PF   = OPF
+RESP = ORESP
+
+TSNAME_val = Strip(TSNAME_val)
+DBNAME_VAL    = Strip(DBNAME_Val )
+
+If TSNAME_Val = "" Then TSNAME_Val = "%"
+If DBNAME_Val    = "" Then DBNAME_VAL    = "%"
+TSNAME_Val = TRANSLATE(TSNAME_Val, '%', '*')
+DBNAME_VAL    = TRANSLATE(DBNAME_VAL   , '%', '*')
+
+ok = NSL("-- MEHR AENDERUNGEN ALS ROWS IN DER TABLE SEIT LETZTEM RS   ")
+ok = NSL("WITH                                                        ")
+ok = NSL("   RTS  (  DBNAME                                           ")
+ok = NSL("         , NAME                                             ")
+ok = NSL("         , STATSINSERTS                                     ")
+ok = NSL("         , STATSDELETES                                     ")
+ok = NSL("         , STATSUPDATES                                     ")
+ok = NSL("         , STATSMASSDELETE                                  ")
+ok = NSL("         , STATS_ALTER_ROWS                                 ")
+ok = NSL("         , TOTALROWS                                        ")
+ok = NSL("         )                                                  ")
+ok = NSL("    AS (SELECT RTS.DBNAME                                   ")
+ok = NSL("             , RTS.NAME                                     ")
+ok = NSL("             , SUM(RTS.STATSINSERTS)                        ")
+ok = NSL("             , SUM(RTS.STATSDELETES)                        ")
+ok = NSL("             , SUM(RTS.STATSUPDATES)                        ")
+ok = NSL("             , SUM(RTS.STATSMASSDELETE)                     ")
+ok = NSL("             , SUM(RTS.STATSINSERTS                         ")
+ok = NSL("               +   RTS.STATSDELETES                         ")
+ok = NSL("               +   RTS.STATSUPDATES                         ")
+ok = NSL("               +   RTS.STATSMASSDELETE)                     ")
+ok = NSL("             , SUM(RTS.TOTALROWS)                           ")
+ok = NSL("        FROM SYSIBM.SYSTABLESPACESTATS RTS                  ")
+ok = NSL("        WHERE  RTS.STATSLASTTIME IS NOT NULL                ")
+If DBNAME_Val  <> "" Then Do
+   IF POS('%', DBNAME_Val) > 0 THEN DO
+      ok = NSL("          AND  RTS.DBNAME   LIKE '"DBNAME_Val"'   ")
+    END
+   Else Do
+      ok = NSL("          AND  RTS.DBNAME   =    '"DBNAME_Val"'   ")
+    END
+ End
+If TSNAME_Val <> "" Then Do
+   IF POS('%', TSNAME_Val) > 0 THEN DO
+      ok = NSL("          AND  RTS.NAME     LIKE '"TSNAME_Val"'   ")
+    END
+   Else Do
+      ok = NSL("          AND  RTS.NAME     =    '"TSNAME_Val"'  ")
+    END
+ End
+ok = NSL("        GROUP BY  RTS.DBNAME                                ")
+ok = NSL("                , RTS.NAME                                  ")
+ok = NSL("       )                                                    ")
+ok = NSL("                                                            ")
+ok = NSL("SELECT RTS.DBNAME                                           ")
+ok = NSL("     , RTS.NAME                                             ")
+ok = NSL("     , RTS.STATSINSERTS                                     ")
+ok = NSL("     , RTS.STATSDELETES                                     ")
+ok = NSL("     , RTS.STATSUPDATES                                     ")
+ok = NSL("     , RTS.STATSMASSDELETE                                  ")
+ok = NSL("     , RTS.TOTALROWS                                        ")
+ok = NSL("     , RTS.STATS_ALTER_ROWS                                 ")
+ok = NSL("     , INT(TB.CARDF) AS CARDF                               ")
+ok = NSL("FROM RTS                       RTS                          ")
+ok = NSL("INNER JOIN SYSIBM.SYSTABLES     TB                          ")
+ok = NSL("ON    RTS.DBNAME      = TB.DBNAME                           ")
+ok = NSL("AND   RTS.NAME        = TB.TSNAME                           ")
+ok = NSL("WHERE RTS.TOTALROWS   > 0                                   ")
+ok = NSL("--     TB.CARDF       < 0                                   ")
+ok = NSL("AND RTS.STATS_ALTER_ROWS      > RTS.TOTALROWS               ")
+ok = NSL("FOR FETCH ONLY WITH UR                                      ")
+ok = NSL(";                                                           ")
+
+EINGABE  = "FIX"
+OBJ      = "EDIT_DIREKT"
+
+Return
+
+Auswahl_14:    /*  Copy Runstats                    */
+
+
+OPF   = PF
+ORESP = RESP
+
+FromTBCreator   = Left(' ', 50, ' '   )
+FROMTBName      = Left(' ', 50, ' '   )
+TOTBCreator     = Left(' ', 50, ' '   )
+
+area.0  = 7
+area.1  = white"  "
+area.2  = white"Copy Statistiks :"
+area.3  = white" "keyw"FromTBCreator :  "in1 ||FromTBCreator  ||endin
+area.4  = white" "keyw"FROMTBName    :  "in1 ||FROMTBName     ||endin
+area.5  = white"  "
+area.6  = white" "keyw"TOTBCreator   :  "in1 ||TOTBCreator    ||endin
+area.7  = white"  "
+MSGLINE = "Bitte alle 3 Felder eingeben sonnst wird es huddelig"
+
+Call Anzeige_Dyn_Panel
+
+If PF   = 'PF03'  | PF = 'PF04' Then do
+   PF   = OPF
+   RESP = ORESP
+   EDIT = "N"
+   return
+ End
+
+PF   = OPF
+RESP = ORESP
+
+FromTBCreator_val = Strip(FromTBCreator_val)
+FROMTBName_val    = Strip(FROMTBName_val)
+TOTBCreator_val   = Strip(TOTBCreator_val)
+
+If FromTBCreator_val = "" Then FromTBCreator_val  = "%"
+If FROMTBName_val    = "" Then FROMTBName_val     = "%"
+If TOTBCreator_val   = "" Then TOTBCreator_val    = "%"
+If TODatabase_val    = "" Then TODatabase_val     = "%"
+FromTBCreator_val = TRANSLATE(FromTBCreator_val  , '%', '*')
+FROMTBName_val    = TRANSLATE(FROMTBName_val     , '%', '*')
+TOTBCreator_val   = TRANSLATE(TOTBCreator_val    , '%', '*')
+
+FromCr  = ""
+FromNm  = ""
+If FromTBCreator_val <> "" Then Do
+   IF POS('%', FromTBCreator_val) > 0 THEN DO
+      FromCR = "        TB.Creator  LIKE '"FromTBCreator_val"'"
+    END
+   Else Do
+      FromCr = "        TB.Creator  =    '"FromTBCreator_val"'"
+    END
+ End
+
+If FROMTBName_Val <> "" Then Do
+   IF POS('%', FROMTBName_Val) > 0 THEN DO
+      FromNm = "        TB.Name     LIKE '"FROMTBName_Val"'"
+    END
+   Else Do
+      FromNm = "        TB.Name     =    '"FROMTBName_Val"'"
+    END
+ End
+
+ok = NSL(" --                                                         ")
+ok = NSL(" -- COPY STATISTIK                                          ")
+ok = NSL(" --                                                         ")
+ok = NSL(" --    AUSWAHL TABLELLE                                     ")
+ok = NSL(" WITH  TAB (TB_CREATOR, TB_NAME, TB_DBNAME, TB_TSNAME       ")
+ok = NSL("           ,TOCR, TODB                                      ")
+ok = NSL("           )                                                ")
+ok = NSL("       AS  (SELECT TB.CREATOR, TB.NAME, TB.DBNAME           ")
+ok = NSL("                 , TB.TSNAME, TB2.Creator, TB2.DBNAME       ")
+ok = NSL("            FROM SYSIBM.SYSTABLES TB                        ")
+ok = NSL("            INNER JOIN SYSIBM.SYSTABLES  TB2                ")
+ok = NSL("              ON  TB2.NAME     = TB.NAME                    ")
+ok = NSL("              AND TB2.CREATOR  = '"TOTBCreator_val"'        ")
+ok = NSL("            WHERE  "FromCr"                                 ")
+ok = NSL("            AND    "FromNm"                                 ")
+ok = NSL("           )                                                ")
+ok = NSL(" --    ERSETZEN CREATOR UND DBNAME                          ")
+ok = NSL("   ,UPTAB1  (C1,  C2,  C3,  C4,  C5,  C6,  C7,  C8 ",
+                     ",C9,  C10                                       ")
+ok = NSL("            ,C11, C12, C13, C14, C15, C16, C17, C18",
+                     ",C19, C20                                       ")
+ok = NSL("            ,C21, C22, C23, C24, C25, C26, C27, C28",
+                     ",C29, C30                                       ")
+ok = NSL("            )                                               ")
+ok = NSL("       AS  (SELECT '--010'                                  ")
+ok = NSL("                 , 'UPDATE SYSIBM.SYSTABLES SET '           ")
+ok = NSL("                 , ' CARDF      = ' || CHAR(CARDF)          ")
+ok = NSL("                 , ',CARD       = ' || CHAR(CARD )          ")
+ok = NSL("                 , ',NPAGES     = ' || CHAR(NPAGES)         ")
+ok = NSL("                 , ',NPAGESF    = ' || CHAR(NPAGESF)        ")
+ok = NSL("                 , ',PCTROWCOMP = ' || CHAR(PCTROWCOMP)     ")
+ok = NSL("                 , ',AVGROWLEN  = ' || CHAR(AVGROWLEN)      ")
+ok = NSL("                 , ',PCTPAGES   = ' || CHAR(PCTPAGES)       ")
+ok = NSL("                 , ',SPACEF     = ' || CHAR(SPACEF)         ")
+ok = NSL("                 , ',STATS_FEEDBACK = ''' ||",
+              "STATS_FEEDBACK || ''''                                 ")
+ok = NSL("                 , ',STATSTIME  = ''' ||",
+              "CHAR(CURRENT TIMESTAMP)|| ''''                         ")
+ok = NSL("                 , 'WHERE CREATOR = ''' ||''||",
+              "RTRIM(TOCR)  || ''''                                   ")
+ok = NSL("                 , 'AND   NAME    = ''' || '' ||",
+              "RTRIM(NAME)   || ''''                                  ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '; '                                     ")
+ok = NSL("            FROM SYSIBM.SYSTABLES T1                        ")
+ok = NSL("            JOIN TAB                                        ")
+ok = NSL("            ON   T1.CREATOR = TAB.TB_CREATOR                ")
+ok = NSL("            AND  T1.NAME    = TAB.TB_NAME                   ")
+ok = NSL("           )                                                ")
+ok = NSL("   ,UPTAB20 (C1,  C2,  C3,  C4,  C5,  C6,  C7,  C8 ",
+                     ",C9,  C10                                       ")
+ok = NSL("            ,C11, C12, C13, C14, C15, C16, C17, C18",
+                     ",C19, C20                                       ")
+ok = NSL("            ,C21, C22, C23, C24, C25, C26, C27, C28",
+                     ",C29, C30                                       ")
+ok = NSL("            )                                               ")
+ok = NSL("       AS  (SELECT DISTINCT '--020'                         ")
+ok = NSL("                 , 'DELETE FROM SYSIBM.SYSTABSTATS      '   ")
+ok = NSL("                 , 'WHERE DBNAME  = ''' ||''||",
+              "RTRIM(TODB)     || ''''                                ")
+ok = NSL("                 , 'AND   TSNAME  = ''' || '' ||",
+              "RTRIM(TSNAME) || ''''                                  ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '; '                                     ")
+ok = NSL("            FROM SYSIBM.SYSTABSTATS  T1                     ")
+ok = NSL("            JOIN TAB                                        ")
+ok = NSL("            ON   T1.DBNAME  = TAB.TB_DBNAME                 ")
+ok = NSL("            AND  T1.TSNAME  = TAB.TB_TSNAME                 ")
+ok = NSL("           )                                                ")
+ok = NSL("   ,UPTAB21 (C1,  C2,  C3,  C4,  C5,  C6,  C7,  C8 ",
+                     ",C9,  C10                                       ")
+ok = NSL("            ,C11, C12, C13, C14, C15, C16, C17, C18",
+                     ",C19, C20                                       ")
+ok = NSL("            ,C21, C22, C23, C24, C25, C26, C27, C28",
+                     ",C29, C30                                       ")
+ok = NSL("            )                                               ")
+ok = NSL("       AS  (SELECT '--021'                                  ")
+ok = NSL("                 , 'INSERT INTO SYSIBM.SYSTABSTATS'         ")
+ok = NSL("                 , '(CARD,NPAGES,PCTPAGES,NACTIVE,",
+                 "PCTROWCOMP'                                         ")
+ok = NSL("                 , ',STATSTIME,IBMREQD,DBNAME,TSNAME,",
+                 "PARTITION'                                          ")
+ok = NSL("                 , ',OWNER,NAME,CARDF) VALUES('             ")
+ok = NSL("                 ,   STRIP(CHAR(CARD))                      ")
+ok = NSL("     CONCAT ' ,'                                            ")
+ok = NSL("                 ,   STRIP(CHAR(NPAGES))                    ")
+ok = NSL("     CONCAT ' ,'                                            ")
+ok = NSL("                 ,   STRIP(CHAR(PCTPAGES))                  ")
+ok = NSL("     CONCAT ' ,'                                            ")
+ok = NSL("                 ,   STRIP(CHAR(NACTIVE))                   ")
+ok = NSL("     CONCAT ' ,'                                            ")
+ok = NSL("                 ,   STRIP(CHAR(PCTROWCOMP))                ")
+ok = NSL("     CONCAT ' ,'                                            ")
+ok = NSL("                 ,   '''' CONCAT CHAR(STATSTIME)            ")
+ok = NSL("     CONCAT ''' ,'                                          ")
+ok = NSL("                 ,   '''' CONCAT IBMREQD                    ")
+ok = NSL("     CONCAT ''' ,'                                          ")
+ok = NSL("                 ,   '''' CONCAT STRIP(TODB)                ")
+ok = NSL("     CONCAT ''' ,'                                          ")
+ok = NSL("                 ,   '''' CONCAT STRIP(TSNAME)              ")
+ok = NSL("     CONCAT ''' ,'                                          ")
+ok = NSL("                 ,   STRIP(CHAR(PARTITION))                 ")
+ok = NSL("     CONCAT ' ,'                                            ")
+ok = NSL("                 ,   '''' CONCAT STRIP(TOCR)                ")
+ok = NSL("     CONCAT ''' ,'                                          ")
+ok = NSL("                 ,   '''' CONCAT STRIP(NAME)                ")
+ok = NSL("     CONCAT ''' ,'                                          ")
+ok = NSL("                 ,   STRIP(CHAR(CARDF))                     ")
+ok = NSL("     CONCAT  ') '                                           ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '; '                                     ")
+ok = NSL("            FROM SYSIBM.SYSTABSTATS  T1                     ")
+ok = NSL("            JOIN TAB                                        ")
+ok = NSL("            ON   T1.DBNAME  = TAB.TB_DBNAME                 ")
+ok = NSL("            AND  T1.TSNAME  = TAB.TB_TSNAME                 ")
+ok = NSL("           )                                                ")
+ok = NSL("   ,UPTAB3  (C1,  C2,  C3,  C4,  C5,  C6,  C7,  C8 ",
+                     ",C9,  C10                                       ")
+ok = NSL("            ,C11, C12, C13, C14, C15, C16, C17, C18",
+                     ",C19, C20                                       ")
+ok = NSL("            ,C21, C22, C23, C24, C25, C26, C27, C28",
+                     ",C29, C30                                       ")
+ok = NSL("            )                                               ")
+ok = NSL("       AS  (SELECT '--030'                                  ")
+ok = NSL("                 , 'UPDATE SYSIBM.SYSCOLUMNS      SET '     ")
+ok = NSL("                 , ' COLCARD    = ' || CHAR(COLCARD)        ")
+ok = NSL("                 , ',COLCARDF   = ' || CHAR(COLCARDF)       ")
+ok = NSL("                 , ',HIGH2KEY   = X''' ||",
+              "HEX(T1.HIGH2KEY) || ''''                               ")
+ok = NSL("                 , ',LOW2KEY   = X''' ||",
+              "HEX(T1.LOW2KEY)  || ''''                               ")
+ok = NSL("                 , ',STATS_FORMAT = ''' ||",
+              "STATS_FORMAT || ''''                                   ")
+ok = NSL("                 , ',STATSTIME  = ''' ||",
+              "CHAR(CURRENT TIMESTAMP)|| ''''                         ")
+ok = NSL("                 , 'WHERE TBCREATOR = ''' ||''||",
+              "RTRIM(TOCR)  || ''''                               ")
+ok = NSL("                 , 'AND TBNAME  = ''' || '' ||",
+              "RTRIM(T2.NAME)   || ''''                               ")
+ok = NSL("                 , 'AND   NAME    = ''' ||",
+              "RTRIM(T1.NAME) || ''''                                 ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '; '                                     ")
+ok = NSL("            FROM SYSIBM.SYSCOLUMNS T1                       ")
+ok = NSL("            JOIN SYSIBM.SYSTABLES  T2                       ")
+ok = NSL("            ON  T1.TBCREATOR = T2.CREATOR                   ")
+ok = NSL("            AND T1.TBNAME    = T2.NAME                      ")
+ok = NSL("            JOIN TAB                                        ")
+ok = NSL("            ON   T2.CREATOR = TAB.TB_CREATOR                ")
+ok = NSL("            AND  T2.NAME    = TAB.TB_NAME                   ")
+ok = NSL("            WHERE T2.TYPE    ='T'                           ")
+ok = NSL("           )                                                ")
+ok = NSL("                                                            ")
+ok = NSL("   ,UPTAB40 (C1,  C2,  C3,  C4,  C5,  C6,  C7,  C8 ",
+                     ",C9,  C10                                       ")
+ok = NSL("            ,C11, C12, C13, C14, C15, C16, C17, C18",
+                     ",C19, C20                                       ")
+ok = NSL("            ,C21, C22, C23, C24, C25, C26, C27, C28",
+                     ",C29, C30                                       ")
+ok = NSL("            )                                               ")
+ok = NSL("       AS  (SELECT DISTINCT '--040'                         ")
+ok = NSL("                 , 'DELETE FROM SYSIBM.SYSCOLDIST      '    ")
+ok = NSL("                 , 'WHERE TBOWNER = ''' ||''||",
+              "RTRIM(TOCR) || ''''                                    ")
+ok = NSL("                 , 'AND  TBNAME  = ''' || '' ||",
+              "RTRIM(T2.NAME) || ''''                                 ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '; '                                     ")
+ok = NSL("            FROM SYSIBM.SYSCOLDIST T1                       ")
+ok = NSL("            JOIN SYSIBM.SYSTABLES  T2                       ")
+ok = NSL("            ON  T1.TBOWNER = T2.CREATOR                     ")
+ok = NSL("            AND T1.TBNAME  = T2.NAME                        ")
+ok = NSL("            JOIN TAB                                        ")
+ok = NSL("            ON   T2.CREATOR = TAB.TB_CREATOR                ")
+ok = NSL("            AND  T2.NAME    = TAB.TB_NAME                   ")
+ok = NSL("           )                                                ")
+ok = NSL("   ,UPTAB41 (C1,  C2,  C3,  C4,  C5,  C6,  C7,  C8 ",
+                     ",C9,  C10                                       ")
+ok = NSL("            ,C11, C12, C13, C14, C15, C16, C17, C18",
+                     ",C19, C20                                       ")
+ok = NSL("            ,C21, C22, C23, C24, C25, C26, C27, C28",
+                     ",C29, C30                                       ")
+ok = NSL("            )                                               ")
+ok = NSL("       AS  (SELECT '--041'                                  ")
+ok = NSL("                 , 'INSERT INTO SYSIBM.SYSCOLDIST '         ")
+ok = NSL("                 , '(FREQUENCY,STATSTIME,IBMREQD,TBOWNER,",
+               "TBNAME,NAME,'                                         ")
+ok = NSL("                 , ' COLVALUE,TYPE,CARDF,COLGROUPCOLNO,",
+               "NUMCOLUMNS,'                                          ")
+ok = NSL("                 , ' FREQUENCYF,QUANTILENO,LOWVALUE,",
+               "HIGHVALUE) '                                          ")
+ok = NSL("                 , ' VALUES(' CONCAT                        ")
+ok = NSL("     STRIP(CHAR(FREQUENCY)) || ', '",
+                          ",  '''' CONCAT CHAR(T1.STATSTIME)          ")
+ok = NSL("     CONCAT ''' ,'                                          ")
+ok = NSL("                 ,  '''' CONCAT CHAR(T1.IBMREQD)            ")
+ok = NSL("     CONCAT ''' ,'                                          ")
+ok = NSL("                 ,  '''' CONCAT STRIP(TOCR)                 ")
+ok = NSL("     CONCAT ''' ,'                                          ")
+ok = NSL("                 ,  '''' CONCAT STRIP(T1.TBNAME)            ")
+ok = NSL("     CONCAT ''','                                           ")
+ok = NSL("                 ,  '''' CONCAT STRIP(T1.NAME)              ")
+ok = NSL("     CONCAT ''' ,'                                          ")
+ok = NSL("                 ,  'X''' CONCAT STRIP(HEX(COLVALUE))       ")
+ok = NSL("     CONCAT ''' ,'                                          ")
+ok = NSL("                 ,  '''' CONCAT T1.TYPE                     ")
+ok = NSL("     CONCAT ''' ,'                                          ")
+ok = NSL("                 ||  STRIP(CHAR(T1.CARDF))                  ")
+ok = NSL("     CONCAT ' ,'                                            ")
+ok = NSL("                 ,  'X'''CONCAT STRIP(HEX(COLGROUPCOLNO))   ")
+ok = NSL("     CONCAT ''' ,'                                          ")
+ok = NSL("                 ,  CHAR(NUMCOLUMNS)                        ")
+ok = NSL("     CONCAT ' ,'                                            ")
+ok = NSL("                 ,  STRIP(CHAR(FREQUENCYF))                 ")
+ok = NSL("     CONCAT ','                                             ")
+ok = NSL("                 || CHAR(QUANTILENO)                        ")
+ok = NSL("     CONCAT ','                                             ")
+ok = NSL("                 ,  'X''' CONCAT STRIP(HEX(LOWVALUE))       ")
+ok = NSL("     CONCAT ''','                                           ")
+ok = NSL("                 ,  'X''' CONCAT STRIP(HEX(HIGHVALUE))      ")
+ok = NSL("     CONCAT ''') '                                          ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '; '                                     ")
+ok = NSL("            FROM SYSIBM.SYSCOLDIST T1                       ")
+ok = NSL("            JOIN SYSIBM.SYSTABLES  T2                       ")
+ok = NSL("            ON  T1.TBOWNER = T2.CREATOR                     ")
+ok = NSL("            AND T1.TBNAME  = T2.NAME                        ")
+ok = NSL("            JOIN TAB                                        ")
+ok = NSL("            ON   T2.CREATOR = TAB.TB_CREATOR                ")
+ok = NSL("            AND  T2.NAME    = TAB.TB_NAME                   ")
+ok = NSL("           )                                                ")
+ok = NSL("   ,UPTAB5  (C1,  C2,  C3,  C4,  C5,  C6,  C7,  C8 ",
+                     ",C9,  C10                                       ")
+ok = NSL("            ,C11, C12, C13, C14, C15, C16, C17, C18",
+                     ",C19, C20                                       ")
+ok = NSL("            ,C21, C22, C23, C24, C25, C26, C27, C28",
+                     ",C29, C30                                       ")
+ok = NSL("            )                                               ")
+ok = NSL("       AS  (SELECT '--050'                                  ")
+ok = NSL("                 , 'UPDATE SYSIBM.SYSTABLESPACE   SET '     ")
+ok = NSL("                 , '   NACTIVE  = '  || CHAR(NACTIVE)       ")
+ok = NSL("                 , ',  NACTIVEF = '  || CHAR(NACTIVEF)      ")
+ok = NSL("                 , ',  AVGROWLEN = ' || CHAR(AVGROWLEN)     ")
+ok = NSL("                 , ',  SPACEF    = ' || CHAR(SPACEF)        ")
+ok = NSL("                 , ',  STATSTIME = ''' ||                   ")
+ok = NSL("     CHAR(CURRENT TIMESTAMP)|| ''''                         ")
+ok = NSL("                 , 'WHERE DBNAME = ''' ||''||",
+              "RTRIM(T1.DBNAME)|| ''''                                ")
+ok = NSL("                 , 'AND   NAME   = ''' || '' ||",
+              "RTRIM(T1.NAME) || ''''                                 ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '; '                                     ")
+ok = NSL("            FROM SYSIBM.SYSTABLESPACE T1                    ")
+ok = NSL("            JOIN TAB                                        ")
+ok = NSL("            ON   T1.DBNAME  = TAB.TB_DBNAME                 ")
+ok = NSL("            AND  T1.NAME    = TAB.TB_TSNAME                 ")
+ok = NSL("           )                                                ")
+ok = NSL("   ,UPTAB6  (C1,  C2,  C3,  C4,  C5,  C6,  C7,  C8 ",
+                     ",C9,  C10                                       ")
+ok = NSL("            ,C11, C12, C13, C14, C15, C16, C17, C18",
+                     ",C19, C20                                       ")
+ok = NSL("            ,C21, C22, C23, C24, C25, C26, C27, C28",
+                     ",C29, C30                                       ")
+ok = NSL("            )                                               ")
+ok = NSL("       AS  (SELECT '--060'                                  ")
+ok = NSL("                 , 'UPDATE SYSIBM.SYSINDEXES      SET '     ")
+ok = NSL("                 , ' CLUSTERRATIOF = '||",
+              "RTRIM(CHAR(T1.CLUSTERRATIOF))                          ")
+ok = NSL("                || ',CLUSTERRATIO = ' ||",
+              "CHAR(T1.CLUSTERRATIO )                                 ")
+ok = NSL("                 , ',FIRSTKEYCARDF = ' ||",
+              "RTRIM(CHAR(T1.FIRSTKEYCARDF))                          ")
+ok = NSL("                || ',FIRSTKEYCARD = ' ||",
+              "CHAR(T1.FIRSTKEYCARD )                                 ")
+ok = NSL("                 , ',CLUSTERED = '''   ||",
+              "CLUSTERED || ''''                                      ")
+ok = NSL("                 , ',FULLKEYCARDF = '  ||",
+              "RTRIM(CHAR(T1.FULLKEYCARDF))                           ")
+ok = NSL("                || ',FULLKEYCARD  = '  ||",
+              "CHAR(T1.FULLKEYCARD )                                  ")
+ok = NSL("                 , ',NLEAF       =  '  ||",
+              "CHAR(T1.NLEAF)                                         ")
+ok = NSL("                 , ',NLEVELS     = '   ||",
+              "CHAR(T1.NLEVELS)                                       ")
+ok = NSL("                 , ',AVGKEYLEN = '     ||",
+              "CHAR(T1.AVGKEYLEN)                                     ")
+ok = NSL("                 , ',IOFACTOR = '      ||",
+              "CHAR(T1.IOFACTOR )                                     ")
+ok = NSL("                 , ',PREFETCHFACTOR = '||",
+              "CHAR(T1.PREFETCHFACTOR)                                ")
+ok = NSL("                 , ',SPACEF   = '      ||",
+              "CHAR(T1.SPACEF   )                                     ")
+ok = NSL("                 , ',DATAREPEATFACTORF=' ||",
+              "CHAR(DATAREPEATFACTORF)                                ")
+ok = NSL("                 , ',STATSTIME = ''' ||",
+              "CHAR(CURRENT TIMESTAMP)|| ''''                         ")
+ok = NSL("                 , 'WHERE CREATOR = ''' ||''||",
+              "RTRIM(TOCR) || ''''                                    ")
+ok = NSL("                 , 'AND   NAME    = ''' || '' ||",
+              "RTRIM(T1.NAME) || ''''                                 ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '; '                                     ")
+ok = NSL("            FROM SYSIBM.SYSINDEXES    T1                    ")
+ok = NSL("            JOIN SYSIBM.SYSTABLES     T2                    ")
+ok = NSL("            ON   T1.TBCREATOR = T2.CREATOR                  ")
+ok = NSL("            AND  T1.TBNAME    = T2.NAME                     ")
+ok = NSL("            JOIN TAB                                        ")
+ok = NSL("            ON   T2.CREATOR = TAB.TB_CREATOR                ")
+ok = NSL("            AND  T2.NAME    = TAB.TB_NAME                   ")
+ok = NSL("           )                                                ")
+ok = NSL("   ,UPTAB7  (C1,  C2,  C3,  C4,  C5,  C6,  C7,  C8 ",
+                     ",C9,  C10                                       ")
+ok = NSL("            ,C11, C12, C13, C14, C15, C16, C17, C18",
+                     ",C19, C20                                       ")
+ok = NSL("            ,C21, C22, C23, C24, C25, C26, C27, C28",
+                     ",C29, C30                                       ")
+ok = NSL("            )                                               ")
+ok = NSL("       AS  (SELECT '--070'                                  ")
+ok = NSL("                 , 'UPDATE SYSIBM.SYSINDEXPART    SET '     ")
+ok = NSL("                 , ' AVGKEYLEN = ' || CHAR(T1.AVGKEYLEN)  ")
+ok = NSL("                 , ',DSNUM = '   || RTRIM(CHAR(T1.DSNUM)) ")
+ok = NSL("                 , ',EXTENTS = ' || CHAR(T1.EXTENTS)      ")
+ok = NSL("                 , ',FAROFFPOSF  =  '  ||",
+              "CHAR(T1.FAROFFPOSF)                                    ")
+ok = NSL("                 , ',LEAFNEAR    =  '  ||",
+              "CHAR(T1.LEAFNEAR)                                      ")
+ok = NSL("                 , ',LEAFFAR     =  '  ||",
+              "CHAR(T1.LEAFFAR)                                       ")
+ok = NSL("                 , ',NEAROFFPOSF =  '  ||",
+              "CHAR(T1.NEAROFFPOSF)                                   ")
+ok = NSL("                 , ',LEAFDIST    =  '  ||",
+              "CHAR(T1.LEAFDIST)                                      ")
+ok = NSL("                 , ',PSEUDO_DEL_ENTRIES = '||",
+              "CHAR(PSEUDO_DEL_ENTRIES)                               ")
+ok = NSL("                 , ',SPACEF =  ' ||",
+              "CHAR(T1.SPACEF)                                        ")
+ok = NSL("                 , 'WHERE IXCREATOR = ''' ||''||",
+              "RTRIM(TOCR) || ''''                                    ")
+ok = NSL("                 , 'AND   IXNAME = ''' || '' ||",
+              "RTRIM(IX.NAME) || ''''                                 ")
+ok = NSL("                 , 'AND   PARTITION = ' ||",
+              "CHAR(PARTITION)                                        ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '; '                                     ")
+ok = NSL("            FROM SYSIBM.SYSINDEXPART  T1                    ")
+ok = NSL("            JOIN SYSIBM.SYSINDEXES    IX                    ")
+ok = NSL("             ON  T1.IXCREATOR = IX.CREATOR                  ")
+ok = NSL("             AND T1.IXNAME    = IX.NAME                     ")
+ok = NSL("            JOIN SYSIBM.SYSTABLES     T2                    ")
+ok = NSL("            ON   IX.TBCREATOR = T2.CREATOR                  ")
+ok = NSL("            AND  IX.TBNAME    = T2.NAME                     ")
+ok = NSL("            JOIN TAB                                        ")
+ok = NSL("            ON   T2.CREATOR = TAB.TB_CREATOR                ")
+ok = NSL("            AND  T2.NAME    = TAB.TB_NAME                   ")
+ok = NSL("           )                                                ")
+ok = NSL("   ,UPTAB8  (C1,  C2,  C3,  C4,  C5,  C6,  C7,  C8 ",
+                     ",C9,  C10                                       ")
+ok = NSL("            ,C11, C12, C13, C14, C15, C16, C17, C18",
+                     ",C19, C20                                       ")
+ok = NSL("            ,C21, C22, C23, C24, C25, C26, C27, C28",
+                     ",C29, C30                                       ")
+ok = NSL("            )                                               ")
+ok = NSL("       AS  (SELECT '--080'                                  ")
+ok = NSL("                 , 'UPDATE SYSIBM.SYSTABLEPART    SET '     ")
+ok = NSL("                 , '   DSNUM = '   ||",
+              "RTRIM(CHAR(T1.DSNUM))                                  ")
+ok = NSL("                 , ',  EXTENTS = ' ||",
+              "RTRIM(CHAR(T1.EXTENTS))                                ")
+ok = NSL("                 , ',  NEARINDREF  =  '  ||",
+              "CHAR(T1.NEARINDREF)                                    ")
+ok = NSL("                 , ',  FARINDREF   =  '  ||",
+              "CHAR(T1.FARINDREF)                                     ")
+ok = NSL("                 , ',  PAGESAVE    =  '  ||",
+              "CHAR(T1.PAGESAVE)                                      ")
+ok = NSL("                 , ',  PERCACTIVE  =  '  ||",
+              "CHAR(T1.PERCACTIVE)                                    ")
+ok = NSL("                 , ',  PERCDROP    =  '  ||",
+              "CHAR(T1.PERCDROP)                                      ")
+ok = NSL("                 , ',  SPACEF =  ' || CHAR(T1.SPACEF)       ")
+ok = NSL("                 , ',  AVGROWLEN = ' || CHAR(T1.AVGROWLEN)  ")
+ok = NSL("                 , 'WHERE DBNAME = ''' ||''||",
+              "RTRIM(TODB) || ''''                                    ")
+ok = NSL("                 , 'AND   TSNAME = ''' || '' ||",
+              "RTRIM(T1.TSNAME)|| ''''                                ")
+ok = NSL("                 , 'AND   PARTITION = ' ||",
+              "CHAR(PARTITION)                                        ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '--'                                     ")
+ok = NSL("                 , '; '                                     ")
+ok = NSL("            FROM SYSIBM.SYSTABLEPART  T1                    ")
+ok = NSL("            JOIN TAB                                        ")
+ok = NSL("            ON   T1.DBNAME  = TAB.TB_DBNAME                 ")
+ok = NSL("            AND  T1.TSNAME  = TAB.TB_TSNAME                 ")
+ok = NSL("           )                                                ")
+ok = NSL("                                                            ")
+ok = NSL("           SELECT * FROM UPTAB1                             ")
+ok = NSL(" UNION ALL SELECT * FROM UPTAB20                            ")
+ok = NSL(" UNION ALL SELECT * FROM UPTAB21                            ")
+ok = NSL(" UNION ALL SELECT * FROM UPTAB3                             ")
+ok = NSL(" UNION ALL SELECT * FROM UPTAB40                            ")
+ok = NSL(" UNION ALL SELECT * FROM UPTAB41                            ")
+ok = NSL(" UNION ALL SELECT * FROM UPTAB5                             ")
+ok = NSL(" UNION ALL SELECT * FROM UPTAB6                             ")
+ok = NSL(" UNION ALL SELECT * FROM UPTAB7                             ")
+ok = NSL(" UNION ALL SELECT * FROM UPTAB8                             ")
+ok = NSL(" ORDER BY C1                                                ")
+ok = NSL("FOR FETCH ONLY  WITH UR                                     ")
+ok = NSL(";                                                           ")
+
+EINGABE  = "WWR"
+OBJ      = "EDIT_DIREKT"
+
+Return
+
+Auswahl_15:    /*  Genarate Crossload               */
+
+
+OPF   = PF
+ORESP = RESP
+
+FLOCATION = Left(' ', 60, ' '   )
+FCREATOR  = Left(' ', 60, ' '   )
+FNAME     = Left(' ', 60, ' ' )
+
+TCREATOR  = Left(' ', 60, ' '   )
+TNAME     = Left(' ', 60, ' ' )
+
+area.0  = 7
+area.1  = white"  "
+area.2  = white"Generate Crossload TABLE       :"
+area.3  = white" "keyw"FROM_LOCATION "in1 ||FLOCATION ||endin
+area.4  = white" "keyw"FROM_CREATOR  "in1 ||FCREATOR  ||endin
+area.5  = white" "keyw"FROM_NAME     "in1 ||FNAME     ||endin
+area.6  = white" "keyw"TO_CREATOR    "in1 ||TCREATOR  ||endin
+area.7  = white"  "
+
+Call Anzeige_Dyn_Panel
+
+If PF   = 'PF03'  | PF = 'PF04' Then do
+   PF   = OPF
+   RESP = ORESP
+   EDIT = "N"
+   return
+ End
+
+PF   = OPF
+RESP = ORESP
+
+FROM_LOCATION_Val = Strip(FROM_Location_Val)
+FROM_CREATOR_val  = Strip(FROM_CREATOR_val)
+FROM_NAME_VAL     = Strip(FROM_NAME_VAL)
+TO_CREATOR_Val    = Strip(TO_CREATOR_Val)
+TO_Name_Val       = Strip(TO_Name_Val)
+
+If FROM_CREATOR_val = "" Then FROM_CREATOR_val = "%"
+If FROM_NAME_VAL    = "" Then FROM_NAME_VAL    = "%"
+FROM_CREATOR_val    = TRANSLATE(FROM_CREATOR_val     , '%', '*')
+FROM_NAME_VAL       = TRANSLATE(FROM_NAME_VAL        , '%', '*')
+
+ok = NSL("-- CROSSLOAD Generieren                                     ")
+ok = NSL("SELECT '-- CARD   ' CONCAT CHAR(BIGINT(CARD))       " ,
+         " CONCAT ' SPACE_KB ' CONCAT CHAR(BIGINT(SPACE_KB))     ")
+ok = NSL(", ' EXEC SQL '                                              ")
+ok = NSL(", '  DECLARE C' || RTRIM(CURNR) || '  CURSOR FOR '          ")
+ok = NSL(", '  SELECT * FROM ' ||                                     ")
+If FROM_LOCATION_Val =  "" Then Do
+   ok = NSL("RTRIM(T1.CREATOR) || '.' || RTRIM(NAME)                  ")
+ End
+ ELSE DO
+   ok = NSL("'"From_Location_Val".' || " || ,
+            "RTRIM(T1.CREATOR) || '.' || RTRIM(NAME)")
+ End
+ok = NSL(", '  WITH UR                                     '          ")
+ok = NSL(", ' ENDEXEC                                      '          ")
+ok = NSL(", ' '                                                       ")
+ok = NSL(", ' LOAD INCURSOR C' || RTRIM(CURNR)                        ")
+ok = NSL(", '      REPLACE LOG NO NOCOPYPEND '                        ")
+ok = NSL(", '      ENFORCE NO  SHRLEVEL NONE               '          ")
+ok = NSL(", '      SORTDEVT SYSDA SORTNUM 4                '          ")
+ok = NSL(", '      OVERRIDE(SYSTEMPERIOD,IDENTITY,TRANSID) '          ")
+ok = NSL(", '      STATISTICS  TABLE(ALL) INDEX(ALL) UPDATE ALL'      ")
+ok = NSL(", '      INTO TABLE ' ||                                    ")
+ok = NSL("  '"TO_CREATOR_Val"'   || '.' || RTRIM(NAME)      ")
+ok = NSL(", ' '                                                       ")
+ok = NSL("FROM (                                                      ")
+ok = NSL("SELECT T1.CREATOR                                           ")
+ok = NSL(", T1.NAME                                                   ")
+ok = NSL(", SPACE_KB                                                  ")
+ok = NSL(", BIGINT(T1.CARDF) AS CARD                                  ")
+ok = NSL(", CHAR(ROWNUMBER() OVER(ORDER BY  T1.CREATOR, T1.NAME )) " ,
+         " AS CURNR  ")
+ok = NSL("FROM SYSIBM.SYSTABLES T1                                    ")
+ok = NSL("INNER JOIN ( SELECT SP.CREATOR, SP.NAME                     ")
+ok = NSL("                  , Sum(SPACE_KB) as SPACE_KB               ")
+ok = NSL("             FROM (                                         ")
+ok = NSL("                  SELECT TB.CREATOR, TB.NAME                ")
+ok = NSL("                  ,     ST.SPACE  AS SPACE_KB               ")
+ok = NSL("             FROM  SYSIBM.SYSTABLES          TB             ")
+ok = NSL("             INNER JOIN SYSIBM.SYSTABLESPACESTATS ST    ")
+ok = NSL("             ON  TB.DBNAME   = ST.DBNAME                 ")
+ok = NSL("             AND TB.TSNAME   = ST.NAME                 ")
+ok = NSL("             AND TYPE IN('T','H','R')                       ")
+ok = NSL("              UNION ALL                                     ")
+ok = NSL("             SELECT AUX.TBOWNER, AUX.TBNAME                 ")
+ok = NSL("                  ,     ST.SPACE  AS SPACE_KB               ")
+ok = NSL("             FROM SYSIBM.SYSTABLES TB                       ")
+ok = NSL("             INNER JOIN SYSIBM.SYSAUXRELS   AUX     ")
+ok = NSL("             ON    AUX.AUXTBOWNER = TB.CREATOR              ")
+ok = NSL("             AND   AUX.AUXTBNAME  = TB.NAME                 ")
+ok = NSL("             INNER JOIN SYSIBM.SYSTABLESPACESTATS ST        ")
+ok = NSL("             ON    TB.DBNAME      = ST.DBNAME               ")
+ok = NSL("             AND   TB.TSNAME      = ST.NAME                 ")
+ok = NSL("             AND TYPE IN('T','H','R', 'X'      )            ")
+ok = NSL("              UNION ALL                                     ")
+ok = NSL("             SELECT AUX.TBOWNER, AUX.TBNAME                 ")
+ok = NSL("                  ,     ST.SPACE  AS SPACE_KB               ")
+ok = NSL("             FROM SYSIBM.SYSTABLES TB                       ")
+ok = NSL("             INNER JOIN SYSIBM.SYSXMLRELS   AUX     ")
+ok = NSL("             ON    AUX.XMLTBOWNER = TB.CREATOR              ")
+ok = NSL("             AND   AUX.XMLTBNAME  = TB.NAME                 ")
+ok = NSL("             INNER JOIN SYSIBM.SYSTABLESPACESTATS ST        ")
+ok = NSL("             ON    TB.DBNAME      = ST.DBNAME               ")
+ok = NSL("             AND   TB.TSNAME      = ST.NAME                 ")
+ok = NSL("             AND TYPE IN('T','H','R',      'P' )            ")
+ok = NSL("           ) SP (CREATOR, NAME, SPACE_KB )                  ")
+ok = NSL("           Group by SP.CREATOR, SP.NAME                     ")
+ok = NSL("           ) SP                                             ")
+ok = NSL("on  t1.CREATOR  = SP.CREATOR                                ")
+ok = NSL("and t1.NAME     = sp.NAME                                   ")
+If POS("%", FROM_CREATOR_val, 1) > 0 Then Do
+   ok = NSL("WHERE T1.CREATOR Like '"FROM_CREATOR_val"'           ")
+ End
+ELSE DO
+   ok = NSL("WHERE T1.CREATOR = '"FROM_CREATOR_val"'              ")
+ End
+If POS("%", FROM_NAME_VAL   , 1) > 0 Then Do
+   ok = NSL("AND   T1.NAME    Like '"FROM_NAME_VAL"'                 ")
+ End
+ELSE DO
+   ok = NSL("AND   T1.NAME    =    '"FROM_NAME_VAL"'                 ")
+ End
+ok = NSL("--    AND EXISTS (SELECT 1 FROM SYSIBM.SYSTABLES TB2        ")
+ok = NSL("--                WHERE  '"TO_CREATOR_Val"' = TB2.CREATOR ")
+ok = NSL("--                AND    T1.NAME    = TB2.NAME              ")
+ok = NSL("--                AND    T1.TYPE    = TB2.TYPE              ")
+ok = NSL("--                )                                         ")
+ok = NSL("--    AND EXISTS (SELECT 1 FROM SYSIBM.SYSTABLESPACE  TS2   ")
+ok = NSL("--                WHERE  t1.DBNAME  = TS2.DBNAME            ")
+ok = NSL("--                AND    T1.TSNAME  = TS2.NAME              ")
+ok = NSL("--                AND    TS2.NTABLES = 1                    ")
+ok = NSL("--                )                                         ")
+ok = NSL(") T1                                                        ")
+ok = NSL("ORDER BY SPACE_KB DESC, T1.CREATOR, T1.NAME       ")
+
+EINGABE  = "WWR"
+OBJ      = "EDIT_DIREKT"
+
+Return
+
+
+Auswahl_16:    /*  ADD   RESTRICT ON DROP             */
+
+
+
+OPF   = PF
+ORESP = RESP
+
+Creator   = Left(' ', 60, ' '   )
+Name      = Left(' ', 60, ' ' )
+
+area.0  = 5
+area.1  = white"  "
+area.2  = white"Generate ADD   RESTRICT ON DROP "
+area.3  = white" "keyw"Creator    :  "in1 ||Creator   ||endin
+area.4  = white" "keyw"Name       :  "in1 ||Name      ||endin
+area.5  = white"  "
+
+Call Anzeige_Dyn_Panel
+
+If PF   = 'PF03'  | PF = 'PF04' Then do
+   PF   = OPF
+   RESP = ORESP
+   EDIT = "N"
+   return
+ End
+
+PF   = OPF
+RESP = ORESP
+
+Creator_val = Strip(Creator_val)
+Name_VAL    = Strip(Name_Val )
+
+If Creator_Val = "" Then Creator_Val = "%"
+If Name_Val    = "" Then Name_VAL    = "%"
+Creator_Val = TRANSLATE(Creator_Val, '%', '*')
+Name_VAL    = TRANSLATE(Name_VAL   , '%', '*')
+
+ok = NSL("-- ADD RESTRICT ON DROP                                     ")
+ok = NSL("SELECT CASE CLUSTERTYPE WHEN 'Y' THEN '--'                  ")
+ok = NSL("                        ELSE                                ")
+ok = NSL("       ' ALTER TABLE '                                      ")
+ok = NSL("    || RTRIM(CREATOR) || '.' || RTRIM(NAME)                 ")
+ok = NSL("    || ' ADD RESTRICT ON DROP ; '                           ")
+ok = NSL("                        END AS ALTER                        ")
+ok = NSL("FROM SYSIBM.SYSTABLES                                       ")
+ok = NSL("Where TYPE IN ('T', 'H', 'R' )                              ")
+ok = NSL("AND   CLUSTERTYPE <> 'Y'                                    ")
+
+If Creator_Val  <> "" Then Do
+   IF POS('%', Creator_Val) > 0 THEN DO
+      ok = NSL("          AND  Creator LIKE '"Creator_Val"'   ")
+    END
+   Else Do
+      ok = NSL("          AND  Creator   =  '"Creator_Val"'   ")
+    END
+ End
+If NAME_Val <> "" Then Do
+   IF POS('%', NAME_Val) > 0 THEN DO
+      ok = NSL("          AND  NAME     LIKE '"NAME_Val"'   ")
+    END
+   Else Do
+      ok = NSL("          AND  NAME     =    '"NAME_Val"'  ")
+    END
+ End
+ok = NSL(" ;                                                          ")
+
+EINGABE  = "WWR"
+OBJ      = "EDIT_DIREKT"
+
+Return
+
+Auswahl_17:    /*  DROP  RESTRICT ON DROP             */
+
+
+
+OPF   = PF
+ORESP = RESP
+
+Creator   = Left(' ', 60, ' '   )
+Name      = Left(' ', 60, ' ' )
+
+area.0  = 5
+area.1  = white"  "
+area.2  = white"Generate DROP  RESTRICT ON DROP "
+area.3  = white" "keyw"Creator    :  "in1 ||Creator   ||endin
+area.4  = white" "keyw"Name       :  "in1 ||Name      ||endin
+area.5  = white"  "
+
+Call Anzeige_Dyn_Panel
+
+If PF   = 'PF03'  | PF = 'PF04' Then do
+   PF   = OPF
+   RESP = ORESP
+   EDIT = "N"
+   return
+ End
+
+PF   = OPF
+RESP = ORESP
+
+Creator_val = Strip(Creator_val)
+Name_VAL    = Strip(Name_Val )
+
+If Creator_Val = "" Then Creator_Val = "%"
+If Name_Val    = "" Then Name_VAL    = "%"
+Creator_Val = TRANSLATE(Creator_Val, '%', '*')
+Name_VAL    = TRANSLATE(Name_VAL   , '%', '*')
+
+ok = NSL("-- DROP RESTRICT ON DROP                                    ")
+ok = NSL("SELECT CASE CLUSTERTYPE WHEN 'Y' THEN                       ")
+ok = NSL("       ' ALTER TABLE '                                      ")
+ok = NSL("    || RTRIM(CREATOR) || '.' || RTRIM(NAME)                 ")
+ok = NSL("    || ' DROP RESTRICT ON DROP ; '                         ")
+ok = NSL("                        ELSE  ' --'                         ")
+ok = NSL("                        END AS ALTER                        ")
+ok = NSL("FROM SYSIBM.SYSTABLES                                       ")
+ok = NSL("Where TYPE IN ('T', 'H', 'R' )                              ")
+ok = NSL("AND   CLUSTERTYPE = 'Y'                                     ")
+
+If Creator_Val  <> "" Then Do
+   IF POS('%', Creator_Val) > 0 THEN DO
+      ok = NSL("          AND  Creator LIKE '"Creator_Val"'   ")
+    END
+   Else Do
+      ok = NSL("          AND  Creator   =  '"Creator_Val"'   ")
+    END
+ End
+If NAME_Val <> "" Then Do
+   IF POS('%', NAME_Val) > 0 THEN DO
+      ok = NSL("          AND  NAME     LIKE '"NAME_Val"'   ")
+    END
+   Else Do
+      ok = NSL("          AND  NAME     =    '"NAME_Val"'  ")
+    END
+ End
+ok = NSL(";                                                           ")
+
+EINGABE  = "WWR"
+OBJ      = "EDIT_DIREKT"
+
+Return
+
+Auswahl_18:    /*  REORG DIRECTORY TABLESPACES        */
+
+OK = NSL("WITH SSINF (SSID, DSHLQ, UNIT) AS                           ")
+OK = NSL("        (                                                   ")
+OK = NSL("         SELECT CURRENT SERVER                              ")
+OK = NSL("              , 'DB2TMP.' CONCAT RTRIM(USER) CONCAT '.'     ")
+OK = NSL("              , 'SYSDA'                                     ")
+OK = NSL("         FROM SYSIBM.SYSDUMMY1                              ")
+OK = NSL("        )                                                   ")
+OK = NSL("      , TSTAB (SORT, DBNAME, TSNAME, TYPE ) AS              ")
+OK = NSL("        (                                                   ")
+OK = NSL("         SELECT DISTINCT 1 , DBNAME, TSNAME, TYPE           ")
+OK = NSL("         FROM SYSIBM.SYSTABLES TB                           ")
+OK = NSL("         WHERE TB.CREATOR = 'SYSIBM'                        ")
+OK = NSL("         AND   TB.DBNAME  = 'DSNDB06'                       ")
+OK = NSL("         AND TB.TSNAME  <> 'SYSTSCPY'                       ")
+OK = NSL("         AND TB.TSNAME  <> 'SYSRTSTS'                       ")
+OK = NSL("         AND TB.TYPE IN('T','X')                            ")
+OK = NSL("         UNION  SELECT 2,  'DSNDB01', 'SCT02', ' '          ")
+OK = NSL("                FROM SYSIBM.SYSDUMMY1                       ")
+OK = NSL("         UNION  SELECT 3,  'DSNDB01', 'SPT01', ' '          ")
+OK = NSL("                FROM SYSIBM.SYSDUMMY1                       ")
+OK = NSL("         UNION  SELECT 4,  'DSNDB01', 'DBD01', ' '          ")
+OK = NSL("                FROM SYSIBM.SYSDUMMY1                       ")
+OK = NSL("         UNION  SELECT 5,  'DSNDB06', 'SYSTSCPY', ' '       ")
+OK = NSL("                FROM SYSIBM.SYSDUMMY1                       ")
+OK = NSL("        )                                                   ")
+OK = NSL("                                                            ")
+OK = NSL("SELECT '--', '//START  EXEC PGM=IEFBR14 '              ")
+OK = NSL(" , '/*' , '--', '--', '--', '--', '--', '--', '--', '--'    ")
+OK = NSL(" , '--' , '--', '--', '--', '--', '--', '--', '--', '--'    ")
+OK = NSL(" , '--' , '--', '--', '--', '--', '--', '--', '--', '--'    ")
+OK = NSL(" , '--' , '--', '--', '--', '--', '--', '--', '--', '--'    ")
+OK = NSL(" , '--' , '--', '--', '--', '--', '--', '--', '--', '--'    ")
+OK = NSL("                                                            ")
+OK = NSL("FROM SYSIBM.SYSDUMMY1                                       ")
+OK = NSL("UNION ALL                                                   ")
+OK = NSL("                                                            ")
+OK = NSL("SELECT DISTINCT                                             ")
+OK = NSL("     '// IF (RC LT 5 AND ABEND = FALSE) THEN  '             ")
+OK = NSL(",    '//* REORG ORDER ' || CHAR(SORT)                       ")
+OK = NSL(",    '//'||RTRIM(TSNAME)||' EXEC PGM=DSNUTILB,REGION=30M,'  ")
+OK = NSL(",    '//         PARM=(' || RTRIM(SSID) ||',''REORG.'       ")
+OK = NSL("     || RTRIM(TSNAME) || ''',RESTART(PHASE))  '             ")
+OK = NSL(",    '//SYSPRINT  DD SYSOUT=*                  '            ")
+OK = NSL(",    '//UTPRINT   DD SYSOUT=*                  '            ")
+OK = NSL(",    '//SYSUT1    DD DSN='||DSHLQ || RTRIM(TSNAME) ||       ")
+OK = NSL("     '.SYSUT1,'                                             ")
+OK = NSL(",    '//         DISP=(NEW,CATLG,CATLG),' ||                ")
+OK = NSL("           'SPACE=(CYL,(500,500)),UNIT=SYSDA'               ")
+OK = NSL(",    '//SORTOUT   DD DSN='||DSHLQ || RTRIM(TSNAME) ||       ")
+OK = NSL("     '.SORTOUT,'                                            ")
+OK = NSL(",    '//         DISP=(NEW,CATLG,CATLG),' ||                ")
+OK = NSL("           'SPACE=(CYL,(500,500)),UNIT=SYSDA'               ")
+OK = NSL(",    '//SYSREC    DD DSN='||DSHLQ || RTRIM(TSNAME) ||       ")
+OK = NSL("     '.SYSREC,'                                             ")
+OK = NSL("            ,  '//         DISP=(NEW,CATLG,CATLG),' ||      ")
+OK = NSL("                     'SPACE=(CYL,(500,500)),UNIT=SYSDA'     ")
+OK = NSL(",    '//SYSERR    DD DSN='||DSHLQ || RTRIM(TSNAME) ||       ")
+OK = NSL("     '.SYSERR'                                              ")
+OK = NSL("           ,  '//         DISP=(NEW,CATLG,CATLG),' ||       ")
+OK = NSL("                    'SPACE=(CYL,(500,500)),UNIT=SYSDA'      ")
+OK = NSL(",    '//SYSLISTD DD *     '                                 ")
+OK = NSL(",    '   LISTDEF ROLIST   '                                 ")
+OK = NSL(",    '        INCLUDE TABLESPACE '                          ")
+OK = NSL("         || RTRIM(DBNAME) || '.' || RTRIM(TSNAME)           ")
+OK = NSL(",    '//SYSTEMPL DD *           '                           ")
+OK = NSL(",    '  TEMPLATE UNLDSN ' ||                                ")
+OK = NSL("    ' DSN(''&SSID..REO.&DB..&TS..D&JU..T&TI.'')'            ")
+OK = NSL(",    '                   DISP(NEW,DELETE,CATLG) '           ")
+OK = NSL(",    '  TEMPLATE SYSCOPY ' ||                               ")
+OK = NSL("     'DSN(''&SSID..IC1.&DB..&TS..D&JU..T&TI.'')'            ")
+OK = NSL(",    '                   DISP(NEW,CATLG,DELETE) '           ")
+OK = NSL(",    '//SYSIN DD *                              '           ")
+OK = NSL(",    '  REORG TABLESPACE LIST ROLIST            '           ")
+OK = NSL(",    '        LOG       NO                      '           ")
+OK = NSL(",    '        SHRLEVEL  REFERENCE               '           ")
+OK = NSL(",      CASE WHEN TYPE = 'X'  THEN '        SORTDATA'        ")
+OK = NSL("            ELSE '    SORTDATA SORTDEVT  SYSDA SORTNUM 4'   ")
+OK = NSL("        END                                                 ")
+OK = NSL(",    '        UNLDDN    (UNLDSN)                '           ")
+OK = NSL(",    '        UNLOAD    CONTINUE                '           ")
+OK = NSL(",    '        WORKDDN   (SYSUT1,SORTOUT)        '           ")
+OK = NSL(",    CASE WHEN TSNAME = 'SYSTSCPY' THEN                     ")
+OK = NSL("    '   REPAIR SET TABLESPACE DSNDB06.SYSTSCPY NOCOPYPEND ' ")
+OK = NSL("        ELSE ''                                             ")
+OK = NSL("      END                                                   ")
+OK = NSL(",    '                                '                     ")
+OK = NSL(",    '  COPY  LIST ROLIST             '                     ")
+OK = NSL(",    '        SHRLEVEL  CHANGE        '                     ")
+OK = NSL(",    '        FULL YES                '                     ")
+OK = NSL(",    '        COPYDDN(SYSCOPY)        '                     ")
+OK = NSL(",    '/*                                        '           ")
+OK = NSL(",    '//DELETE  EXEC PGM=IDCAMS,COND=(5,LT)     '           ")
+OK = NSL(",    '//SYSPRINT  DD SYSOUT=*                   '           ")
+OK = NSL(",    '//SYSIN     DD *                          '           ")
+OK = NSL(",    '  DELETE ' || DSHLQ || RTRIM(TSNAME) ||'.SYSUT1 '  || ")
+OK = NSL("     ' NONVSAM '                                            ")
+OK = NSL(",    '  DELETE ' || DSHLQ || RTRIM(TSNAME) ||'.SORTOUT'  || ")
+OK = NSL("     ' NONVSAM '                                            ")
+OK = NSL(",    '  DELETE ' || DSHLQ || RTRIM(TSNAME) ||'.SYSREC '  || ")
+OK = NSL("     ' NONVSAM '                                            ")
+OK = NSL(",    '  DELETE ' || DSHLQ || RTRIM(TSNAME) ||'.SYSERR '  || ")
+OK = NSL("     ' NONVSAM '                                            ")
+OK = NSL(",    '  SET MAXCC = 0  '                                    ")
+OK = NSL(",    '/*               '                                    ")
+OK = NSL(",    '// ENDIF '                                            ")
+OK = NSL("FROM SSINF, TSTAB                                           ")
+OK = NSL("ORDER BY 1                                                  ")
+OK = NSL(";                                                           ")
+
+EINGABE  = "WWR"
+OBJ      = "EDIT_DIREKT"
+
+Return
+
+Auswahl_19:    /*  Creatr Insert Select from Table    */
+
+
+
+OPF   = PF
+ORESP = RESP
+
+FCreator   = Left(' ', 60, ' '   )
+FName      = Left(' ', 60, ' ' )
+TCreator   = Left(' ', 60, ' '   )
+
+area.0  = 6
+area.1  = white"  "
+area.2  = white"Generate INSERT SELECT FROM     "
+area.3  = white" "keyw"FCreator :  "in1 || FCreator   ||endin
+area.4  = white" "keyw"FName    :  "in1 || FName      ||endin
+area.5  = white" "keyw"TCreator :  "in1 || TCreator   ||endin
+area.6  = white"  "
+
+Call Anzeige_Dyn_Panel
+
+If PF   = 'PF03'  | PF = 'PF04' Then do
+   PF   = OPF
+   RESP = ORESP
+   EDIT = "N"
+   return
+ End
+
+
+PF   = OPF
+RESP = ORESP
+
+FCreator_val = Strip(FCreator_val)
+FName_VAL    = Strip(FName_Val )
+TCreator_val = Strip(TCreator_val)
+
+If FCreator_Val = "" Then FCreator_Val = "%"
+If FName_Val    = "" Then FName_VAL    = "%"
+If TCreator_Val = "" Then TCreator_Val = "HUGONETTENB¢R"
+
+FCreator_Val = STrip(TRANSLATE(FCreator_Val, '%', '*'))
+FName_VAL    = Strip(TRANSLATE(FName_VAL   , '%', '*'))
+TCreator_Val = Strip(TCreator_Val)
+
+WHERELIST = ""
+Call MAKE_WHERELIST "TB.CREATOR", FCreator_Val
+WhereList1 = "AND " SubWord(Wherelist, 2)
+
+WHERELIST = ""
+Call MAKE_WHERELIST "TB.NAME   ", FNAME_Val
+WhereList2 = "AND " SubWord(Wherelist, 2)
+
+ok = NSL("--                                                          ")
+ok = NSL("-- SELECT TABLES F!R INSERT MIT CT/PT (FOREING KEYS)        ")
+ok = NSL("--                                                          ")
+ok = NSL("                                                            ")
+ok = NSL("WITH                                                        ")
+ok = NSL("-- UNKRITISCH KEIN FK BEZIEHUNG                             ")
+ok = NSL("  NOFK     (SEQTYPE, CREATOR, NAME, TYPE, PARENTS, CHILDREN)")
+ok = NSL("       AS  (SELECT 1                                        ")
+ok = NSL("                 , CREATOR                                  ")
+ok = NSL("                 , NAME                                     ")
+ok = NSL("                 , TYPE                                     ")
+ok = NSL("                 , PARENTS                                  ")
+ok = NSL("                 , CHILDREN                                 ")
+ok = NSL("            FROM SYSIBM.SYSTABLES TB                        ")
+ok = NSL("            WHERE TYPE = 'T'                                ")
+ok = NSL("            AND   PARENTS   = 0                             ")
+ok = NSL("            AND   CHILDREN  = 0                             ")
+ok = NSL("           "Wherelist1                                       )
+ok = NSL("           "Wherelist2                                       )
+ok = NSL("           )                                                ")
+ok = NSL("-- UNKRITISCH TABELLE HAT NUR CILD TABLES                   ")
+ok = NSL(" , ONLYCT  (SEQTYPE, CREATOR, NAME, TYPE, PARENTS, CHILDREN)")
+ok = NSL("       AS  (SELECT 2                                        ")
+ok = NSL("                 , CREATOR                                  ")
+ok = NSL("                 , NAME                                     ")
+ok = NSL("                 , TYPE                                     ")
+ok = NSL("                 , PARENTS                                  ")
+ok = NSL("                 , CHILDREN                                 ")
+ok = NSL("            FROM SYSIBM.SYSTABLES TB                        ")
+ok = NSL("            WHERE TYPE      = 'T'                           ")
+ok = NSL("            AND   PARENTS   = 0                             ")
+ok = NSL("            AND   CHILDREN  > 0                             ")
+ok = NSL("           "Wherelist1                                       )
+ok = NSL("           "Wherelist2                                       )
+ok = NSL("           )                                                ")
+ok = NSL("                                                            ")
+ok = NSL("                                                            ")
+ok = NSL(" , PTCT    (SEQTYPE, CREATOR, NAME, TYPE, PARENTS, CHILDREN)")
+ok = NSL("      AS   (SELECT DISTINCT 3                               ")
+ok = NSL("                 , REFTBCREATOR                             ")
+ok = NSL("                 , REFTBNAME                                ")
+ok = NSL("                 , TYPE                                     ")
+ok = NSL("                 , 1                                        ")
+ok = NSL("                 , 1                                        ")
+ok = NSL("            FROM SYSIBM.SYSTABLES     TB                    ")
+ok = NSL("            INNER JOIN SYSIBM.SYSRELS REL                   ")
+ok = NSL("            ON  TB.CREATOR  = REL.CREATOR                   ")
+ok = NSL("            AND TB.NAME     = REL.TBNAME                    ")
+ok = NSL("            WHERE TYPE      = 'T'                           ")
+ok = NSL("            AND   PARENTS   > 0                             ")
+ok = NSL("           "Wherelist1                                       )
+ok = NSL("           "Wherelist2                                       )
+ok = NSL("           )                                                ")
+ok = NSL("                                                            ")
+ok = NSL(" , ONLYPT  (SEQTYPE, CREATOR, NAME, TYPE, PARENTS, CHILDREN)")
+ok = NSL("      AS   (SELECT 4                                        ")
+ok = NSL("                 , CREATOR                                  ")
+ok = NSL("                 , NAME                                     ")
+ok = NSL("                 , TYPE                                     ")
+ok = NSL("                 , PARENTS                                  ")
+ok = NSL("                 , CHILDREN                                 ")
+ok = NSL("            FROM SYSIBM.SYSTABLES TB                        ")
+ok = NSL("            WHERE TYPE      = 'T'                           ")
+ok = NSL("            AND   PARENTS   > 0                             ")
+ok = NSL("            AND   CHILDREN  = 0                             ")
+ok = NSL("           "Wherelist1                                       )
+ok = NSL("           "Wherelist2                                       )
+ok = NSL("           )                                                ")
+ok = NSL("                                                            ")
+ok = NSL("                                                            ")
+ok = NSL("SELECT DISTINCT                                             ")
+ok = NSL("   '-- ' || CHAR(SEQTYPE)                   ")
+ok = NSL(" , 'INSERT INTO "TCreator_Val".' || NAME    ")
+ok = NSL(" , 'SELECT * FROM ' || RTRIM(CREATOR) || '.' || RTRIM(NAME) ")
+ok = NSL(" , ';'                                                      ")
+ok = NSL(" , ' '                                                      ")
+ok = NSL("FROM (                                                      ")
+ok = NSL("SELECT *                                                    ")
+ok = NSL("FROM NOFK                                                   ")
+ok = NSL("UNION ALL                                                   ")
+ok = NSL("SELECT *                                                    ")
+ok = NSL("FROM ONLYCT                                                 ")
+ok = NSL("UNION ALL                                                   ")
+ok = NSL("SELECT *                                                    ")
+ok = NSL("FROM PTCT                                                   ")
+ok = NSL("WHERE NOT EXISTS (SELECT 1 FROM ONLYCT                      ")
+ok = NSL("                  WHERE ONLYCT.CREATOR = PTCT.CREATOR       ")
+ok = NSL("                  AND   ONLYCT.NAME    = PTCT.NAME          ")
+ok = NSL("                 )                                          ")
+ok = NSL("UNION ALL                                                   ")
+ok = NSL("SELECT *                                                    ")
+ok = NSL("FROM ONLYPT                                                 ")
+ok = NSL(") T1                                                        ")
+ok = NSL("ORDER BY 1, 3                                               ")
+ok = NSL(";                                                           ")
+
+EINGABE  = "WWR"
+OBJ      = "EDIT_DIREKT"
+
+Return
+
+Anzeige_Dyn_Panel_Neu:
+
+ADDRESS ISPEXEC  "VGET (ZSCREENW,ZSCREEND)"
+dyndata = ""
+Do ai = 1 to area.0
+   dyndata = dyndata || Left(area.ai, ZSCREENW, ' ')
+ end
+
+If InitArea  <> "N" THEN InitArea  = "Y"
+If EnterBack <> "Y" THEN EnterBack = "N"
+
+Call ZOSB1906 DYNDATA ,,
+              EnterBack ,,
+              InitArea
+
+Do QUEUED()
+   Parse pull Text
+   Interpret Text
+ End
+
+PF = RESULT
+IF PF = "ENTER" THEN RESP = PF
+IF PF = "PF04" Then exit 4
+
+Return
+
+Anzeige_Dyn_Panel:
+
+If InitArea <> "N" Then do
+   Zeile = 0
+   DROP ausgabe.
+   ausgabe.0 = 0
+   MaxLines = area.0
+   curline = 1                        /* set current line #     */
+   dyndata  = ""
+   ADDRESS ISPEXEC  "VGET (ZSCREENW,ZSCREEND)"
+   Do ai = 1 to area.0
+      dyndata = dyndata || Left(area.ai, ZSCREENW, ' ')
+    end
+   dyndata = dyndata || endin
+   dynarea = substr(dyndata,1+(curline-1)*ZSCREENW) /*set dyn var  */
+   dynarea = dyndata
+
+   MaxScreenLines = ZSCREEND-5
+   dyndata_len = Length(dyndata)
+   trenner = in1
+   START   = Pos(keyw, dyndata, 1)
+   If START  < 1 Then START = 1
+   DYNPOS  = START + 1
+   Do ki = 1 to keytab.0
+      Found    = Pos(keytab.ki, dyndata, START )
+      If Found > 0  Then Do
+         SELECT
+           When  DYNPOS =  START + 1   Then dynpos = Found + 1
+           When  Found  <  DYNPOS      Then dynpos = Found + 1
+           Otherwise NOP
+          END
+       End
+    End
+   znr     = 1
+ End
+
+
+NNCount = 0
+If EnterBack = "Y"  Then PFTASTEN = " ENTER=GO PF03=Return PF04=Cancel "
+ELSE                     PFTASTEN  = "         PF03=GO    PF04=Cancel "
+
+Do Until disprc > 0
+
+  start   = 1+(curline-1)*ZSCREENW
+  dynarea = substr(dyndata, Start)
+  size = length(dynarea)                   /* Set a scalar variable  */
+  ADDRESS ISPEXEC "DISPLAY PANEL(PDYNPNL1)"
+
+  MaxScreenLines = DYNDPTH
+  DynArea_len = MaxScreenLines*ZSCREENW
+  dyndata1= Substr(dyndata, 1,  1+(curline-1)*ZSCREENW-1)
+  start   = Length(dyndata1) + Length(dynarea) + 1
+  Dyndata = Dyndata1 || dynarea || Substr(Dyndata, start)
+  Eingabe = dynarea
+  Eingabe = dyndata
+
+  disprc = rc                              /* save return code       */
+  ADDRESS ISPEXEC "VGET (ZVERB,ZSCROLLA,ZSCROLLN, ZSCROLLD) "
+  ADDRESS ISPEXEC "VGET (ZXSMAX, ZXSMIN) "
+  dynrc = rc
+  SELECT                                   /* Process scrolling      */
+    When(zverb  = 'UP')   Then Do          /* Scroll up              */
+     If zscrolla = 'MAX' Then Do           /*  if scroll was max     */
+        curline = 1                       /*    scroll to top       */
+      End
+     Else Do                               /*  else a number is known*/
+      curline = curline - MaxScreenLines        /* (max is bottom)   */
+      if curline < 1 then Curline = 1
+      End
+     End
+    When(zverb  = 'DOWN') Then Do          /* Scroll down            */
+     If zscrolla = 'MAX' Then Do           /*  if scroll was max     */
+      curline = maxlines                   /*    scroll to bottom    */
+     end
+     Else do                               /*  else a number is known*/
+      curline = curline + MaxScreenLines        /* (max is bottom)   */
+      If curline > maxlines Then Curline = maxlines
+      if DynArea_len >= dyndata_len Then Do  /* NUR EINE SEITE */
+         curline = 1
+       End
+      end
+     end
+    Otherwise;                      /* could use left & right too    */
+  End
+  if dynrc > 8 then Do
+     say "Display RC="RC
+     say "ZEDSMSG="ZEDSMSG
+     say "ZERRLM="ZERRLM
+     say "ZERRMSG="ZERRMSG
+     say "ZERRSM="ZERRSM
+     say rc object1
+   End
+
+  DO While Length(eingabe) > 0
+     Zeile = zeile + 1
+     trenner = in1
+     FoundL = 0
+     Do ki = 1 to keytab.0
+        Found    = Pos(keytab.ki, eingabe, 1)
+        If Found = 0 Then Iterate
+        Select
+          When FoundL = 0 Then Do
+               Trenner = keytab.KI
+               FoundL  = Found
+           End
+          When FoundL > 0 & Found < FoundL Then Do
+               Trenner = keytab.KI
+               FoundL  = Found
+           End
+          Otherwise NOP
+         End
+      End
+
+     /*    Keyword Finden   */
+     epos     = Pos(keyw, eingabe, 1)
+     xpos     = Pos(Trenner, eingabe, epos+1)
+     elen     = xpos - epos -1
+     If    elen < 0 Then Leave
+     Keyword  =  Substr(eingabe, epos+1, elen  )
+     Keyword  =  Word(Keyword, 1)
+     If Length(Keyword) < 1 Then Do
+        NNCount = NNCount + 1
+        KeyWord = "Col" || NNCount
+      End
+
+     /*    EINGABE Finden   */
+     epos     = Pos(Trenner, eingabe, 1)
+     if epos  < 1 then leave
+     xpos     = Pos(endin, eingabe, epos+1)
+     elen     = xpos - epos -1
+     evalue   = Substr(eingabe, epos+1, elen  )
+     eingabe  = Substr(eingabe, xpos+ 1)
+
+     Interpret Strip(Keyword) || "_VAL" "= evalue"
+   End
+   If PF = 'PF03'               THEN LEAVE
+   If PF = 'PF04'               THEN EXIT 4
+   If RESP = "ENTER" & EnterBack = "Y" Then return
+End                                        /* End of display loop    */
+
+Return
+
+
+NSL: Procedure Expose sl.
+ sl.0   = sl.0 + 1
+ sli    = sl.0
+ sl.sli = Arg(1)
+return 0
+
+Edit_Stmt:
+
+DSNAME = ZOSB1900("ZOSB1","DSNAME", "STMT", LNR)
+LRECL   = RECLEN
+
+IF LISTDSI(DSNAME) = 0 THEN do
+    ADDRESS "TSO" "ALLOC F(SELDD) DA("DSNAME") SHR"
+ end
+else do
+    ADDRESS "TSO" "ALLOC F(SELDD) DA("DSNAME") NEW CATALOG ,
+          SPACE("TRACKS","TRACKS") TRACKS REUSE,
+          LRECL("RECLEN") UNIT(SYSDA)"
+ end
+
+
+ADDRESS "TSO" "EXECIO * DISKW SELDD ( STEM SL. FINIS"
+ADDRESS "TSO" "FREE FI(SELDD)"
+
+ok   = ZOSB1911(SSID,     ,
+                LOCATION,  ,
+                EINGABE,   ,
+                OBJ,       ,
+                DSNAME,    ,
+                LNR   )
+
+
+return
+
+
+MAKE_WHERELIST: PROCEDURE EXPOSE WHERELIST
+
+COLUMNNAME = ARG(1)
+ARGUMENT   = ARG(2)
+ARGTYPE    = ARG(3)
+
+IF LENGTH(STRIP(ARGUMENT)) = 0 THEN RETURN
+ARGUMENT   = TRANSLATE(ARGUMENT, '%', '*')
+
+IF TRANSLATE(WORD(WHERELIST, 1) ) = "WHERE" THEN ANDKZ = "AND"
+ ELSE ANDKZ = "WHERE"
+
+IF LENGTH(STRIP(COLUMNNAME)) = 0 ,
+ & LENGTH(STRIP(ARGUMENT)) > 0 THEN DO
+   WHERELIST = WHERELIST ANDKZ ARGUMENT
+   RETURN
+ END
+
+IF LENGTH(STRIP(ARGUMENT)) = 0 THEN RETURN
+
+If ARGTYPE = "NUM" Then do
+   IF POS('%', ARGUMENT) > 0 THEN DO
+      WHERELIST = WHERELIST ANDKZ COLUMNNAME "LIKE "ARGUMENT
+    END
+   Else Do
+      WHERELIST = WHERELIST ANDKZ COLUMNNAME "= "ARGUMENT
+    END
+ End
+Else Do
+   IF POS('%', ARGUMENT) > 0 ,
+    | POS('_', ARGUMENT) > 0 THEN DO
+      WHERELIST = WHERELIST ANDKZ COLUMNNAME "LIKE '"ARGUMENT"'"
+    END
+   Else Do
+      WHERELIST = WHERELIST ANDKZ COLUMNNAME "= '"ARGUMENT"'"
+    END
+ End
+
+RETURN
+
+
+error: failure: syntax: novalue:
+return

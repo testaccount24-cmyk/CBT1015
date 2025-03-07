@@ -1,0 +1,181 @@
+/* REXX */
+/*******************************************************************/
+/*                                                                 */
+/* ProgramNAME      : LUW97905  (fuer LUB V9.7  Nr 905)            */
+/* AUTHER           : ULRICH BRAEUER                               */
+/* FUNKTION         : AG : Skeletons Dynamisch ausgeben            */
+/*                                                                 */
+/*                                                                 */
+/*******************************************************************/
+
+ENV        = "TSO"
+X          = MSG('OFF')
+USER       = USERID()
+SYSCATS    = "SYSCAT"
+SYSIBMS    = "SYSIBM"
+SYSIBMA    = "SYSIBMADM"
+SYSPROCA   = "SYSPROC"
+ADDRESS ISPEXEC 'VGET (SYSIBMS) PROFILE'
+ADDRESS ISPEXEC 'VGET (SYSCATS) PROFILE'
+ADDRESS ISPEXEC 'VGET (SYSIBMA) PROFILE'
+ADDRESS ISPEXEC 'VGET (SYSPROCA) PROFILE'
+
+ADDRESS ISPEXEC 'VGET (UDBTRACE) PROFILE'
+IF UDBTRACE = 'ON' THEN TRACE R
+ELSE                    TRACE
+
+DROP WLine.
+
+PARSE SOURCE SRC.1 SRC.2 SRC.3 SRC.4 SRC.5 SRC.6 SRC.7 SRC.8 SRC.9
+OBJLIB  = ARG(1)   /* SKELS UND PANEL LIB */
+OBJLIB1 = Strip(Translate(OBJLIB, " ", "'") )
+OBJLIB  = "'" || Space(OBJLIB1, 0) || "'"
+
+ADDRESS "TSO" "ALLOC F(OBJLIB) DA("OBJLIB") OLD"
+Call GetMem
+ADDRESS "TSO" "FREE  F(OBJLIB) "
+
+If SKELV     = SRC.3  Then do
+   /* Gleiche Version dann Return */
+   Return
+ End
+
+ADDRESS "TSO" "ALLOC F(OBJLIB) DA("OBJLIB") OLD"
+
+MemName = "SKELVER"
+WLine.0 = 1
+WLine.1 = SRC.3
+Call Write_Mem
+
+
+skel.0   = 1
+skel.1   = "SKALTS9            SKEL_SKALTS9           "
+
+do skeli = 1 to skel.0
+   Drop WLine.
+   WLine.0  = 0
+   MemName  = Word(skel.skeli, 1)
+   MemProc  = Word(skel.skeli, 2)
+   If MemName = "" Then Iterate
+   Interpret "Call "MemProc
+   Call Write_Mem
+ End
+
+ADDRESS "TSO" "FREE FI(OBJLIB)"
+Return 0
+
+WL:
+if Datatype(WLine.0) <> "NUM" Then WLine.0 = 0
+WLine.0 = WLine.0 + 1
+WLineI  = WLine.0
+
+WLine.WLineI = Arg(1)
+
+Return 0
+
+Write_Mem:
+ADDRESS ISPEXEC
+'LMINIT DATAID(DID) DDNAME(OBJLIB) ENQ(EXCLU)'
+'LMOPEN DATAID(&DID) OPTION(OUTPUT)'
+'LMMDEL DATAID(&DID) MEMBER('MemName')'
+
+Do i = 1 to WLine.0
+  P1 = WLine.i
+  "LMPUT DATAID(&DID) MODE(INVAR) DATALOC(P1) DATALEN(80)"
+ End
+
+'LMMADD DATAID(&DID) MEMBER('MemName')'
+'LMFREE DATAID(&DID)'
+
+ Return 0
+
+GetMem:
+ADDRESS ISPEXEC
+SKELV  = ""
+pdsmbr = 'SKELVER'
+'LMINIT DATAID(DID) DDNAME(OBJLIB) ENQ(EXCLU)'
+'LMOPEN DATAID(&DID) OPTION(INPUT)'
+'LMMLIST DATAID(&DID) OPTION(LIST) MEMBER(PDSMBR) STATS(YES)'
+
+'LMMFIND DATAID(&DID) MEMBER('PDSMBR')',
+    'LRECL(reclen) RECFM(recfmvr)',
+    'STATS(NO)'
+
+'lmget dataid(&DID) mode(invar) dataloc(SKELV) ',
+                   ' datalen(datavar) maxlen(80)'
+
+'LMFREE DATAID(&DID)'
+
+ Return 0
+
+SKEL_SKALTS9:
+Z=")DEFAULT  )#?ü<~>                                                   "
+OK=WL(Z)
+Z=")SEL #JOB EQ Y                                                      "
+OK=WL(Z)
+Z="//ALTERTS EXEC PGM=IKJEFT01,DYNAMNBR=20                             "
+OK=WL(Z)
+Z=")IM SKSTEPLI                                                        "
+OK=WL(Z)
+Z="//SYSTSPRT DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSPRINT DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSUDUMP DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSTSIN  DD  *                                                    "
+OK=WL(Z)
+Z="  DSN SYSTEM(#SSID.)                                                "
+OK=WL(Z)
+Z=")SEL #STOPTS = Y                                                    "
+OK=WL(Z)
+Z="     -STOP  DATABASE(#DBNAME) SPACENAM(#TSNAME) AT(COMMIT)          "
+OK=WL(Z)
+Z=")ENDSEL                                                             "
+OK=WL(Z)
+Z="      RUN  PROGRAM(DSNTEP4) -                                       "
+OK=WL(Z)
+Z="           PLAN(DSNTEP4)    -                                       "
+OK=WL(Z)
+Z=")SEL #RUNLIB NE #BLANK                                              "
+OK=WL(Z)
+Z="           LIB('#RUNLIB')   -                                       "
+OK=WL(Z)
+Z=")ENDSEL                                                             "
+OK=WL(Z)
+Z="           PARMS('/ALIGN(MID)')                                     "
+OK=WL(Z)
+Z=")SEL #STOPTS = Y                                                    "
+OK=WL(Z)
+Z="     -START DATABASE(#DBNAME) SPACENAM(#TSNAME) ACCESS(RW)          "
+OK=WL(Z)
+Z=")ENDSEL                                                             "
+OK=WL(Z)
+Z="   END                                                              "
+OK=WL(Z)
+Z="//SYSIN DD *                                                        "
+OK=WL(Z)
+Z="--##SET ROWS_FETCH -1                                               "
+OK=WL(Z)
+Z="--##SET ROWS_OUT   -1                                               "
+OK=WL(Z)
+Z="--##SET TOLWARN    YES                                              "
+OK=WL(Z)
+Z="--##SET TERMINATOR ;                                                "
+OK=WL(Z)
+Z="--##SET TOLARTHWRN YES                                              "
+OK=WL(Z)
+Z="--##SET MAXERRORS  -1                                               "
+OK=WL(Z)
+Z="--##SET MULT_FETCH 1000                                             "
+OK=WL(Z)
+Z=")ENDSEL                                                             "
+OK=WL(Z)
+Z=")SEL #STMT EQ Y                                                     "
+OK=WL(Z)
+Z="  #SQLSTMT                                                          "
+OK=WL(Z)
+Z=")ENDSEL                                                             "
+OK=WL(Z)
+
+RETURN

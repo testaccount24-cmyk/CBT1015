@@ -1,0 +1,23 @@
+/*        REXX                */
+/* To protect against errors: */
+SIGNAL ON SYNTAX          /* TURN ON SYNTAX TRAP */
+SIGNAL ON HALT            /* TRAP THIS ONLY ON LUW */
+SIGNAL ON FAILURE
+SIGNAL ON ERROR
+
+ok = xxx()
+
+Return
+
+error: failure: syntax: novalue:
+condition = condition('C')
+If condition = 'HALT' Then Call SQLDBS 'INTERRUPT' /* only for LUW */
+source = strip(sourceline(sigl),"B")
+/*  Call SQLEXEC 'ROLLBACK'  make sure we roll back */
+say copies('*',79)
+say left('* 'condition' CONDITION ON LINE 'sigl' OF REXX 'rexx,78)'*'
+say left('* 'source,78)'*'
+say left('* RETURN CODE 'rc,78)'*'
+say left('* 'errortext(rc),78)'*'
+say copies('*',79)
+exit 100

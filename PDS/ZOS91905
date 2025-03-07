@@ -1,0 +1,4711 @@
+/* REXX */
+/*******************************************************************/
+/*                                                                 */
+/* PROGRAMMNAME     : ZOS91905  (fuer ZOS V9  Nr 905)              */
+/* AUTHER           : ULRICH BRAEUER                               */
+/* FUNKTION         : AG : Skeletons Dynamisch ausgeben           */
+/*                                                                 */
+/*                                                                 */
+/*******************************************************************/
+
+ENV        = "TSO"
+X          = MSG('OFF')
+USER       = USERID()
+SYSCATS    = "SYSCAT"
+SYSIBMS    = "SYSIBM"
+SYSIBMA    = "SYSIBMADM"
+SYSPROCA   = "SYSPROC"
+ADDRESS ISPEXEC 'VGET (SYSIBMS) PROFILE'
+ADDRESS ISPEXEC 'VGET (SYSCATS) PROFILE'
+ADDRESS ISPEXEC 'VGET (SYSIBMA) PROFILE'
+ADDRESS ISPEXEC 'VGET (SYSPROCA) PROFILE'
+
+ADDRESS ISPEXEC 'VGET (UDBTRACE) PROFILE'
+IF UDBTRACE = 'ON' THEN TRACE R
+ELSE                    TRACE
+
+DROP WLine.
+
+PARSE SOURCE SRC.1 SRC.2 SRC.3 SRC.4 SRC.5 SRC.6 SRC.7 SRC.8 SRC.9
+OBJLIB  = ARG(1)   /* SKELS UND PANEL LIB */
+OBJLIB1 = Strip(Translate(OBJLIB, " ", "'") )
+OBJLIB  = "'" || Space(OBJLIB1, 0) || "'"
+SKELVER = "'"OBJLIB1 || "(SKELVER)'"
+IF SYSDSN(SKELVER) = 'OK' THEN do
+   /* Check Skeletons nur einmal schreiben wenn gleiche Version */
+   ADDRESS "TSO" "FREE FI(SKELVER)"
+   SEKV.0    = 0
+   ADDRESS "TSO" "ALLOC F(SKELVER) DA('"OBJLIB1"(SKELVER)') SHR"
+   IF RC = 0 Then Do
+      ADDRESS TSO "EXECIO * DISKR SKELVER (STEM SEKV.    FINIS"
+    End
+   ADDRESS "TSO" "FREE FI(SKELVER)"
+ End
+
+If SEKV.1    = SRC.3  Then do
+   /* Gleiche Version dann Return */
+   Return
+ End
+
+ADDRESS "TSO" "ALLOC F(OBJLIB) DA("OBJLIB") OLD"
+
+MemName = "SKELVER"
+WLine.0 = 1
+WLine.1 = SRC.3
+Call Write_Mem
+
+
+skel.0   = 46
+skel.1   = "SKALTS9            SKEL_SKALTS9           "
+skel.2   = "SKCHKDT1           SKEL_SKCHKDT1          "
+skel.3   = "SKCHKIX1           SKEL_SKCHKIX1          "
+skel.4   = "SKCPYCPY           SKEL_SKCPYCPY          "
+skel.5   = "SKCPYMER           SKEL_SKCPYMER          "
+skel.6   = "SKCPYTS1           SKEL_SKCPYTS1          "
+skel.7   = "                                          "
+skel.8   = "                                          "
+skel.9   = "SKICINFO           SKEL_SKICINFO          "
+skel.10  = "SKJU003            SKEL_SKJU003           "
+skel.11  = "SKJU004            SKEL_SKJU004           "
+skel.12  = "                                          "
+skel.13  = "SKMODALL           SKEL_SKMODALL          "
+skel.14  = "SKMODHIS           SKEL_SKMODHIS          "
+skel.15  = "SKMODREC           SKEL_SKMODREC          "
+skel.16  = "                                          "
+skel.17  = "SKQUIES1           SKEL_SKQUIES1          "
+skel.18  = "SKRBPG1            SKEL_SKRBPG1           "
+skel.19  = "SKRBPL1            SKEL_SKRBPL1           "
+skel.20  = "SKREBIX1           SKEL_SKREBIX1          "
+skel.21  = "SKRECOV1           SKEL_SKRECOV1          "
+skel.22  = "                                          "
+skel.23  = "SKREOIX1           SKEL_SKREOIX1          "
+skel.24  = "SKREOTS1           SKEL_SKREOTS1          "
+skel.25  = "                                          "
+skel.26  = "SKREPTS1           SKEL_SKREPTS1          "
+skel.27  = "                                          "
+skel.28  = "                                          "
+skel.29  = "SKRSIX1            SKEL_SKRSIX1           "
+skel.30  = "                                          "
+skel.31  = "                                          "
+skel.32  = "SKRSTS2            SKEL_SKRSTS2           "
+skel.33  = "                                          "
+skel.34  = "SKSTEPLI           SKEL_SKSTEPLI          "
+skel.35  = "SKSTOSPA           SKEL_SKSTOSPA          "
+skel.36  = "SKTEP2             SKEL_SKTEP2            "
+skel.37  = "SKTEP4             SKEL_SKTEP4            "
+skel.38  = "SKTIAD             SKEL_SKTIAD            "
+skel.39  = "SKTIAUL            SKEL_SKTIAUL           "
+skel.40  = "SKUNLIC            SKEL_SKUNLIC           "
+skel.41  = "SKUNLTB            SKEL_SKUNLTB           "
+skel.42  = "SKUNLTS            SKEL_SKUNLTS           "
+skel.43  = "SK1COPY1           SKEL_SK1COPY1          "
+skel.44  = "                                          "
+skel.45  = "SK1LOGP            SKEL_SK1LOGP           "
+skel.46  = "SK1PRINT           SKEL_SK1PRINT          "
+
+do skeli = 1 to skel.0
+   Drop WLine.
+   WLine.0  = 0
+   MemName  = Word(skel.skeli, 1)
+   MemProc  = Word(skel.skeli, 2)
+   If MemName = "" Then Iterate
+   Interpret "Call "MemProc
+   Call Write_Mem
+ End
+
+ADDRESS "TSO" "FREE FI(OBJLIB)"
+Return 0
+
+WL:
+if Datatype(WLine.0) <> "NUM" Then WLine.0 = 0
+WLine.0 = WLine.0 + 1
+WLineI  = WLine.0
+
+WLine.WLineI = Arg(1)
+
+Return 0
+
+Write_Mem:
+ADDRESS ISPEXEC
+'LMINIT DATAID(DID) DDNAME(OBJLIB) ENQ(EXCLU)'
+'LMOPEN DATAID(&DID) OPTION(OUTPUT)'
+'LMMDEL DATAID(&DID) MEMBER('MemName')'
+
+Do i = 1 to WLine.0
+  P1 = WLine.i
+  "LMPUT DATAID(&DID) MODE(INVAR) DATALOC(P1) DATALEN(80)"
+ End
+
+'LMMADD DATAID(&DID) MEMBER('MemName')'
+'LMFREE DATAID(&DID)'
+
+ Return 0
+
+SKEL_SKALTS9:
+Z=")DEFAULT  )#?ü<~>                                                   "
+OK=WL(Z)
+Z=")SEL #JOB EQ Y                                                      "
+OK=WL(Z)
+Z="//ALTERTS EXEC PGM=IKJEFT01,DYNAMNBR=20                             "
+OK=WL(Z)
+Z=")IM SKSTEPLI                                                        "
+OK=WL(Z)
+Z="//SYSTSPRT DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSPRINT DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSUDUMP DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSTSIN  DD  *                                                    "
+OK=WL(Z)
+Z="  DSN SYSTEM(#SSID.)                                                "
+OK=WL(Z)
+Z=")SEL #STOPTS = Y                                                    "
+OK=WL(Z)
+Z="     -STOP  DATABASE(#DBNAME) SPACENAM(#TSNAME) AT(COMMIT)          "
+OK=WL(Z)
+Z=")ENDSEL                                                             "
+OK=WL(Z)
+Z="      RUN  PROGRAM(DSNTEP4) -                                       "
+OK=WL(Z)
+Z="           PLAN(DSNTEP4)    -                                       "
+OK=WL(Z)
+Z=")SEL #RUNLIB NE #BLANK                                              "
+OK=WL(Z)
+Z="           LIB('#RUNLIB')   -                                       "
+OK=WL(Z)
+Z=")ENDSEL                                                             "
+OK=WL(Z)
+Z="           PARMS('/ALIGN(MID)')                                     "
+OK=WL(Z)
+Z=")SEL #STOPTS = Y                                                    "
+OK=WL(Z)
+Z="     -START DATABASE(#DBNAME) SPACENAM(#TSNAME) ACCESS(RW)          "
+OK=WL(Z)
+Z=")ENDSEL                                                             "
+OK=WL(Z)
+Z="   END                                                              "
+OK=WL(Z)
+Z="//SYSIN DD *                                                        "
+OK=WL(Z)
+Z="--##SET ROWS_FETCH -1                                               "
+OK=WL(Z)
+Z="--##SET ROWS_OUT   -1                                               "
+OK=WL(Z)
+Z="--##SET TOLWARN    YES                                              "
+OK=WL(Z)
+Z="--##SET TERMINATOR ;                                                "
+OK=WL(Z)
+Z="--##SET TOLARTHWRN YES                                              "
+OK=WL(Z)
+Z="--##SET MAXERRORS  -1                                               "
+OK=WL(Z)
+Z="--##SET MULT_FETCH 1000                                             "
+OK=WL(Z)
+Z=")ENDSEL                                                             "
+OK=WL(Z)
+Z=")SEL #STMT EQ Y                                                     "
+OK=WL(Z)
+Z="  #SQLSTMT                                                          "
+OK=WL(Z)
+Z=")ENDSEL                                                             "
+OK=WL(Z)
+
+RETURN
+
+SKEL_SKCHKDT1:
+Z=")DEFAULT  )#?ü<~>                                                   "
+OK=WL(Z)
+Z=")SEL #LTB EQ Y                                                      "
+OK=WL(Z)
+Z="//DSNTEP4 EXEC PGM=IKJEFT01,DYNAMNBR=20                             "
+OK=WL(Z)
+Z=")IM SKSTEPLI                                                        "
+OK=WL(Z)
+Z="//SYSTSPRT DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSPRINT DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSUDUMP DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSTSIN  DD  *                                                    "
+OK=WL(Z)
+Z="  DSN SYSTEM(#SSID.)                                                "
+OK=WL(Z)
+Z="      RUN  PROGRAM(DSNTEP4) -                                       "
+OK=WL(Z)
+Z="           PLAN(DSNTEP4)    -                                       "
+OK=WL(Z)
+Z=")SEL #RUNLIB NE #BLANK                                              "
+OK=WL(Z)
+Z="           LIB('#RUNLIB')   -                                       "
+OK=WL(Z)
+Z=")ENDSEL                                                             "
+OK=WL(Z)
+Z="           PARMS('/ALIGN(MID)')                                     "
+OK=WL(Z)
+Z="   END                                                              "
+OK=WL(Z)
+Z="//SYSIN DD *                                                        "
+OK=WL(Z)
+Z="--##SET ROWS_FETCH -1                                               "
+OK=WL(Z)
+Z="--##SET ROWS_OUT  -1                                                "
+OK=WL(Z)
+Z="--##SET TOLWARN   YES                                               "
+OK=WL(Z)
+Z="--##SET TERMINATOR ;                                                "
+OK=WL(Z)
+Z="--##SET TOLARTHWRN YES                                              "
+OK=WL(Z)
+Z="--##SET MAXERRORS -1                                                "
+OK=WL(Z)
+Z="--##SET MULT_FETCH 1000                                             "
+OK=WL(Z)
+Z="                                                                    "
+OK=WL(Z)
+Z="  CREATE TABLE #TBC..#TBN._CHK                                      "
+OK=WL(Z)
+Z="    LIKE       #TBC..#TBN.                                          "
+OK=WL(Z)
+Z="     ;                                                              "
+OK=WL(Z)
+Z=")ENDSEL                                                             "
+OK=WL(Z)
+Z="//CHKDATA EXEC PGM=DSNUTILB,                                        "
+OK=WL(Z)
+Z="//         REGION=8M,                                               "
+OK=WL(Z)
+Z="//         PARM=(#SSID,'CHKDATA.#TS.') ,RESTART(PHASE)              "
+OK=WL(Z)
+Z=")IM SKSTEPLI                                                        "
+OK=WL(Z)
+Z="//*  //SYSUT1  DD DSN=#JHLQ...#DB..#TS..SYSUT1,                     "
+OK=WL(Z)
+Z="//*  //         DISP=(MOD,DELETE,DELETE),                           "
+OK=WL(Z)
+Z="//*  //         SPACE=(CYL,(1000,1000)),                            "
+OK=WL(Z)
+Z="//*  //         UNIT=(#WORK,50)                                     "
+OK=WL(Z)
+Z="//*  //SORTOUT DD DSN=#JHLQ...#DB..#TS..SORTOUT,                    "
+OK=WL(Z)
+Z="//*  //         DISP=(MOD,DELETE,DELETE),                           "
+OK=WL(Z)
+Z="//*  //         SPACE=(CYL,(1000,1000)),                            "
+OK=WL(Z)
+Z="//*  //         UNIT=(#WORK,50)                                     "
+OK=WL(Z)
+Z="//*  //SYSERR  DD DSN=#JHLQ...#DB..#TS..SYSERR,                     "
+OK=WL(Z)
+Z="//*  //         DISP=(MOD,DELETE,DELETE),                           "
+OK=WL(Z)
+Z="//*  //         SPACE=(CYL,(1000,1000)),                            "
+OK=WL(Z)
+Z="//*  //         UNIT=(#WORK,50)                                     "
+OK=WL(Z)
+Z="//DSSPRINT DD SYSOUT=*                                              "
+OK=WL(Z)
+Z="//SYSPRINT DD SYSOUT=*                                              "
+OK=WL(Z)
+Z="//SYSUDUMP DD SYSOUT=*                                              "
+OK=WL(Z)
+Z="//UTPRINT  DD SYSOUT=*                                              "
+OK=WL(Z)
+Z="//SYSOUT   DD SYSOUT=*                                              "
+OK=WL(Z)
+Z="//SYSLISTD DD *                                                     "
+OK=WL(Z)
+Z="//SYSTEMPL DD *                                                     "
+OK=WL(Z)
+Z="  TEMPLATE TSYSUT1                                                  "
+OK=WL(Z)
+Z="           UNIT     #WORK                                           "
+OK=WL(Z)
+Z="           UNCNT    59                                              "
+OK=WL(Z)
+Z="           DISP(MOD,DELETE,CATLG)                                   "
+OK=WL(Z)
+Z="           SPACE(800,800) CYL                                       "
+OK=WL(Z)
+Z="           DSN('#MHLQWRK..&DB..&TS..SYSUT1')                        "
+OK=WL(Z)
+Z="                                                                    "
+OK=WL(Z)
+Z="  TEMPLATE TSORTOUT                                                 "
+OK=WL(Z)
+Z="           UNIT     #WORK                                           "
+OK=WL(Z)
+Z="           UNCNT    59                                              "
+OK=WL(Z)
+Z="           DISP(MOD,DELETE,CATLG)                                   "
+OK=WL(Z)
+Z="           SPACE(800,800) CYL                                       "
+OK=WL(Z)
+Z="           DSN('#MHLQWRK..&DB..&TS..SORTOUT')                       "
+OK=WL(Z)
+Z="                                                                    "
+OK=WL(Z)
+Z="  TEMPLATE TSYSERR                                                  "
+OK=WL(Z)
+Z="           UNIT     #WORK                                           "
+OK=WL(Z)
+Z="           UNCNT    59                                              "
+OK=WL(Z)
+Z="           DISP(MOD,DELETE,CATLG)                                   "
+OK=WL(Z)
+Z="           SPACE(800,800) CYL                                       "
+OK=WL(Z)
+Z="           DSN('#MHLQWRK..&DB..&TS..SYSERR')                        "
+OK=WL(Z)
+Z="/*                                                                  "
+OK=WL(Z)
+Z="//SYSIN DD *                                                        "
+OK=WL(Z)
+Z=")IF #USEDOT  = Y THEN )DO                                           "
+OK=WL(Z)
+Z=")DOT #TSLISTE                                                       "
+OK=WL(Z)
+Z="  CHECK #TSTYPE TABLESPACE  #DBNAME..#TSNAME.                       "
+OK=WL(Z)
+Z="        SCOPE ALL                                                   "
+OK=WL(Z)
+Z="        SHRLEVEL REFERENCE                                          "
+OK=WL(Z)
+Z="        WORKDDN  (TSYSUT1,TSORTOUT)                                 "
+OK=WL(Z)
+Z="        ERRDDN   (TSYSERR)                                          "
+OK=WL(Z)
+Z="        SORTDEVT #WORK                                              "
+OK=WL(Z)
+Z="        SORTNUM  4                                                  "
+OK=WL(Z)
+Z="        DRAIN_WAIT 180 RETRY  10 RETRY_DELAY 10                     "
+OK=WL(Z)
+Z=")SEL #LTB EQ Y                                                      "
+OK=WL(Z)
+Z="        FOR EXCEPTION IN #TBC..#TBN. USE #TBC..#TBN._CHK            "
+OK=WL(Z)
+Z="        DELETE YES                                                  "
+OK=WL(Z)
+Z=")ENDSEL                                                             "
+OK=WL(Z)
+Z=")BLANK                                                              "
+OK=WL(Z)
+Z=")ENDDOT                                                             "
+OK=WL(Z)
+Z=")ENDDO                                                              "
+OK=WL(Z)
+Z=")ELSE )DO                                                           "
+OK=WL(Z)
+Z="  CHECK #TSTYPE TABLESPACE  #DB..#TS.                               "
+OK=WL(Z)
+Z="        SCOPE ALL                                                   "
+OK=WL(Z)
+Z="        SHRLEVEL REFERENCE                                          "
+OK=WL(Z)
+Z="        WORKDDN  (TSYSUT1,TSORTOUT)                                 "
+OK=WL(Z)
+Z="        ERRDDN   (TSYSERR)                                          "
+OK=WL(Z)
+Z="        SORTDEVT #WORK                                              "
+OK=WL(Z)
+Z="        SORTNUM  4                                                  "
+OK=WL(Z)
+Z="        DRAIN_WAIT 180 RETRY  10 RETRY_DELAY 10                     "
+OK=WL(Z)
+Z=")SEL #LTB EQ Y                                                      "
+OK=WL(Z)
+Z="        FOR EXCEPTION IN #TBC..#TBN. USE #TBC..#TBN._CHK            "
+OK=WL(Z)
+Z="        DELETE YES                                                  "
+OK=WL(Z)
+Z=")ENDSEL                                                             "
+OK=WL(Z)
+Z=")BLANK                                                              "
+OK=WL(Z)
+Z=")ENDDO                                                              "
+OK=WL(Z)
+Z="/*                                                                  "
+OK=WL(Z)
+Z=")SEL #LTB EQ Y                                                      "
+OK=WL(Z)
+Z="//DSNTEP4 EXEC PGM=IKJEFT01,DYNAMNBR=20                             "
+OK=WL(Z)
+Z=")IM SKSTEPLI                                                        "
+OK=WL(Z)
+Z="//SYSTSPRT DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSPRINT DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSUDUMP DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSTSIN  DD  *                                                    "
+OK=WL(Z)
+Z="  DSN SYSTEM(#SSID.)                                                "
+OK=WL(Z)
+Z="      RUN  PROGRAM(DSNTEP4) -                                       "
+OK=WL(Z)
+Z="           PLAN(DSNTEP4)    -                                       "
+OK=WL(Z)
+Z=")SEL #RUNLIB NE #BLANK                                              "
+OK=WL(Z)
+Z="           LIB('#RUNLIB')   -                                       "
+OK=WL(Z)
+Z=")ENDSEL                                                             "
+OK=WL(Z)
+Z="           PARMS('/ALIGN(MID)')                                     "
+OK=WL(Z)
+Z="   END                                                              "
+OK=WL(Z)
+Z="//SYSIN DD *                                                        "
+OK=WL(Z)
+Z="--##SET ROWS_FETCH -1                                               "
+OK=WL(Z)
+Z="--##SET ROWS_OUT  -1                                                "
+OK=WL(Z)
+Z="--##SET TOLWARN   YES                                               "
+OK=WL(Z)
+Z="--##SET TERMINATOR ;                                                "
+OK=WL(Z)
+Z="--##SET TOLARTHWRN YES                                              "
+OK=WL(Z)
+Z="--##SET MAXERRORS -1                                                "
+OK=WL(Z)
+Z="--##SET MULT_FETCH 1000                                             "
+OK=WL(Z)
+Z="                                                                    "
+OK=WL(Z)
+Z="  DROP   TABLE #TBC..#TBN._CHK                                      "
+OK=WL(Z)
+Z="     ;                                                              "
+OK=WL(Z)
+Z=")ENDSEL                                                             "
+OK=WL(Z)
+Z="// IF (CHKDATA.RC GT 4 OR CHKDATA.ABEND = TRUE) THEN                "
+OK=WL(Z)
+Z="//TERM    EXEC PGM=IKJEFT01,DYNAMNBR=20                             "
+OK=WL(Z)
+Z=")IM SKSTEPLI                                                        "
+OK=WL(Z)
+Z="//SYSTSPRT DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSPRINT DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSUDUMP DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSIN    DD  DUMMY                                                "
+OK=WL(Z)
+Z="//SYSTSIN  DD  *                                                    "
+OK=WL(Z)
+Z="  DSN SYSTEM(#SSID)                                                 "
+OK=WL(Z)
+Z="  -DIS  UTILITY(CHKDATA.#TS.)                                       "
+OK=WL(Z)
+Z="  -TERM UTILITY(CHKDATA.#TS.)                                       "
+OK=WL(Z)
+Z="  END                                                               "
+OK=WL(Z)
+Z="// ENDIF                                                            "
+OK=WL(Z)
+
+RETURN
+
+SKEL_SKCHKIX1:
+Z=")DEFAULT  )#?ü<~>                                                   "
+OK=WL(Z)
+Z="//CHECKIX EXEC PGM=DSNUTILB,                                        "
+OK=WL(Z)
+Z="//         REGION=8M,                                               "
+OK=WL(Z)
+Z="//         PARM=(#SSID,'CHECKIX.INDEX') ,RESTART(PHASE)             "
+OK=WL(Z)
+Z=")IM SKSTEPLI                                                        "
+OK=WL(Z)
+Z="//ABNLIGNR DD DUMMY                                                 "
+OK=WL(Z)
+Z="//DSSPRINT DD SYSOUT=*                                              "
+OK=WL(Z)
+Z="//SYSPRINT DD SYSOUT=*                                              "
+OK=WL(Z)
+Z="//SYSUDUMP DD SYSOUT=*                                              "
+OK=WL(Z)
+Z="//UTPRINT  DD SYSOUT=*                                              "
+OK=WL(Z)
+Z="//SYSOUT   DD SYSOUT=*                                              "
+OK=WL(Z)
+Z="//SYSLISTD DD *                                                     "
+OK=WL(Z)
+Z="  LISTDEF CHECKIDX                                                  "
+OK=WL(Z)
+Z=")IF #USEDOT  = Y THEN )DO                                           "
+OK=WL(Z)
+Z=")DOT #TSLISTE                                                       "
+OK=WL(Z)
+Z="   INCLUDE INDEX      #CREATOR..#NAME.                              "
+OK=WL(Z)
+Z=")ENDDOT                                                             "
+OK=WL(Z)
+Z=")ENDDO                                                              "
+OK=WL(Z)
+Z=")ELSE )DO                                                           "
+OK=WL(Z)
+Z="   INCLUDE INDEX      #IXCR..#IXNM                                  "
+OK=WL(Z)
+Z=")ENDDO                                                              "
+OK=WL(Z)
+Z="/*                                                                  "
+OK=WL(Z)
+Z="//SYSTEMPL DD *                                                     "
+OK=WL(Z)
+Z="  TEMPLATE TSYSUT1                                                  "
+OK=WL(Z)
+Z="           UNIT     #WORK                                           "
+OK=WL(Z)
+Z="           UNCNT    59                                              "
+OK=WL(Z)
+Z="           DISP(MOD,DELETE,CATLG)                                   "
+OK=WL(Z)
+Z="           SPACE(800,800) CYL                                       "
+OK=WL(Z)
+Z="           DSN('#MHLQWRK..&DB..&TS..SYSUT1')                        "
+OK=WL(Z)
+Z="                                                                    "
+OK=WL(Z)
+Z="/*                                                                  "
+OK=WL(Z)
+Z="//SYSIN DD *                                                        "
+OK=WL(Z)
+Z="-- OPTIONS EVENT(ITEMERROR,SKIP)                                    "
+OK=WL(Z)
+Z="  CHECK INDEX LIST CHECKIDX                                         "
+OK=WL(Z)
+Z="        WORKDDN  (TSYSUT1)                                          "
+OK=WL(Z)
+Z="        SORTDEVT #WORK                                              "
+OK=WL(Z)
+Z="        SORTNUM 4                                                   "
+OK=WL(Z)
+Z="/*                                                                  "
+OK=WL(Z)
+Z="// IF (CHECKIX.RC GT 4 OR CHECKIX.ABEND = TRUE) THEN                "
+OK=WL(Z)
+Z="//TERM    EXEC PGM=IKJEFT01,DYNAMNBR=20                             "
+OK=WL(Z)
+Z=")IM SKSTEPLI                                                        "
+OK=WL(Z)
+Z="//SYSTSPRT DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSPRINT DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSUDUMP DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSIN    DD  DUMMY                                                "
+OK=WL(Z)
+Z="//SYSTSIN  DD  *                                                    "
+OK=WL(Z)
+Z="  DSN SYSTEM(#SSID.)                                                "
+OK=WL(Z)
+Z="  -DIS  UTILITY(CHECKIX.INDEX  )                                    "
+OK=WL(Z)
+Z="  -TERM UTILITY(CHECKIX.INDEX  )                                    "
+OK=WL(Z)
+Z="  END                                                               "
+OK=WL(Z)
+Z="// ENDIF                                                            "
+OK=WL(Z)
+
+RETURN
+
+SKEL_SKCPYCPY:
+Z=")DEFAULT  )#?ü<~>                                                   "
+OK=WL(Z)
+Z="//CPY2CPY EXEC PGM=DSNUTILB,                                        "
+OK=WL(Z)
+Z=")SEL #TS EQ *                                                       "
+OK=WL(Z)
+Z="//         PARM=(#SSID,'CPY2CPY.TABLESP')                           "
+OK=WL(Z)
+Z=")ENDSEL                                                             "
+OK=WL(Z)
+Z=")SEL #TS NE *                                                       "
+OK=WL(Z)
+Z="//         PARM=(#SSID,'CPY2CPY.#TS')                               "
+OK=WL(Z)
+Z=")ENDSEL                                                             "
+OK=WL(Z)
+Z=")IM SKSTEPLI                                                        "
+OK=WL(Z)
+Z="//SYSPRINT  DD SYSOUT=*                                             "
+OK=WL(Z)
+Z="//UTPRINT   DD SYSOUT=*                                             "
+OK=WL(Z)
+Z="/*                                                                  "
+OK=WL(Z)
+Z="//SYSTEMPL DD *                                                     "
+OK=WL(Z)
+Z="  TEMPLATE COPYTAPE                                                 "
+OK=WL(Z)
+Z="           DSN #MDICTAPE                                            "
+OK=WL(Z)
+Z="           UNIT #TAPE                                               "
+OK=WL(Z)
+Z="           DISP (MOD,CATLG,CATLG)                                   "
+OK=WL(Z)
+Z="           DATACLAS #RACDATAC                                       "
+OK=WL(Z)
+Z="           VOLCNT   255                                             "
+OK=WL(Z)
+Z="           RETPD 30                                                 "
+OK=WL(Z)
+Z="           STACK(YES)                                               "
+OK=WL(Z)
+Z="                                                                    "
+OK=WL(Z)
+Z="--TEMPLATE COPYDISK                                                 "
+OK=WL(Z)
+Z="--         DSN #MDICDISK                                            "
+OK=WL(Z)
+Z="--         DISP (NEW,CATLG,CATLG)                                   "
+OK=WL(Z)
+Z="--         UNIT #SYSDA                                              "
+OK=WL(Z)
+Z="--         UNCNT    59                                              "
+OK=WL(Z)
+Z="                                                                    "
+OK=WL(Z)
+Z="//SYSIN DD *                                                        "
+OK=WL(Z)
+Z="--OPTIONS PREVIEW                                                   "
+OK=WL(Z)
+Z=")IF #USEDOT  = Y THEN )DO                                           "
+OK=WL(Z)
+Z=")DOT #TSLISTE                                                       "
+OK=WL(Z)
+Z="COPYTOCOPY TABLESPACE #DBNAME..#TSNAME.                             "
+OK=WL(Z)
+Z=")SEL #DSNAME NE #BLANK                                              "
+OK=WL(Z)
+Z="      FROMCOPY #DSNAME.                                             "
+OK=WL(Z)
+Z=")ENDSEL                                                             "
+OK=WL(Z)
+Z=")SEL #DSNAME EQ #BLANK                                              "
+OK=WL(Z)
+Z="      FROMLASTFULLCOPY                                              "
+OK=WL(Z)
+Z="--    FROMLASTCOPY                                                  "
+OK=WL(Z)
+Z=")ENDSEL                                                             "
+OK=WL(Z)
+Z="      RECOVERYDDN(COPYTAPE)                                         "
+OK=WL(Z)
+Z=")ENDDOT                                                             "
+OK=WL(Z)
+Z=")ENDDO                                                              "
+OK=WL(Z)
+Z=")ELSE )DO                                                           "
+OK=WL(Z)
+Z="COPYTOCOPY TABLESPACE #DB..#TS.                                     "
+OK=WL(Z)
+Z=")SEL #ICDSN NE #BLANK                                               "
+OK=WL(Z)
+Z="      FROMCOPY #ICDSN                                               "
+OK=WL(Z)
+Z=")ENDSEL                                                             "
+OK=WL(Z)
+Z=")SEL #ICDSN EQ #BLANK                                               "
+OK=WL(Z)
+Z="      FROMLASTFULLCOPY                                              "
+OK=WL(Z)
+Z="--    FROMLASTCOPY                                                  "
+OK=WL(Z)
+Z=")ENDSEL                                                             "
+OK=WL(Z)
+Z="      RECOVERYDDN(COPYTAPE)                                         "
+OK=WL(Z)
+Z=")ENDDO                                                              "
+OK=WL(Z)
+Z="                                                                    "
+OK=WL(Z)
+Z="/*                                                                  "
+OK=WL(Z)
+Z="// IF (CPY2CPY.RC GT 4 OR CPY2CPY.ABEND = TRUE) THEN                "
+OK=WL(Z)
+Z="//TERM    EXEC PGM=IKJEFT01,DYNAMNBR=20                             "
+OK=WL(Z)
+Z=")IM SKSTEPLI                                                        "
+OK=WL(Z)
+Z="//SYSTSPRT DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSPRINT DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSUDUMP DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSIN    DD  DUMMY                                                "
+OK=WL(Z)
+Z="//SYSTSIN  DD  *                                                    "
+OK=WL(Z)
+Z="  DSN SYSTEM(#SSID.)                                                "
+OK=WL(Z)
+Z="  -DIS  UTILITY(CPY2CPY.#TS)                                        "
+OK=WL(Z)
+Z="  -TERM UTILITY(CPY2CPY.#TS)                                        "
+OK=WL(Z)
+Z="  END                                                               "
+OK=WL(Z)
+Z="// ENDIF                                                            "
+OK=WL(Z)
+
+RETURN
+
+SKEL_SKCPYMER:
+Z=")DEFAULT  )#?ü<~>                                                   "
+OK=WL(Z)
+Z="//MCOPY   EXEC PGM=DSNUTILB,                                        "
+OK=WL(Z)
+Z=")SEL #TS EQ *                                                       "
+OK=WL(Z)
+Z="//         PARM=(#SSID,'MCOPY.TABLESP')                             "
+OK=WL(Z)
+Z=")ENDSEL                                                             "
+OK=WL(Z)
+Z=")SEL #TS NE *                                                       "
+OK=WL(Z)
+Z="//         PARM=(#SSID,'MCOPY.#TS')                                 "
+OK=WL(Z)
+Z=")ENDSEL                                                             "
+OK=WL(Z)
+Z=")IM SKSTEPLI                                                        "
+OK=WL(Z)
+Z="//SYSPRINT  DD SYSOUT=*                                             "
+OK=WL(Z)
+Z="//UTPRINT   DD SYSOUT=*                                             "
+OK=WL(Z)
+Z="/*                                                                  "
+OK=WL(Z)
+Z="//SYSTEMPL DD *                                                     "
+OK=WL(Z)
+Z="  TEMPLATE COPYTAPE                                                 "
+OK=WL(Z)
+Z="             DSN #MDICTAPE                                          "
+OK=WL(Z)
+Z="             UNIT #TAPE                                             "
+OK=WL(Z)
+Z="             DISP (MOD,CATLG,CATLG)                                 "
+OK=WL(Z)
+Z="             DATACLAS #RACDATAC                                     "
+OK=WL(Z)
+Z="             VOLCNT   255                                           "
+OK=WL(Z)
+Z="             RETPD 30                                               "
+OK=WL(Z)
+Z="             STACK(YES)                                             "
+OK=WL(Z)
+Z="--                                                                  "
+OK=WL(Z)
+Z="--   TEMPLATE COPYDISK                                              "
+OK=WL(Z)
+Z="--            DSN #MDICDISK                                         "
+OK=WL(Z)
+Z="--            DISP (NEW,CATLG,CATLG)                                "
+OK=WL(Z)
+Z="--            UNIT #SYSDA                                           "
+OK=WL(Z)
+Z="--            UNCNT    59                                           "
+OK=WL(Z)
+Z="                                                                    "
+OK=WL(Z)
+Z="     TEMPLATE TSYSUT1                                               "
+OK=WL(Z)
+Z="              DSN #MHLQ..&DB..&TS..SYSUT1                           "
+OK=WL(Z)
+Z="              DISP (NEW,CATLG,CATLG)                                "
+OK=WL(Z)
+Z="              SPACE(300,300) CYL                                    "
+OK=WL(Z)
+Z="              UNIT #SYSDA                                           "
+OK=WL(Z)
+Z="              UNCNT    59                                           "
+OK=WL(Z)
+Z="                                                                    "
+OK=WL(Z)
+Z="//SYSIN DD *                                                        "
+OK=WL(Z)
+Z="--OPTIONS PREVIEW                                                   "
+OK=WL(Z)
+Z=")IF #USEDOT  = Y THEN )DO                                           "
+OK=WL(Z)
+Z=")DOT #TSLISTE                                                       "
+OK=WL(Z)
+Z="  MERGECOPY TABLESPACE #DBNAME..#TSNAME. DSNUM ALL                  "
+OK=WL(Z)
+Z="        COPYDDN(COPYTAPE)                                           "
+OK=WL(Z)
+Z="        WORKDDN(TSYSUT1)                                            "
+OK=WL(Z)
+Z="        NEWCOPY  YES                                                "
+OK=WL(Z)
+Z=")ENDDOT                                                             "
+OK=WL(Z)
+Z=")ENDDO                                                              "
+OK=WL(Z)
+Z=")ELSE )DO                                                           "
+OK=WL(Z)
+Z="  MERGECOPY TABLESPACE #DB..#TS. DSNUM ALL                          "
+OK=WL(Z)
+Z="        COPYDDN(COPYTAPE)                                           "
+OK=WL(Z)
+Z="        WORKDDN(TSYSUT1)                                            "
+OK=WL(Z)
+Z="        NEWCOPY  YES                                                "
+OK=WL(Z)
+Z=")ENDDO                                                              "
+OK=WL(Z)
+Z="/*                                                                  "
+OK=WL(Z)
+Z="// IF (MCOPY.RC GT 4 OR MCOPY.ABEND = TRUE) THEN                    "
+OK=WL(Z)
+Z="//TERM    EXEC PGM=IKJEFT01,DYNAMNBR=20                             "
+OK=WL(Z)
+Z=")IM SKSTEPLI                                                        "
+OK=WL(Z)
+Z="//SYSTSPRT DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSPRINT DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSUDUMP DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSIN    DD  DUMMY                                                "
+OK=WL(Z)
+Z="//SYSTSIN  DD  *                                                    "
+OK=WL(Z)
+Z="  DSN SYSTEM(#SSID.)                                                "
+OK=WL(Z)
+Z="  -DIS  UTILITY(MCOPY.#TS)                                          "
+OK=WL(Z)
+Z="  -TERM UTILITY(MCOPY.#TS)                                          "
+OK=WL(Z)
+Z="  END                                                               "
+OK=WL(Z)
+Z="// ENDIF                                                            "
+OK=WL(Z)
+
+RETURN
+
+SKEL_SKCPYTS1:
+Z=")DEFAULT  )#?ü<~>                                                   "
+OK=WL(Z)
+Z="//ICOPY   EXEC PGM=DSNUTILB,                                        "
+OK=WL(Z)
+Z=")SEL #TS EQ *                                                       "
+OK=WL(Z)
+Z="//         PARM=(#SSID,'ICOPY.TABLESP')                             "
+OK=WL(Z)
+Z=")ENDSEL                                                             "
+OK=WL(Z)
+Z=")SEL #TS NE *                                                       "
+OK=WL(Z)
+Z="//         PARM=(#SSID,'ICOPY.#TS')                                 "
+OK=WL(Z)
+Z=")ENDSEL                                                             "
+OK=WL(Z)
+Z=")IM SKSTEPLI                                                        "
+OK=WL(Z)
+Z="//SYSPRINT  DD SYSOUT=*                                             "
+OK=WL(Z)
+Z="//UTPRINT   DD SYSOUT=*                                             "
+OK=WL(Z)
+Z="/*                                                                  "
+OK=WL(Z)
+Z="//SYSLISTD DD *                                                     "
+OK=WL(Z)
+Z="  LISTDEF ICLIST1                                                   "
+OK=WL(Z)
+Z=")IF #auswkz = DB THEN )DO                                           "
+OK=WL(Z)
+Z="          INCLUDE TABLESPACES DATABASE #DB                          "
+OK=WL(Z)
+Z=")ENDDO                                                              "
+OK=WL(Z)
+Z=")ELSE )DO                                                           "
+OK=WL(Z)
+Z=")IF #USEDOT  = Y THEN )DO                                           "
+OK=WL(Z)
+Z=")DOT #TSLISTE                                                       "
+OK=WL(Z)
+Z="          INCLUDE TABLESPACE #DBNAME..#TSNAME.                      "
+OK=WL(Z)
+Z=")ENDDOT                                                             "
+OK=WL(Z)
+Z=")ENDDO                                                              "
+OK=WL(Z)
+Z=")ELSE )DO                                                           "
+OK=WL(Z)
+Z="          INCLUDE TABLESPACE #DB..#TS.                              "
+OK=WL(Z)
+Z=")ENDDO                                                              "
+OK=WL(Z)
+Z=")ENDDO                                                              "
+OK=WL(Z)
+Z="/*                                                                  "
+OK=WL(Z)
+Z="//SYSTEMPL DD *                                                     "
+OK=WL(Z)
+Z="  TEMPLATE COPYTAPE                                                 "
+OK=WL(Z)
+Z="           DSN #MDICTAPE                                            "
+OK=WL(Z)
+Z="           UNIT #TAPE                                               "
+OK=WL(Z)
+Z="           DISP (MOD,CATLG,CATLG)                                   "
+OK=WL(Z)
+Z="           DATACLAS #RACDATAC                                       "
+OK=WL(Z)
+Z="           VOLCNT   255                                             "
+OK=WL(Z)
+Z="           RETPD 30                                                 "
+OK=WL(Z)
+Z="           STACK(YES)                                               "
+OK=WL(Z)
+Z="--                                                                  "
+OK=WL(Z)
+Z="--TEMPLATE COPYDISK                                                 "
+OK=WL(Z)
+Z="--         DSN #MDICDISK                                            "
+OK=WL(Z)
+Z="--         DISP (NEW,CATLG,CATLG)                                   "
+OK=WL(Z)
+Z="--         UNIT #SYSDA                                              "
+OK=WL(Z)
+Z="--         UNCNT    59                                              "
+OK=WL(Z)
+Z="                                                                    "
+OK=WL(Z)
+Z="//SYSIN DD *                                                        "
+OK=WL(Z)
+Z="--OPTIONS PREVIEW                                                   "
+OK=WL(Z)
+Z="--OPTIONS EVENT(ITEMERROR,SKIP)                                     "
+OK=WL(Z)
+Z="  COPY  LIST ICLIST1                                                "
+OK=WL(Z)
+Z="        SHRLEVEL  CHANGE                                            "
+OK=WL(Z)
+Z="        FULL YES                                                    "
+OK=WL(Z)
+Z="        COPYDDN(COPYTAPE)                                           "
+OK=WL(Z)
+Z="/*                                                                  "
+OK=WL(Z)
+Z="// IF (ICOPY.RC GT 4 OR ICOPY.ABEND = TRUE) THEN                    "
+OK=WL(Z)
+Z="//TERM    EXEC PGM=IKJEFT01,DYNAMNBR=20                             "
+OK=WL(Z)
+Z=")IM SKSTEPLI                                                        "
+OK=WL(Z)
+Z="//SYSTSPRT DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSPRINT DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSUDUMP DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSIN    DD  DUMMY                                                "
+OK=WL(Z)
+Z="//SYSTSIN  DD  *                                                    "
+OK=WL(Z)
+Z="  DSN SYSTEM(#SSID.)                                                "
+OK=WL(Z)
+Z="  -DIS  UTILITY(ICOPY.#TS)                                          "
+OK=WL(Z)
+Z="  -TERM UTILITY(ICOPY.#TS)                                          "
+OK=WL(Z)
+Z="  END                                                               "
+OK=WL(Z)
+Z="// ENDIF                                                            "
+OK=WL(Z)
+
+RETURN
+
+SKEL_SKDIAG:
+Z=")DEFAULT  )#?ü<~>                                                   "
+OK=WL(Z)
+Z="//DIAGNOS EXEC PGM=DSNUTILB,                                        "
+OK=WL(Z)
+Z="//         REGION=8M,                                               "
+OK=WL(Z)
+Z="//         PARM=(#SSID,'DIAGNOS')                                   "
+OK=WL(Z)
+Z=")IM SKSTEPLI                                                        "
+OK=WL(Z)
+Z="//SYSPRINT  DD SYSOUT=*                                             "
+OK=WL(Z)
+Z="//*SYSPRINT DD  DCB=(RECFM=VM,LRECL=133),                           "
+OK=WL(Z)
+Z="//*             DISP=(NEW,CATLG,CATLG),                             "
+OK=WL(Z)
+Z="//*             DSORG=PS,                                           "
+OK=WL(Z)
+Z="//*             SPACE=(CYL,(5,5)),                                  "
+OK=WL(Z)
+Z="//*             DSN=#USERID..DSNAME.FOR.OUTPUT                      "
+OK=WL(Z)
+Z="//UTPRINT   DD SYSOUT=*                                             "
+OK=WL(Z)
+Z="//RNPRIN01  DD SYSOUT=*                                             "
+OK=WL(Z)
+Z="//STPRIN01  DD SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSIN     DD *                                                    "
+OK=WL(Z)
+Z=" DIAGNOSE                                                           "
+OK=WL(Z)
+Z=")IF #AUSWTYP = Y  THEN )DO                                          "
+OK=WL(Z)
+Z="     TYPE(#Type)                                                    "
+OK=WL(Z)
+Z=")ENDDO                                                              "
+OK=WL(Z)
+Z="                                                                    "
+OK=WL(Z)
+Z=")IF #Alldumps = Y  THEN )DO                                         "
+OK=WL(Z)
+Z="     ALLDUMPS (x'#AlldumpA')                                        "
+OK=WL(Z)
+Z=")ENDDO                                                              "
+OK=WL(Z)
+Z="                                                                    "
+OK=WL(Z)
+Z=")IF #NODumps  = Y  THEN )DO                                         "
+OK=WL(Z)
+Z="     NODUMPS (x'#NODumpA')                                          "
+OK=WL(Z)
+Z=")ENDDO                                                              "
+OK=WL(Z)
+Z="                                                                    "
+OK=WL(Z)
+Z=")IF #SYSUTIL = Y  THEN )DO                                          "
+OK=WL(Z)
+Z="     DISPLAY SYSUTIL                                                "
+OK=WL(Z)
+Z=")ENDDO                                                              "
+OK=WL(Z)
+Z="                                                                    "
+OK=WL(Z)
+Z=")IF #MEPL    = Y  THEN )DO                                          "
+OK=WL(Z)
+Z="     DISPLAY MEPL                                                   "
+OK=WL(Z)
+Z=")ENDDO                                                              "
+OK=WL(Z)
+Z="                                                                    "
+OK=WL(Z)
+Z=")IF #AVAILAB = Y  THEN )DO                                          "
+OK=WL(Z)
+Z="     DISPLAY AVAILABLE                                              "
+OK=WL(Z)
+Z=")ENDDO                                                              "
+OK=WL(Z)
+Z="                                                                    "
+OK=WL(Z)
+Z=")IF #OBD     = Y  THEN )DO                                          "
+OK=WL(Z)
+Z="     DISPLAY OBD #OBDOBJ #OBDAUSW                                   "
+OK=WL(Z)
+Z=")IF #OBDCLON = Y  THEN )DO                                          "
+OK=WL(Z)
+Z="                  CLONE                                             "
+OK=WL(Z)
+Z=")ENDDO                                                              "
+OK=WL(Z)
+Z=")ENDDO                                                              "
+OK=WL(Z)
+Z="                                                                    "
+OK=WL(Z)
+Z=")IF #DBET    = Y  THEN )DO                                          "
+OK=WL(Z)
+Z="     DISPLAY DBET                                                   "
+OK=WL(Z)
+Z=")IF #DBETO    = DB THEN )DO                                         "
+OK=WL(Z)
+Z="             DATABASE #DBETOBJ                                      "
+OK=WL(Z)
+Z=")ENDDO                                                              "
+OK=WL(Z)
+Z=")IF #DBETO    = TS THEN )DO                                         "
+OK=WL(Z)
+Z="             TABLESPACE #DBETOBJ                                    "
+OK=WL(Z)
+Z=")IF #DBETCLON = Y  THEN )DO                                         "
+OK=WL(Z)
+Z="                  CLONE                                             "
+OK=WL(Z)
+Z=")ENDDO                                                              "
+OK=WL(Z)
+Z=")ENDDO                                                              "
+OK=WL(Z)
+Z=")IF #DBETO    = IX THEN )DO                                         "
+OK=WL(Z)
+Z="             INDEX    #DBETOBJ                                      "
+OK=WL(Z)
+Z=")ENDDO                                                              "
+OK=WL(Z)
+Z="                                                                    "
+OK=WL(Z)
+Z=")ENDDO                                                              "
+OK=WL(Z)
+Z="                                                                    "
+OK=WL(Z)
+Z=" DIAGNOSE END                                                       "
+OK=WL(Z)
+Z="/*                                                                  "
+OK=WL(Z)
+Z="// IF (DIAGNOS.RC GT 4 OR DIAGNOS.ABEND = TRUE) THEN                "
+OK=WL(Z)
+Z="//TERM    EXEC PGM=IKJEFT01,DYNAMNBR=20                             "
+OK=WL(Z)
+Z=")IM SKSTEPLI                                                        "
+OK=WL(Z)
+Z="//SYSTSPRT DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSPRINT DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSUDUMP DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSIN    DD  DUMMY                                                "
+OK=WL(Z)
+Z="//SYSTSIN  DD  *                                                    "
+OK=WL(Z)
+Z=" DSN SYSTEM(#SSID.)                                                 "
+OK=WL(Z)
+Z="     -DIS  UTILITY(DIAGNOS)                                         "
+OK=WL(Z)
+Z="     -TERM UTILITY(DIAGNOS)                                         "
+OK=WL(Z)
+Z="  END                                                               "
+OK=WL(Z)
+Z="// ENDIF                                                            "
+OK=WL(Z)
+
+RETURN
+
+SKEL_SKICINFO:
+Z=")DEFAULT  )#?ü<~|                                                   "
+OK=WL(Z)
+Z="//ICINFO   EXEC PGM=IKJEFT01                                        "
+OK=WL(Z)
+Z="//SYSEXEC  DD DISP=SHR,DSN=#PROCLIB                                 "
+OK=WL(Z)
+Z="//* DB=#DB.  TS=#TS.                                                "
+OK=WL(Z)
+Z="//ICOPYDSN DD DISP=SHR,                                             "
+OK=WL(Z)
+Z="//        DSN=#ICDSN.                                               "
+OK=WL(Z)
+Z="//TBOBID   DD SYSOUT=*                                              "
+OK=WL(Z)
+Z="//SYSPRINT DD SYSOUT=*                                              "
+OK=WL(Z)
+Z="//SYSTSPRT DD SYSOUT=*                                              "
+OK=WL(Z)
+Z="//SYSTSIN  DD *                                                     "
+OK=WL(Z)
+Z=" EXECUTIL SEARCHDD(YES)                                             "
+OK=WL(Z)
+Z=" %ICINFO                                                            "
+OK=WL(Z)
+Z="/*                                                                  "
+OK=WL(Z)
+Z="//*                                                                 "
+OK=WL(Z)
+
+RETURN
+
+SKEL_SKJU003:
+Z=")DEFAULT  )#?ü<~|                                                   "
+OK=WL(Z)
+Z="//DSNJU003 EXEC PGM=DSNJU003                                        "
+OK=WL(Z)
+Z="//* ALTER BSDS                                                      "
+OK=WL(Z)
+Z=")IM SKSTEPLI                                                        "
+OK=WL(Z)
+Z="//SYSUT1   DD  DISP=SHR,DSN=#BSDS1.                                 "
+OK=WL(Z)
+Z="//SYSUT2   DD  DISP=SHR,DSN=#BSDS2.                                 "
+OK=WL(Z)
+Z="//SYSPRINT DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSUDUMP DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSIN    DD  *                                                    "
+OK=WL(Z)
+Z="  DELETE DSNAME=DB2X.LOGCOPY1.DS01                                  "
+OK=WL(Z)
+Z="  NEWLOG DSNAME=DB2X.LOGCOPY1.DS01,COPY1                            "
+OK=WL(Z)
+Z="  CRESTART                                                          "
+OK=WL(Z)
+Z="  NEWCAT                                                            "
+OK=WL(Z)
+Z="  DDF                                                               "
+OK=WL(Z)
+Z="  CHECKPT                                                           "
+OK=WL(Z)
+Z="  HIGHRBA STARTRBA=startrba,,OFFLRBA=offlrba,TIME=time              "
+OK=WL(Z)
+Z="//*                                                                 "
+OK=WL(Z)
+
+RETURN
+
+SKEL_SKJU004:
+Z=")DEFAULT  )#?ü<~|                                                   "
+OK=WL(Z)
+Z="//DSNJU004 EXEC PGM=DSNJU004                                        "
+OK=WL(Z)
+Z="//* PRINT BSDS                                                      "
+OK=WL(Z)
+Z=")IM SKSTEPLI                                                        "
+OK=WL(Z)
+Z="//SYSUT1   DD DISP=SHR,DSN=#BSDS1.                                  "
+OK=WL(Z)
+Z="//SYSPRINT DD SYSOUT=*                                              "
+OK=WL(Z)
+Z="//*SYSPRINT DD DISP=(,PASS),DSN=&&BSDS01,                           "
+OK=WL(Z)
+Z="//*            UNIT=WORK,SPACE=(CYL,(5,1)),                         "
+OK=WL(Z)
+Z="//*            DCB=(RECFM=VBA,LRECL=125,BLKSIZE=6160,DSORG=PS)      "
+OK=WL(Z)
+Z="//*                                                                 "
+OK=WL(Z)
+
+RETURN
+
+SKEL_SKLOGP:
+Z=")DEFAULT  )#?ü<~|                                                   "
+OK=WL(Z)
+Z="//DSN1LOGP EXEC PGM=DSN1LOGP                                        "
+OK=WL(Z)
+Z="//* PRINT ACHLOG                                                    "
+OK=WL(Z)
+Z=")IM SKSTEPLI                                                        "
+OK=WL(Z)
+Z="//BSDS     DD DISP=SHR,DSN=#BSDS1.                                  "
+OK=WL(Z)
+Z="//SYSPRINT DD SYSOUT=*                                              "
+OK=WL(Z)
+Z="//SYSSUMRY DD SYSOUT=*                                              "
+OK=WL(Z)
+Z="//SYSABEND DD SYSOUT=*                                              "
+OK=WL(Z)
+Z="//*ACTIVE1 DD DISP=SHR,DSN=DSNCAT.LOGCOPY1.DS02                     "
+OK=WL(Z)
+Z="//*ACTIVE2 DD DISP=SHR,DSN=DSNCAT.LOGCOPY1.DS03                     "
+OK=WL(Z)
+Z="//*ACTIVE3 DD DISP=SHR,DSN=DSNCAT.LOGCOPY1.DS01                     "
+OK=WL(Z)
+Z="//*ARCHIVE DD DISP=SHR,DSN=DSNCAT.ARCLOG1.D....                     "
+OK=WL(Z)
+Z="//*        DD DISP=SHR,DSN=DSNCAT.ARCLOG1.D....                     "
+OK=WL(Z)
+Z="//SYSIN DD *                                                        "
+OK=WL(Z)
+Z=")IF #daten = Y THEN )DO                                             "
+OK=WL(Z)
+Z="RBASTART (#RBASTR)                                                  "
+OK=WL(Z)
+Z="RBAEND   (#RBAEND)                                                  "
+OK=WL(Z)
+Z="DBID     (#DBID)                                                    "
+OK=WL(Z)
+Z="OBID     (#PSID)                                                    "
+OK=WL(Z)
+Z="SUMMARY  (YES)                                                      "
+OK=WL(Z)
+Z=")ENDDO                                                              "
+OK=WL(Z)
+Z=")ELSE )DO                                                           "
+OK=WL(Z)
+Z="--- sample sysin record                                             "
+OK=WL(Z)
+Z="RBASTART (AF000)                                                    "
+OK=WL(Z)
+Z="RBAEND   (B3000)                                                    "
+OK=WL(Z)
+Z="DBID     (10A)                                                      "
+OK=WL(Z)
+Z="OBID     (1F)                                                       "
+OK=WL(Z)
+Z="SUMMARY  (YES)                                                      "
+OK=WL(Z)
+Z="PAGE     (3B)                                                       "
+OK=WL(Z)
+Z="PAGE     (8C)                                                       "
+OK=WL(Z)
+Z=")ENDDO                                                              "
+OK=WL(Z)
+Z="/*                                                                  "
+OK=WL(Z)
+Z="//*   LRSNSTART(#LRSNSTR)                                           "
+OK=WL(Z)
+Z="//*   LRSNEND(#LRSNEND)                                             "
+OK=WL(Z)
+Z="//*   DATAONLY(YES/NO)                                              "
+OK=WL(Z)
+Z="//*   SYSCOPY(YES/NO)                                               "
+OK=WL(Z)
+Z="//*   SUMMARY(YES/ONLY/NO)                                          "
+OK=WL(Z)
+Z="//*   URID(XXXXXXXXXXXX)                                            "
+OK=WL(Z)
+Z="//*   LUWID(NNNNNNNN.LLLLLLLL.XXXXXXXXXXXX.XXXX)                    "
+OK=WL(Z)
+Z="//*   TYPE(XX)                                                      "
+OK=WL(Z)
+Z="//*   SUBTYPE(XX)                                                   "
+OK=WL(Z)
+Z="//*   DBID(XXXX)                                                    "
+OK=WL(Z)
+Z="//*   OBID(XXXX)      MANY TIMES                                    "
+OK=WL(Z)
+Z="//*   PAGE(XXXXXXXX)  MANY TIMES                                    "
+OK=WL(Z)
+Z="//*   RID(XXXXXXXX)   MANY TIMES                                    "
+OK=WL(Z)
+Z="//*   CHECK(DATA)                                                   "
+OK=WL(Z)
+
+RETURN
+
+SKEL_SKMODALL:
+Z=")DEFAULT  )#?ü<~|                                               "
+OK=WL(Z)
+Z="//****************************************************          "
+OK=WL(Z)
+Z="//* MODIFY RECOVERY                                             "
+OK=WL(Z)
+Z="//****************************************************          "
+OK=WL(Z)
+Z="//*                                                             "
+OK=WL(Z)
+Z="//GENMODST EXEC PGM=IKJEFT01                                    "
+OK=WL(Z)
+Z=")IM SKSTEPLI                                                    "
+OK=WL(Z)
+Z="//SYSEXEC  DD DISP=SHR,DSN=#PROCLIB                             "
+OK=WL(Z)
+Z="//SYSTSPRT DD SYSOUT=*                                          "
+OK=WL(Z)
+Z="//OUTDD    DD  DISP=(,PASS),                                    "
+OK=WL(Z)
+Z="//             SPACE=(CYL,(3,5)),                               "
+OK=WL(Z)
+Z="//             UNIT=#SYSDA,                                     "
+OK=WL(Z)
+Z="//             DCB=(RECFM=FB,LRECL=80,BLKSIZE=3120),            "
+OK=WL(Z)
+Z="//             DSN=&&MODREC                                     "
+OK=WL(Z)
+Z="//RXPARM   DD *                                                 "
+OK=WL(Z)
+Z="SSID          = '#SSID'        /* SSID DES DB2SYSTEMS           " ||,
+"    */          "
+OK=WL(Z)
+Z="LOCATION      = ''             /* LOCATION ZU ANDERER DB2 DB(LUW" ||,
+")   */          "
+OK=WL(Z)
+Z="SQLTERM       = ';'            /* SQL TERMINATION               " ||,
+"    */          "
+OK=WL(Z)
+Z="OUTPUT-FORMAT = 'FIXED'        /* FEST BREITE                   " ||,
+"    */          "
+OK=WL(Z)
+Z="OUTPUT-FORMAT = 'CSV'          /* SEMICOLON GETRENNT            " ||,
+"    */          "
+OK=WL(Z)
+Z="OUTPUT-FORMAT = 'VARIABLE'     /* VARIABLE BREITE (REXX WORD)   " ||,
+"    */          "
+OK=WL(Z)
+Z="OUTPUT-FORMAT = 'WORDWRAP'     /* ZEILENUMBRUCH BEI JEDEM COLUMN" ||,
+"    */          "
+OK=WL(Z)
+Z="COLDEL        = ';'            /* CSV COL  DELIMITER            " ||,
+"    */          "
+OK=WL(Z)
+Z="CHARDEL       = '"'"'"'        /* CSV CHAR DELIMITER            " ||,
+"    */          "
+OK=WL(Z)
+Z="AUTO_COMMIT   = 'NO'           /* AUTOCOMMIT NACH JEDEM STATEMEN" ||,
+"T   */          "
+OK=WL(Z)
+Z="/*                                                              "
+OK=WL(Z)
+Z="//SYSPRINT DD SYSOUT=*                                          "
+OK=WL(Z)
+Z="//SYSTSIN  DD *                                                 "
+OK=WL(Z)
+Z="  EXECUTIL SEARCHDD(YES)                                        "
+OK=WL(Z)
+Z="  %DYNAMSQL                                                     "
+OK=WL(Z)
+Z="/*                                                              "
+OK=WL(Z)
+Z="//SYSIN    DD *                                                 "
+OK=WL(Z)
+Z="WITH MODTAB  (RN, PN, DBNAME, TSNAME                            "
+OK=WL(Z)
+Z="                             , DSNUM, ICTYPE, FILESEQNO         "
+OK=WL(Z)
+Z="                             , DEVTYPE, DSNAME, ICDATE          "
+OK=WL(Z)
+Z="                             , TIMESTAMP, DSVOLSER              "
+OK=WL(Z)
+Z="                            )                                   "
+OK=WL(Z)
+Z="         AS (SELECT ROWNUMBER()                                 "
+OK=WL(Z)
+Z="                    OVER(ORDER     BY DBNAME                    "
+OK=WL(Z)
+Z="                                    , TSNAME                    "
+OK=WL(Z)
+Z="                                    , TIMESTAMP DESC) AS RN     "
+OK=WL(Z)
+Z="                 ,  ROWNUMBER()                                 "
+OK=WL(Z)
+Z="                    OVER(PARTITION BY DBNAME                    "
+OK=WL(Z)
+Z="                                    , TSNAME) AS PN             "
+OK=WL(Z)
+Z="                 ,  DBNAME                                      "
+OK=WL(Z)
+Z="                 ,  TSNAME                                      "
+OK=WL(Z)
+Z="                 ,  DSNUM                                       "
+OK=WL(Z)
+Z="                 ,  ICTYPE                                      "
+OK=WL(Z)
+Z="                 ,  FILESEQNO                                   "
+OK=WL(Z)
+Z="                 ,  DEVTYPE                                     "
+OK=WL(Z)
+Z="                 ,  DSNAME                                      "
+OK=WL(Z)
+Z="                 ,  '20' CONCAT CHAR(ICDATE) AS ICDATE          "
+OK=WL(Z)
+Z="                 ,  TIMESTAMP                                   "
+OK=WL(Z)
+Z="                 ,  DSVOLSER                                    "
+OK=WL(Z)
+Z="             FROM SYSIBM.SYSCOPY                                "
+OK=WL(Z)
+Z="             WHERE ICTYPE = 'F'                                 "
+OK=WL(Z)
+Z="             )                                                  "
+OK=WL(Z)
+Z="SELECT '   MODIFY RECOVERY TABLESPACE '                         "
+OK=WL(Z)
+Z="CONCAT RTRIM(DBNAME) CONCAT '.' CONCAT RTRIM(TSNAME)            "
+OK=WL(Z)
+Z="    ,  '          DELETE DATE(' CONCAT ICDATE CONCAT ')'        "
+OK=WL(Z)
+Z="    ,  '          '                                             "
+OK=WL(Z)
+Z="FROM MODTAB                                                     "
+OK=WL(Z)
+Z="WHERE PN = 3                                                    "
+OK=WL(Z)
+Z="AND   DBNAME = 'XXXXXXXX'                                       "
+OK=WL(Z)
+Z="AND   TSNAME = 'XXXXXXXX'                                       "
+OK=WL(Z)
+Z="ORDER BY DBNAME, TSNAME, PN DESC                                "
+OK=WL(Z)
+Z="FOR FETCH ONLY  WITH UR                                         "
+OK=WL(Z)
+Z=" ;                                                              "
+OK=WL(Z)
+Z="//*                                                             "
+OK=WL(Z)
+Z="//MODIFY   EXEC PGM=DSNUTILB,PARM=(#SSID,'REP.MODREC')          "
+OK=WL(Z)
+Z=")IM SKSTEPLI                                                    "
+OK=WL(Z)
+Z="//SYSPRINT  DD  DISP=(,PASS),                                   "
+OK=WL(Z)
+Z="//             SPACE=(CYL,(3,5)),                               "
+OK=WL(Z)
+Z="//             UNIT=#SYSDA,                                     "
+OK=WL(Z)
+Z="//             DCB=(RECFM=FB,LRECL=133,BLKSIZE=0),              "
+OK=WL(Z)
+Z="//             DSN=&&DELCOPY                                    "
+OK=WL(Z)
+Z="//UTPRINT   DD SYSOUT=*                                         "
+OK=WL(Z)
+Z="//SYSIN     DD DISP=(OLD,PASS),DSN=&&MODREC                     "
+OK=WL(Z)
+Z="//*                                                             "
+OK=WL(Z)
+Z="//GENDEL    EXEC PGM=IKJEFT01                                   "
+OK=WL(Z)
+Z="//SYSEXEC  DD DISP=SHR,DSN=#PROCLIB                             "
+OK=WL(Z)
+Z="//SYSPRINT  DD  SYSOUT=*                                        "
+OK=WL(Z)
+Z="//SYSTSPRT  DD  SYSOUT=*                                        "
+OK=WL(Z)
+Z="//SYSOUT    DD  SYSOUT=*                                        "
+OK=WL(Z)
+Z="//MODIFID   DD  DISP=(OLD,PASS),DSN=&&DELCOPY                   "
+OK=WL(Z)
+Z="//DELFILE   DD  DISP=(,PASS),                                   "
+OK=WL(Z)
+Z="//             SPACE=(CYL,(3,5)),                               "
+OK=WL(Z)
+Z="//             UNIT=#SYSDA,                                     "
+OK=WL(Z)
+Z="//             DCB=(RECFM=FB,LRECL=133,BLKSIZE=0),              "
+OK=WL(Z)
+Z="//             DSN=&&DELFILE                                    "
+OK=WL(Z)
+Z="//SYSTSIN   DD  *                                               "
+OK=WL(Z)
+Z="  EXECUTIL SEARCHDD(YES)                                        "
+OK=WL(Z)
+Z="  %RXMODDEL                                                     "
+OK=WL(Z)
+Z="//*                                                             "
+OK=WL(Z)
+Z="//SYSIN     DD  DUMMY                                           "
+OK=WL(Z)
+Z="/*                                                              "
+OK=WL(Z)
+Z="//*                                                             "
+OK=WL(Z)
+Z="//* EXECUTE  DELETE STATEMENTS                                  "
+OK=WL(Z)
+Z="//*                                                             "
+OK=WL(Z)
+Z="//DELETE   EXEC PGM=IDCAMS,COND=(EVEN)                          "
+OK=WL(Z)
+Z="//SYSPRINT  DD SYSOUT=*                                         "
+OK=WL(Z)
+Z="//SYSIN     DD  DISP=(OLD,PASS),DSN=&&DELFILE                   "
+OK=WL(Z)
+Z="//          DD  *                                               "
+OK=WL(Z)
+Z="   SET MAXCC = 0                                                "
+OK=WL(Z)
+Z="//*                                                             "
+OK=WL(Z)
+
+RETURN
+
+SKEL_SKMODHIS:
+Z=")DEFAULT  )#?ü<~>                                                   "
+OK=WL(Z)
+Z="//MODHIS EXEC PGM=DSNUTILB,                                         "
+OK=WL(Z)
+Z="//         REGION=8M,                                               "
+OK=WL(Z)
+Z="//         PARM=(#SSID,'MODHIS.#TS.')                               "
+OK=WL(Z)
+Z=")IM SKSTEPLI                                                        "
+OK=WL(Z)
+Z="//SYSPRINT  DD SYSOUT=*                                             "
+OK=WL(Z)
+Z="//UTPRINT   DD SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSLISTD DD *                                                     "
+OK=WL(Z)
+Z="  LISTDEF MODSTATS                                                  "
+OK=WL(Z)
+Z=")IF #auswkz = DB THEN )DO                                           "
+OK=WL(Z)
+Z="          INCLUDE TABLESPACES DATABASE #DB                          "
+OK=WL(Z)
+Z=")ENDDO                                                              "
+OK=WL(Z)
+Z=")ELSE )DO                                                           "
+OK=WL(Z)
+Z=")IF #USEDOT  = Y THEN )DO                                           "
+OK=WL(Z)
+Z=")DOT #TSLISTE                                                       "
+OK=WL(Z)
+Z="          INCLUDE TABLESPACE #DBNAME..#TSNAME.                      "
+OK=WL(Z)
+Z=")ENDDOT                                                             "
+OK=WL(Z)
+Z=")ENDDO                                                              "
+OK=WL(Z)
+Z=")ELSE )DO                                                           "
+OK=WL(Z)
+Z="          INCLUDE TABLESPACE #DB..#TS.                              "
+OK=WL(Z)
+Z=")ENDDO                                                              "
+OK=WL(Z)
+Z=")ENDDO                                                              "
+OK=WL(Z)
+Z="//SYSIN DD *                                                        "
+OK=WL(Z)
+Z="  --OPTIONS PREVIEW                                                 "
+OK=WL(Z)
+Z="  --OPTIONS EVENT(ITEMERROR,SKIP)                                   "
+OK=WL(Z)
+Z="  MODIFY STATISTICS LIST MODSTATS                                   "
+OK=WL(Z)
+Z="--       DELETE ACCESSPATH DATE(#HISDAT)                            "
+OK=WL(Z)
+Z="         DELETE ALL                                                 "
+OK=WL(Z)
+Z="         AGE #DELAG                                                 "
+OK=WL(Z)
+Z="/*                                                                  "
+OK=WL(Z)
+Z="// IF (MODHIS.RC GT 4 OR MODHIS.ABEND = TRUE) THEN                  "
+OK=WL(Z)
+Z="//TERM    EXEC PGM=IKJEFT01,DYNAMNBR=20                             "
+OK=WL(Z)
+Z=")IM SKSTEPLI                                                        "
+OK=WL(Z)
+Z="//SYSTSPRT DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSPRINT DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSUDUMP DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSIN    DD  DUMMY                                                "
+OK=WL(Z)
+Z="//SYSTSIN  DD  *                                                    "
+OK=WL(Z)
+Z="  DSN SYSTEM(#SSID.)                                                "
+OK=WL(Z)
+Z="  -DIS  UTILITY(MODHIS.#TS )                                        "
+OK=WL(Z)
+Z="  -TERM UTILITY(MODHIS.#TS )                                        "
+OK=WL(Z)
+Z="  END                                                               "
+OK=WL(Z)
+Z="// ENDIF                                                            "
+OK=WL(Z)
+
+RETURN
+
+SKEL_SKMODREC:
+Z=")DEFAULT  )#?ü<~>                                                   "
+OK=WL(Z)
+Z="//MODREC EXEC PGM=DSNUTILB,                                         "
+OK=WL(Z)
+Z="//         REGION=8M,                                               "
+OK=WL(Z)
+Z="//         PARM=(#SSID,'MODREC.#TS.')                               "
+OK=WL(Z)
+Z=")IM SKSTEPLI                                                        "
+OK=WL(Z)
+Z="//SYSPRINT  DD SYSOUT=*                                             "
+OK=WL(Z)
+Z="//UTPRINT   DD SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSLISTD DD *                                                     "
+OK=WL(Z)
+Z="  LISTDEF MODLIST                                                   "
+OK=WL(Z)
+Z=")IF #auswkz = DB THEN )DO                                           "
+OK=WL(Z)
+Z="          INCLUDE TABLESPACES DATABASE #DB                          "
+OK=WL(Z)
+Z=")ENDDO                                                              "
+OK=WL(Z)
+Z=")ELSE )DO                                                           "
+OK=WL(Z)
+Z=")IF #USEDOT  = Y THEN )DO                                           "
+OK=WL(Z)
+Z=")DOT #TSLISTE                                                       "
+OK=WL(Z)
+Z="          INCLUDE TABLESPACE #DBNAME..#TSNAME.                      "
+OK=WL(Z)
+Z=")ENDDOT                                                             "
+OK=WL(Z)
+Z=")ENDDO                                                              "
+OK=WL(Z)
+Z=")ELSE )DO                                                           "
+OK=WL(Z)
+Z="          INCLUDE TABLESPACE #DB..#TS.                              "
+OK=WL(Z)
+Z=")ENDDO                                                              "
+OK=WL(Z)
+Z=")ENDDO                                                              "
+OK=WL(Z)
+Z="//SYSIN DD *                                                        "
+OK=WL(Z)
+Z="--OPTIONS PREVIEW                                                   "
+OK=WL(Z)
+Z="--OPTIONS EVENT(ITEMERROR,SKIP)                                     "
+OK=WL(Z)
+Z="  MODIFY RECOVERY LIST MODLIST                                      "
+OK=WL(Z)
+Z="         DELETE DATE(*)                                             "
+OK=WL(Z)
+Z="  REPORT RECOVERY TABLESPACE LIST MODLIST                           "
+OK=WL(Z)
+Z="/*                                                                  "
+OK=WL(Z)
+Z="// IF (MODREC.RC GT 4 OR MODREC.ABEND = TRUE) THEN                  "
+OK=WL(Z)
+Z="//TERM    EXEC PGM=IKJEFT01,DYNAMNBR=20                             "
+OK=WL(Z)
+Z=")IM SKSTEPLI                                                        "
+OK=WL(Z)
+Z="//SYSTSPRT DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSPRINT DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSUDUMP DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSIN    DD  DUMMY                                                "
+OK=WL(Z)
+Z="//SYSTSIN  DD  *                                                    "
+OK=WL(Z)
+Z="  DSN SYSTEM(#SSID.)                                                "
+OK=WL(Z)
+Z="  -DIS  UTILITY(MODREC.#TS )                                        "
+OK=WL(Z)
+Z="  -TERM UTILITY(MODREC.#TS )                                        "
+OK=WL(Z)
+Z="  END                                                               "
+OK=WL(Z)
+Z="// ENDIF                                                            "
+OK=WL(Z)
+
+RETURN
+
+SKEL_SKPRNT:
+Z=")DEFAULT  )#?ü<~|                                                   "
+OK=WL(Z)
+Z="//DSN1PRNT EXEC PGM=DSN1PRNT,                                       "
+OK=WL(Z)
+Z="//      PARM='PRINT(0A,0C),FORMAT'                                  "
+OK=WL(Z)
+Z="//*     PARM='NODATPGS,FORMAT'                                      "
+OK=WL(Z)
+Z="//* PRINT INFO                                                      "
+OK=WL(Z)
+Z=")IM SKSTEPLI                                                        "
+OK=WL(Z)
+Z="//SYSPRINT DD SYSOUT=*                                              "
+OK=WL(Z)
+Z="//*SYSPRINT  DD DCB=(RECFM=VM,LRECL=133),                           "
+OK=WL(Z)
+Z="//*             DISP=(NEW,CATLG,CATLG),                             "
+OK=WL(Z)
+Z="//*             DSORG=PS,                                           "
+OK=WL(Z)
+Z="//*             SPACE=(CYL,(5,5)),                                  "
+OK=WL(Z)
+Z="//*SYSPRINT  DD DSN=DSNAME.FOR.OUTPUT                               "
+OK=WL(Z)
+Z="//SYSUT1 DD DISP=SHR,DSN=#VSAMDS                                    "
+OK=WL(Z)
+Z="/*                                                                  "
+OK=WL(Z)
+
+RETURN
+
+SKEL_SKQUIES1:
+Z=")DEFAULT  )#?ü<~>                                                   "
+OK=WL(Z)
+Z="//QUIESCE EXEC PGM=DSNUTILB,                                        "
+OK=WL(Z)
+Z=")SEL #TS EQ *                                                       "
+OK=WL(Z)
+Z="//         PARM=(#SSID,'QUIESCE.TABLESP')                           "
+OK=WL(Z)
+Z=")ENDSEL                                                             "
+OK=WL(Z)
+Z=")SEL #TS NE *                                                       "
+OK=WL(Z)
+Z="//         PARM=(#SSID,'QUIESCE.#TS')                               "
+OK=WL(Z)
+Z=")ENDSEL                                                             "
+OK=WL(Z)
+Z=")IM SKSTEPLI                                                        "
+OK=WL(Z)
+Z="//SYSPRINT  DD SYSOUT=*                                             "
+OK=WL(Z)
+Z="//UTPRINT   DD SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSLISTD DD *                                                     "
+OK=WL(Z)
+Z="  LISTDEF LQUIESCE                                                  "
+OK=WL(Z)
+Z=")IF #auswkz = DB THEN )DO                                           "
+OK=WL(Z)
+Z="          INCLUDE TABLESPACES DATABASE #DB                          "
+OK=WL(Z)
+Z=")ENDDO                                                              "
+OK=WL(Z)
+Z=")ELSE )DO                                                           "
+OK=WL(Z)
+Z=")IF #USEDOT  = Y THEN )DO                                           "
+OK=WL(Z)
+Z=")DOT #TSLISTE                                                       "
+OK=WL(Z)
+Z="          INCLUDE TABLESPACE #DBNAME..#TSNAME.                      "
+OK=WL(Z)
+Z=")ENDDOT                                                             "
+OK=WL(Z)
+Z=")ENDDO                                                              "
+OK=WL(Z)
+Z=")ELSE )DO                                                           "
+OK=WL(Z)
+Z="          INCLUDE TABLESPACE #DB..#TS.                              "
+OK=WL(Z)
+Z=")ENDDO                                                              "
+OK=WL(Z)
+Z=")ENDDO                                                              "
+OK=WL(Z)
+Z="//SYSIN DD *                                                        "
+OK=WL(Z)
+Z="--OPTIONS PREVIEW                                                   "
+OK=WL(Z)
+Z="--OPTIONS EVENT(ITEMERROR,SKIP)                                     "
+OK=WL(Z)
+Z="  QUIESCE LIST LQUIESCE                                             "
+OK=WL(Z)
+Z=")IF #DBVers GT 10  THEN )DO                                         "
+OK=WL(Z)
+Z="--        WRITE YES/NO                                              "
+OK=WL(Z)
+Z=")ENDDO                                                              "
+OK=WL(Z)
+Z="/*                                                                  "
+OK=WL(Z)
+Z="// IF (QUIESCE.RC GT 4 OR QUIESCE.ABEND = TRUE) THEN                "
+OK=WL(Z)
+Z="//TERM    EXEC PGM=IKJEFT01,DYNAMNBR=20                             "
+OK=WL(Z)
+Z=")IM SKSTEPLI                                                        "
+OK=WL(Z)
+Z="//SYSTSPRT DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSPRINT DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSUDUMP DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSIN    DD  DUMMY                                                "
+OK=WL(Z)
+Z="//SYSTSIN  DD  *                                                    "
+OK=WL(Z)
+Z="  DSN SYSTEM(#SSID.)                                                "
+OK=WL(Z)
+Z=")IF #TS EQ *  THEN )DO                                              "
+OK=WL(Z)
+Z="  -DIS  UTILITY(QUIESCE.TABLESP )                                   "
+OK=WL(Z)
+Z="  -TERM UTILITY(QUIESCE.TABLESP )                                   "
+OK=WL(Z)
+Z=")ENDDO                                                              "
+OK=WL(Z)
+Z=")ELSE )DO                                                           "
+OK=WL(Z)
+Z="  -DIS  UTILITY(QUIESCE.#TS  )                                      "
+OK=WL(Z)
+Z="  -TERM UTILITY(QUIESCE.#TS  )                                      "
+OK=WL(Z)
+Z=")ENDDO                                                              "
+OK=WL(Z)
+Z="  END                                                               "
+OK=WL(Z)
+Z="// ENDIF                                                            "
+OK=WL(Z)
+
+RETURN
+
+SKEL_SKRBPG1:
+Z=")DEFAULT  )#?ü<~>                                                   "
+OK=WL(Z)
+Z="//REBINDPG EXEC PGM=IKJEFT01,DYNAMNBR=20                            "
+OK=WL(Z)
+Z=")IM SKSTEPLI                                                        "
+OK=WL(Z)
+Z="//SYSTERM  DD SYSOUT=*                                              "
+OK=WL(Z)
+Z="//SYSPRINT DD SYSOUT=*                                              "
+OK=WL(Z)
+Z="//SYSTSPRT DD SYSOUT=*                                              "
+OK=WL(Z)
+Z="//SYSTSIN  DD *                                                     "
+OK=WL(Z)
+Z="DSN SYSTEM(#SSID.)                                                  "
+OK=WL(Z)
+Z=")SEL #VER EQ #BLANK                                                 "
+OK=WL(Z)
+Z="    REBIND PACKAGE (#CR..#NM)                                       "
+OK=WL(Z)
+Z=")ENDSEL                                                             "
+OK=WL(Z)
+Z=")SEL #VER NE #BLANK                                                 "
+OK=WL(Z)
+Z="    REBIND PACKAGE (#CR..#NM..(#VER.))                              "
+OK=WL(Z)
+Z=")ENDSEL                                                             "
+OK=WL(Z)
+Z=" END                                                                "
+OK=WL(Z)
+Z="/*                                                                  "
+OK=WL(Z)
+
+RETURN
+
+SKEL_SKRBPL1:
+Z=")DEFAULT  )#?ü<~>                                                   "
+OK=WL(Z)
+Z="//REBINDPG EXEC PGM=IKJEFT01,DYNAMNBR=20                            "
+OK=WL(Z)
+Z=")IM SKSTEPLI                                                        "
+OK=WL(Z)
+Z="//SYSTERM  DD SYSOUT=*                                              "
+OK=WL(Z)
+Z="//SYSPRINT DD SYSOUT=*                                              "
+OK=WL(Z)
+Z="//SYSTSPRT DD SYSOUT=*                                              "
+OK=WL(Z)
+Z="//SYSTSIN  DD *                                                     "
+OK=WL(Z)
+Z="DSN SYSTEM(#SSID.)                                                  "
+OK=WL(Z)
+Z="    REBIND PLAN  (#NM.)                                             "
+OK=WL(Z)
+Z=" END                                                                "
+OK=WL(Z)
+Z="/*                                                                  "
+OK=WL(Z)
+
+RETURN
+
+SKEL_SKREBIX1:
+Z=")DEFAULT  )#?ü<~>                                                   "
+OK=WL(Z)
+Z="//REBUILD EXEC PGM=DSNUTILB,                                        "
+OK=WL(Z)
+Z="//         REGION=8M,                                               "
+OK=WL(Z)
+Z="//         PARM=(#SSID,'REBUILD.INDEX')                             "
+OK=WL(Z)
+Z=")IM SKSTEPLI                                                        "
+OK=WL(Z)
+Z="//SYSPRINT  DD SYSOUT=*                                             "
+OK=WL(Z)
+Z="//UTPRINT   DD SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSTEMPL DD *                                                     "
+OK=WL(Z)
+Z="  TEMPLATE SUT1                                                     "
+OK=WL(Z)
+Z="           UNIT(#WORK)                                              "
+OK=WL(Z)
+Z="           DISP(NEW,DELETE,CATLG)                                   "
+OK=WL(Z)
+Z="           DSN(#MHLQWRK..INDEX.SUT1)                                "
+OK=WL(Z)
+Z="/*                                                                  "
+OK=WL(Z)
+Z="                                                                    "
+OK=WL(Z)
+Z=")SEL #AUSWKZ  = TS                                                  "
+OK=WL(Z)
+Z="//SYSIN DD *                                                        "
+OK=WL(Z)
+Z="--OPTIONS PREVIEW                                                   "
+OK=WL(Z)
+Z="--OPTIONS EVENT(ITEMERROR,SKIP)                                     "
+OK=WL(Z)
+Z=")IF #USEDOT  = Y THEN )DO                                           "
+OK=WL(Z)
+Z=")DOT #TSLISTE                                                       "
+OK=WL(Z)
+Z="  REBUILD INDEX(ALL) TABLESPACE #DBNAME..#TSNAME.                   "
+OK=WL(Z)
+Z=")ENDDOT                                                             "
+OK=WL(Z)
+Z=")ENDDO                                                              "
+OK=WL(Z)
+Z=")ELSE )DO                                                           "
+OK=WL(Z)
+Z="  REBUILD INDEX(ALL) TABLESPACE #OBJECT.                            "
+OK=WL(Z)
+Z=")ENDDO                                                              "
+OK=WL(Z)
+Z=")ENDSEL                                                             "
+OK=WL(Z)
+Z="                                                                    "
+OK=WL(Z)
+Z=")SEL #AUSWKZ  = IX                                                  "
+OK=WL(Z)
+Z="//SYSIN DD *                                                        "
+OK=WL(Z)
+Z="--OPTIONS PREVIEW                                                   "
+OK=WL(Z)
+Z="--OPTIONS EVENT(ITEMERROR,SKIP)                                     "
+OK=WL(Z)
+Z=")IF #USEDOT  = Y THEN )DO                                           "
+OK=WL(Z)
+Z=")DOT #TSLISTE                                                       "
+OK=WL(Z)
+Z="  REBUILD INDEX(#Creator..#Name.)                                   "
+OK=WL(Z)
+Z=")ENDDOT                                                             "
+OK=WL(Z)
+Z=")ENDDO                                                              "
+OK=WL(Z)
+Z=")ELSE )DO                                                           "
+OK=WL(Z)
+Z="  REBUILD INDEX(#OBJECT.)                                           "
+OK=WL(Z)
+Z=")ENDDO                                                              "
+OK=WL(Z)
+Z=")ENDSEL                                                             "
+OK=WL(Z)
+Z="/*                                                                  "
+OK=WL(Z)
+Z="// IF (REBUILD.RC GT 4 OR REBUILD.ABEND = TRUE) THEN                "
+OK=WL(Z)
+Z="//TERM    EXEC PGM=IKJEFT01,DYNAMNBR=20                             "
+OK=WL(Z)
+Z=")IM SKSTEPLI                                                        "
+OK=WL(Z)
+Z="//SYSTSPRT DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSPRINT DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSUDUMP DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSIN    DD  DUMMY                                                "
+OK=WL(Z)
+Z="//SYSTSIN  DD  *                                                    "
+OK=WL(Z)
+Z="  DSN SYSTEM(#SSID.)                                                "
+OK=WL(Z)
+Z="  -DIS  UTILITY(REBUILD.INDEX)                                      "
+OK=WL(Z)
+Z="  -TERM UTILITY(REBUILD.INDEX)                                      "
+OK=WL(Z)
+Z="  END                                                               "
+OK=WL(Z)
+Z="// ENDIF                                                            "
+OK=WL(Z)
+
+RETURN
+
+SKEL_SKRECOV1:
+Z=")DEFAULT  )#?ü<~>                                                   "
+OK=WL(Z)
+Z="//RECOVER EXEC PGM=DSNUTILB,                                        "
+OK=WL(Z)
+Z="//*        REGION=8M,                                               "
+OK=WL(Z)
+Z="//         PARM=(#SSID,'RECOVER.#TS')                               "
+OK=WL(Z)
+Z=")IM SKSTEPLI                                                        "
+OK=WL(Z)
+Z="//SYSPRINT  DD SYSOUT=*                                             "
+OK=WL(Z)
+Z="//UTPRINT   DD SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSIN    DD *                                                     "
+OK=WL(Z)
+Z="--OPTIONS PREVIEW                                                   "
+OK=WL(Z)
+Z="--OPTIONS EVENT(ITEMERROR,SKIP)                                     "
+OK=WL(Z)
+Z=")SEL #WHAT    = LC                                                  "
+OK=WL(Z)
+Z=")SETF Rectodo = #STR(TOLASTCOPY)                                    "
+OK=WL(Z)
+Z=")ENDSEL                                                             "
+OK=WL(Z)
+Z=")SEL #WHAT    = FC                                                  "
+OK=WL(Z)
+Z=")SETF Rectodo = #STR(TOLASTFULLCOPY)                                "
+OK=WL(Z)
+Z=")ENDSEL                                                             "
+OK=WL(Z)
+Z=")SEL #WHAT    = LS                                                  "
+OK=WL(Z)
+Z=")SETF Rectodo = #STR(LOCALSITE CURRENTCOPYONLY)                     "
+OK=WL(Z)
+Z=")ENDSEL                                                             "
+OK=WL(Z)
+Z=")SEL #WHAT    = IC                                                  "
+OK=WL(Z)
+Z=")SETF Rectodo = #STR(TOCOPY #OBJECT3.)                              "
+OK=WL(Z)
+Z=")ENDSEL                                                             "
+OK=WL(Z)
+Z=")SEL #WHAT    = RBA                                                 "
+OK=WL(Z)
+Z=")SETF Rectodo = #STR(TORBA X'#OBJECT2.')                            "
+OK=WL(Z)
+Z=")ENDSEL                                                             "
+OK=WL(Z)
+Z=")SEL #WHAT    = RBAB                                                "
+OK=WL(Z)
+Z=")SETF Rectodo = #STR(TORBA X'#OBJECT2.')                            "
+OK=WL(Z)
+Z=")ENDSEL                                                             "
+OK=WL(Z)
+Z=")SEL #WHAT    = LP                                                  "
+OK=WL(Z)
+Z=")SETF Rectodo = #STR(TOLOGPOINT X'#OBJECT2.')                       "
+OK=WL(Z)
+Z=")ENDSEL                                                             "
+OK=WL(Z)
+Z=")SEL #WHAT    = RB                                                  "
+OK=WL(Z)
+Z=")SETF Rectodo = #STR(RESTOREBEFORE X'#OBJECT2.')                    "
+OK=WL(Z)
+Z=")ENDSEL                                                             "
+OK=WL(Z)
+Z="                                                                    "
+OK=WL(Z)
+Z=")IF #USEDOT  = Y THEN )DO                                           "
+OK=WL(Z)
+Z=")DOT #TSLISTE                                                       "
+OK=WL(Z)
+Z="  RECOVER  TABLESPACE #DBNAME..#TSNAME.                             "
+OK=WL(Z)
+Z="       #Rectodo                                                     "
+OK=WL(Z)
+Z=")ENDDOT                                                             "
+OK=WL(Z)
+Z=")ENDDO                                                              "
+OK=WL(Z)
+Z=")ELSE )DO                                                           "
+OK=WL(Z)
+Z="  RECOVER  TABLESPACE #DB..#TS.                                     "
+OK=WL(Z)
+Z="       #Rectodo                                                     "
+OK=WL(Z)
+Z=")SEL #WHAT    = RBAB                                                "
+OK=WL(Z)
+Z="       BACKOUT YES                                                  "
+OK=WL(Z)
+Z=")ENDSEL                                                             "
+OK=WL(Z)
+Z=")ENDDO                                                              "
+OK=WL(Z)
+Z="                                                                    "
+OK=WL(Z)
+Z=")BLANK                                                              "
+OK=WL(Z)
+Z="                                                                    "
+OK=WL(Z)
+Z=")IF #USEDOT  = Y THEN )DO                                           "
+OK=WL(Z)
+Z=")DOT #TSLISTE                                                       "
+OK=WL(Z)
+Z="  REBUILD INDEX(ALL) TABLESPACE #DBNAME..#TSNAME.                   "
+OK=WL(Z)
+Z=")ENDDOT                                                             "
+OK=WL(Z)
+Z=")ENDDO                                                              "
+OK=WL(Z)
+Z=")ELSE )DO                                                           "
+OK=WL(Z)
+Z="  REBUILD INDEX(ALL) TABLESPACE #DB..#TS.                           "
+OK=WL(Z)
+Z=")ENDDO                                                              "
+OK=WL(Z)
+Z="/*                                                                  "
+OK=WL(Z)
+Z="// IF (RECOVER.RC GT 4 OR RECOVER.ABEND = TRUE) THEN                "
+OK=WL(Z)
+Z="//TERM    EXEC PGM=IKJEFT01,DYNAMNBR=20                             "
+OK=WL(Z)
+Z=")IM SKSTEPLI                                                        "
+OK=WL(Z)
+Z="//SYSTSPRT DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSPRINT DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSUDUMP DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSIN    DD  DUMMY                                                "
+OK=WL(Z)
+Z="//SYSTSIN  DD  *                                                    "
+OK=WL(Z)
+Z="  DSN SYSTEM(#SSID.)                                                "
+OK=WL(Z)
+Z="  -DIS  UTILITY(RECOVER.#TS.)                                       "
+OK=WL(Z)
+Z="  -TERM UTILITY(RECOVER.#TS.)                                       "
+OK=WL(Z)
+Z="  END                                                               "
+OK=WL(Z)
+Z="// ENDIF                                                            "
+OK=WL(Z)
+
+RETURN
+
+SKEL_SKRECOV2:
+Z=")DEFAULT  )#?ü<~>                                                   "
+OK=WL(Z)
+Z=")CM RECOVER TABLESPACE LISTE  (RECOVER ALL)                         "
+OK=WL(Z)
+Z="//RECOVER EXEC PGM=DSNUTILB,                                        "
+OK=WL(Z)
+Z="//*        REGION=8M,                                               "
+OK=WL(Z)
+Z="//         PARM=(#SSID,'RECOVER.#TS')                               "
+OK=WL(Z)
+Z=")IM SKSTEPLI                                                        "
+OK=WL(Z)
+Z="//SYSPRINT  DD SYSOUT=*                                             "
+OK=WL(Z)
+Z="//UTPRINT   DD SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSIN    DD *                                                     "
+OK=WL(Z)
+Z="--OPTIONS PREVIEW                                                   "
+OK=WL(Z)
+Z="--OPTIONS EVENT(ITEMERROR,SKIP)                                     "
+OK=WL(Z)
+Z="                                                                    "
+OK=WL(Z)
+Z=")DOT #TSLISTE                                                       "
+OK=WL(Z)
+Z="  RECOVER  TABLESPACE #DBNAME..#TSNAME.                             "
+OK=WL(Z)
+Z=")IF #ICTYPE. = F                   THEN )DO                         "
+OK=WL(Z)
+Z="       TOCOPY #DSNAME.                                              "
+OK=WL(Z)
+Z=")ENDDO                                                              "
+OK=WL(Z)
+Z=")ELSE )DO                                                           "
+OK=WL(Z)
+Z=")IF #ICTYPE. = I THEN )DO                                           "
+OK=WL(Z)
+Z="       TOCOPY #DSNAME.                                              "
+OK=WL(Z)
+Z=")ENDDO                                                              "
+OK=WL(Z)
+Z=")ELSE )DO                                                           "
+OK=WL(Z)
+Z="       TORBA X'#STARTRBA.'                                          "
+OK=WL(Z)
+Z="       BACKOUT  NO                                                  "
+OK=WL(Z)
+Z=")ENDDO                                                              "
+OK=WL(Z)
+Z=")ENDDO                                                              "
+OK=WL(Z)
+Z="                                                                    "
+OK=WL(Z)
+Z=")ENDDOT                                                             "
+OK=WL(Z)
+Z="                                                                    "
+OK=WL(Z)
+Z=")BLANK                                                              "
+OK=WL(Z)
+Z="                                                                    "
+OK=WL(Z)
+Z=")DOT #TSLISTE                                                       "
+OK=WL(Z)
+Z="  REBUILD INDEX(ALL) TABLESPACE #DBNAME..#TSNAME.                   "
+OK=WL(Z)
+Z=")ENDDOT                                                             "
+OK=WL(Z)
+Z="/*                                                                  "
+OK=WL(Z)
+Z="// IF (RECOVER.RC GT 4 OR RECOVER.ABEND = TRUE) THEN                "
+OK=WL(Z)
+Z="//TERM    EXEC PGM=IKJEFT01,DYNAMNBR=20                             "
+OK=WL(Z)
+Z=")IM SKSTEPLI                                                        "
+OK=WL(Z)
+Z="//SYSTSPRT DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSPRINT DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSUDUMP DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSIN    DD  DUMMY                                                "
+OK=WL(Z)
+Z="//SYSTSIN  DD  *                                                    "
+OK=WL(Z)
+Z="  DSN SYSTEM(#SSID.)                                                "
+OK=WL(Z)
+Z="  -DIS  UTILITY(RECOVER.#TS.)                                       "
+OK=WL(Z)
+Z="  -TERM UTILITY(RECOVER.#TS.)                                       "
+OK=WL(Z)
+Z="  END                                                               "
+OK=WL(Z)
+Z="// ENDIF                                                            "
+OK=WL(Z)
+
+RETURN
+
+SKEL_SKREOIX1:
+Z=")DEFAULT  )#?ü<~>                                                   "
+OK=WL(Z)
+Z="//REORGIX EXEC PGM=DSNUTILB,                                        "
+OK=WL(Z)
+Z="//         REGION=8M,                                               "
+OK=WL(Z)
+Z="//         PARM=(#SSID,'REORGIX.INDEX')                             "
+OK=WL(Z)
+Z=")IM SKSTEPLI                                                        "
+OK=WL(Z)
+Z="//SYSPRINT  DD SYSOUT=*                                             "
+OK=WL(Z)
+Z="//UTPRINT   DD SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SORTWK01  DD DISP=(NEW,DELETE,DELETE),                            "
+OK=WL(Z)
+Z="//             UNIT=#SYSDA,SPACE=(CYL,(400,400))                    "
+OK=WL(Z)
+Z="//SORTWK02  DD DISP=(NEW,DELETE,DELETE),                            "
+OK=WL(Z)
+Z="//             UNIT=#SYSDA,SPACE=(CYL,(400,400))                    "
+OK=WL(Z)
+Z="//SORTWK03  DD DISP=(NEW,DELETE,DELETE),                            "
+OK=WL(Z)
+Z="//             UNIT=#SYSDA,SPACE=(CYL,(400,400))                    "
+OK=WL(Z)
+Z="//SORTWK04  DD DISP=(NEW,DELETE,DELETE),                            "
+OK=WL(Z)
+Z="//             UNIT=#SYSDA,SPACE=(CYL,(400,400))                    "
+OK=WL(Z)
+Z="//DATAWK01  DD DISP=(NEW,DELETE,DELETE),                            "
+OK=WL(Z)
+Z="//             UNIT=#SYSDA,SPACE=(CYL,(400,400))                    "
+OK=WL(Z)
+Z="//DATAWK02  DD DISP=(NEW,DELETE,DELETE),                            "
+OK=WL(Z)
+Z="//             UNIT=#SYSDA,SPACE=(CYL,(400,400))                    "
+OK=WL(Z)
+Z="//DATAWK03  DD DISP=(NEW,DELETE,DELETE),                            "
+OK=WL(Z)
+Z="//             UNIT=#SYSDA,SPACE=(CYL,(400,400))                    "
+OK=WL(Z)
+Z="//DATAWK04  DD DISP=(NEW,DELETE,DELETE),                            "
+OK=WL(Z)
+Z="//             UNIT=#SYSDA,SPACE=(CYL,(400,400))                    "
+OK=WL(Z)
+Z="//SYSLISTD DD *                                                     "
+OK=WL(Z)
+Z="  LISTDEF ROLIST                                                    "
+OK=WL(Z)
+Z=")IF #USEDOT  = Y THEN )DO                                           "
+OK=WL(Z)
+Z=")DOT #TSLISTE                                                       "
+OK=WL(Z)
+Z="   INCLUDE INDEX                                                    "
+OK=WL(Z)
+Z="    #CREATOR..#NAME.                                                "
+OK=WL(Z)
+Z=")ENDDOT                                                             "
+OK=WL(Z)
+Z=")ENDDO                                                              "
+OK=WL(Z)
+Z=")ELSE )DO                                                           "
+OK=WL(Z)
+Z="   INCLUDE INDEX                                                    "
+OK=WL(Z)
+Z="    #IXCR..#IXNM                                                    "
+OK=WL(Z)
+Z=")ENDDO                                                              "
+OK=WL(Z)
+Z="//SYSTEMPL DD *                                                     "
+OK=WL(Z)
+Z="TEMPLATE SUT1                                                       "
+OK=WL(Z)
+Z="         UNIT(#WORK)                                                "
+OK=WL(Z)
+Z="         DISP(NEW,DELETE,CATLG)                                     "
+OK=WL(Z)
+Z="         DSN(#MHLQRO..INDEX.SUT1)                                   "
+OK=WL(Z)
+Z="//SYSIN DD *                                                        "
+OK=WL(Z)
+Z="--OPTIONS PREVIEW                                                   "
+OK=WL(Z)
+Z="--OPTIONS EVENT(ITEMERROR,SKIP)                                     "
+OK=WL(Z)
+Z="  REORG INDEX      LIST ROLIST                                      "
+OK=WL(Z)
+Z="        SHRLEVEL CHANGE                                             "
+OK=WL(Z)
+Z="        SORTDEVT #WORK                                              "
+OK=WL(Z)
+Z="        WORKDDN (SUT1)                                              "
+OK=WL(Z)
+Z="        STATISTICS REPORT NO                                        "
+OK=WL(Z)
+Z="                   UPDATE ALL                                       "
+OK=WL(Z)
+Z="/*                                                                  "
+OK=WL(Z)
+Z="// IF (REORGIX.RC GT 4 OR REORGIX.ABEND = TRUE) THEN                "
+OK=WL(Z)
+Z="//TERM    EXEC PGM=IKJEFT01,DYNAMNBR=20                             "
+OK=WL(Z)
+Z=")IM SKSTEPLI                                                        "
+OK=WL(Z)
+Z="//SYSTSPRT DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSPRINT DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSUDUMP DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSIN    DD  DUMMY                                                "
+OK=WL(Z)
+Z="//SYSTSIN  DD  *                                                    "
+OK=WL(Z)
+Z="  DSN SYSTEM(#SSID.)                                                "
+OK=WL(Z)
+Z="  -DIS  UTILITY(REORGIX.INDEX)                                      "
+OK=WL(Z)
+Z="  -TERM UTILITY(REORGIX.INDEX)                                      "
+OK=WL(Z)
+Z="  END                                                               "
+OK=WL(Z)
+Z="// ENDIF                                                            "
+OK=WL(Z)
+
+RETURN
+
+SKEL_SKREOTS1:
+Z=")DEFAULT  )#?ü<~>                                                   "
+OK=WL(Z)
+Z="//REORG  EXEC PGM=DSNUTILB,                                         "
+OK=WL(Z)
+Z=")SEL #TS EQ *                                                       "
+OK=WL(Z)
+Z="//         PARM=(#SSID,'REORG.TABLESP') ,RESTART(PHASE)             "
+OK=WL(Z)
+Z=")ENDSEL                                                             "
+OK=WL(Z)
+Z=")SEL #TS NE *                                                       "
+OK=WL(Z)
+Z="//         PARM=(#SSID,'REORG.#TS') ,RESTART(PHASE)                 "
+OK=WL(Z)
+Z=")ENDSEL                                                             "
+OK=WL(Z)
+Z=")IM SKSTEPLI                                                        "
+OK=WL(Z)
+Z="//*   DB2 VERSION  #DBVers..#DBRel..#DBMod                          "
+OK=WL(Z)
+Z="//SYSPRINT  DD SYSOUT=*                                             "
+OK=WL(Z)
+Z="//UTPRINT   DD SYSOUT=*                                             "
+OK=WL(Z)
+Z="//* kann gesetzt werden FILSZ=E (estimated rows)                    "
+OK=WL(Z)
+Z="//*DFSPARM DD *                                                     "
+OK=WL(Z)
+Z="//*     OPTION FILSZ=E00999999,DYNALLOC=(#SYSDA,9)                  "
+OK=WL(Z)
+Z="/*                                                                  "
+OK=WL(Z)
+Z="//SYSLISTD DD *                                                     "
+OK=WL(Z)
+Z="  LISTDEF ROLIST                                                    "
+OK=WL(Z)
+Z=")IF #auswkz = DB THEN )DO                                           "
+OK=WL(Z)
+Z="          INCLUDE TABLESPACES DATABASE #DB                          "
+OK=WL(Z)
+Z=")ENDDO                                                              "
+OK=WL(Z)
+Z=")ELSE )DO                                                           "
+OK=WL(Z)
+Z=")IF #USEDOT  = Y THEN )DO                                           "
+OK=WL(Z)
+Z=")DOT #TSLISTE                                                       "
+OK=WL(Z)
+Z="          INCLUDE TABLESPACE #DBNAME..#TSNAME.                      "
+OK=WL(Z)
+Z=")ENDDOT                                                             "
+OK=WL(Z)
+Z=")ENDDO                                                              "
+OK=WL(Z)
+Z=")ELSE )DO                                                           "
+OK=WL(Z)
+Z="          INCLUDE TABLESPACE #DB..#TS.                              "
+OK=WL(Z)
+Z=")ENDDO                                                              "
+OK=WL(Z)
+Z=")ENDDO                                                              "
+OK=WL(Z)
+Z="/*                                                                  "
+OK=WL(Z)
+Z="//SYSTEMPL DD *                                                     "
+OK=WL(Z)
+Z="--TEMPLATE COPYDSN                                                  "
+OK=WL(Z)
+Z="--         DSN      #MDICTAPE                                       "
+OK=WL(Z)
+Z="--         UNIT     #TAPE                                           "
+OK=WL(Z)
+Z="--         VOLCNT   255                                             "
+OK=WL(Z)
+Z="--         DISP     (NEW,KEEP,KEEP)                                 "
+OK=WL(Z)
+Z="--         DISP     (MOD,CATLG,CATLG)                               "
+OK=WL(Z)
+Z="--         DATACLAS #RACDATAC                                       "
+OK=WL(Z)
+Z="--         RETPD    30                                              "
+OK=WL(Z)
+Z="--         STACK    (YES)                                           "
+OK=WL(Z)
+Z=")BLANK                                                              "
+OK=WL(Z)
+Z="                                                                    "
+OK=WL(Z)
+Z="  TEMPLATE COPYDSN                                                  "
+OK=WL(Z)
+Z="           DSN #MDICDISK                                            "
+OK=WL(Z)
+Z="           DISP (NEW,CATLG,CATLG)                                   "
+OK=WL(Z)
+Z="           UNIT #SYSDA                                              "
+OK=WL(Z)
+Z="           UNCNT    59                                              "
+OK=WL(Z)
+Z=")BLANK                                                              "
+OK=WL(Z)
+Z="                                                                    "
+OK=WL(Z)
+Z="  TEMPLATE RECXXX                                                   "
+OK=WL(Z)
+Z="           DSN #MHLQRO..&DB..&TS..SYSREC                            "
+OK=WL(Z)
+Z="           DISP (NEW,DELETE,DELETE)                                 "
+OK=WL(Z)
+Z="--         SPACE(300,300) CYL                                       "
+OK=WL(Z)
+Z="           UNIT #WORK                                               "
+OK=WL(Z)
+Z="           UNCNT    59                                              "
+OK=WL(Z)
+Z=")BLANK                                                              "
+OK=WL(Z)
+Z="                                                                    "
+OK=WL(Z)
+Z="  TEMPLATE SUT1                                                     "
+OK=WL(Z)
+Z="           DISP(NEW,DELETE,DELETE)                                  "
+OK=WL(Z)
+Z="           DSN('#MHLQRO..&DB..&TS..SYSUT1')                         "
+OK=WL(Z)
+Z="--         SPACE (300,300) CYL                                      "
+OK=WL(Z)
+Z="           UNIT #WORK                                               "
+OK=WL(Z)
+Z="           UNCNT    59                                              "
+OK=WL(Z)
+Z=")BLANK                                                              "
+OK=WL(Z)
+Z="                                                                    "
+OK=WL(Z)
+Z="  TEMPLATE PUNCH                                                    "
+OK=WL(Z)
+Z="           DISP(NEW,DELETE,DELETE)                                  "
+OK=WL(Z)
+Z="           DSN('#MHLQRO..&DB..&TS..SYSPUNCH')                       "
+OK=WL(Z)
+Z="--         SPACE (5,5) CYL                                          "
+OK=WL(Z)
+Z="           UNIT #WORK                                               "
+OK=WL(Z)
+Z="           UNCNT    59                                              "
+OK=WL(Z)
+Z=")BLANK                                                              "
+OK=WL(Z)
+Z="                                                                    "
+OK=WL(Z)
+Z="  TEMPLATE DISC                                                     "
+OK=WL(Z)
+Z="           DISP(NEW,DELETE,DELETE)                                  "
+OK=WL(Z)
+Z="           DSN('#MHLQRO..&DB..&TS..SYSDISC')                        "
+OK=WL(Z)
+Z="           SPACE (300,300) CYL                                      "
+OK=WL(Z)
+Z="           UNIT #WORK                                               "
+OK=WL(Z)
+Z="           UNCNT    59                                              "
+OK=WL(Z)
+Z=")BLANK                                                              "
+OK=WL(Z)
+Z="                                                                    "
+OK=WL(Z)
+Z="//SYSIN    DD *                                                     "
+OK=WL(Z)
+Z="--OPTIONS PREVIEW                                                   "
+OK=WL(Z)
+Z="--OPTIONS EVENT(ITEMERROR,SKIP)                                     "
+OK=WL(Z)
+Z=" REORG TABLESPACE LIST ROLIST                                       "
+OK=WL(Z)
+Z="       SHRLEVEL     #SHRL                                           "
+OK=WL(Z)
+Z="       SORTDEVT     #WORK                                           "
+OK=WL(Z)
+Z="       SORTNUM      4                                               "
+OK=WL(Z)
+Z="       UNLDDN       RECXXX                                          "
+OK=WL(Z)
+Z="       WORKDDN      SUT1                                            "
+OK=WL(Z)
+Z="       PUNCHDDN     PUNCH                                           "
+OK=WL(Z)
+Z="       DISCARDDN    DISC                                            "
+OK=WL(Z)
+Z=")SEL #ICOPY  EQ Y                                                   "
+OK=WL(Z)
+Z="       COPYDDN      COPYDSN                                         "
+OK=WL(Z)
+Z=")ENDSEL                                                             "
+OK=WL(Z)
+Z=")SEL #ONLINE EQ Y                                                   "
+OK=WL(Z)
+Z="       LOG          NO                                              "
+OK=WL(Z)
+Z="       DRAIN_WAIT   30                                              "
+OK=WL(Z)
+Z="       FASTSWITCH   YES                                             "
+OK=WL(Z)
+Z=")IF #USEMDB =  Y       THEN )DO                                     "
+OK=WL(Z)
+Z="       MAPPINGDATABASE #MAPDB                                       "
+OK=WL(Z)
+Z=")ENDDO                                                              "
+OK=WL(Z)
+Z=")ELSE )DO                                                           "
+OK=WL(Z)
+Z="       MAPPINGTABLE #MAPTAB                                         "
+OK=WL(Z)
+Z=")ENDDO                                                              "
+OK=WL(Z)
+Z="       MAXRO        50                                              "
+OK=WL(Z)
+Z="       LONGLOG      CONTINUE                                        "
+OK=WL(Z)
+Z="       TIMEOUT      TERM                                            "
+OK=WL(Z)
+Z=")SEL #STATS  EQ Y                                                   "
+OK=WL(Z)
+Z="       STATISTICS TABLE(ALL)                                        "
+OK=WL(Z)
+Z="                  INDEX(ALL KEYCARD FREQVAL NUMCOLS 1 COUNT 10)     "
+OK=WL(Z)
+Z="                  REPORT NO                                         "
+OK=WL(Z)
+Z="                  UPDATE ALL                                        "
+OK=WL(Z)
+Z=")ENDSEL                                                             "
+OK=WL(Z)
+Z=")ENDSEL                                                             "
+OK=WL(Z)
+Z="                                                                    "
+OK=WL(Z)
+Z="/*                                                                  "
+OK=WL(Z)
+Z="// IF (REORG.RC GT 4 OR REORG.ABEND = TRUE) THEN                    "
+OK=WL(Z)
+Z="//TERM    EXEC PGM=IKJEFT01,DYNAMNBR=20                             "
+OK=WL(Z)
+Z=")IM SKSTEPLI                                                        "
+OK=WL(Z)
+Z="//SYSTSPRT DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSPRINT DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSUDUMP DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSIN    DD  DUMMY                                                "
+OK=WL(Z)
+Z="//SYSTSIN  DD  *                                                    "
+OK=WL(Z)
+Z="  DSN SYSTEM(#SSID.)                                                "
+OK=WL(Z)
+Z="  -DIS  UTILITY(REORG.#TS.)                                         "
+OK=WL(Z)
+Z="  -TERM UTILITY(REORG.#TS.)                                         "
+OK=WL(Z)
+Z="  END                                                               "
+OK=WL(Z)
+Z="// ENDIF                                                            "
+OK=WL(Z)
+
+RETURN
+
+SKEL_SKREPLVL:
+Z=")DEFAULT  )#?ü<~>                                                   "
+OK=WL(Z)
+Z="//REPLVL  EXEC PGM=DSNUTILB,                                        "
+OK=WL(Z)
+Z=")SEL #TS EQ *                                                       "
+OK=WL(Z)
+Z="//         PARM=(#SSID,'REP.TABLESP')                               "
+OK=WL(Z)
+Z=")ENDSEL                                                             "
+OK=WL(Z)
+Z=")SEL #TS NE *                                                       "
+OK=WL(Z)
+Z="//         PARM=(#SSID,'REP.#TS')                                   "
+OK=WL(Z)
+Z=")ENDSEL                                                             "
+OK=WL(Z)
+Z=")IM SKSTEPLI                                                        "
+OK=WL(Z)
+Z="//SYSPRINT  DD SYSOUT=*                                             "
+OK=WL(Z)
+Z="//UTPRINT   DD SYSOUT=*                                             "
+OK=WL(Z)
+Z="/*                                                                  "
+OK=WL(Z)
+Z="//SYSIN DD *                                                        "
+OK=WL(Z)
+Z="--OPTIONS PREVIEW                                                   "
+OK=WL(Z)
+Z="--OPTIONS EVENT(ITEMERROR,SKIP)                                     "
+OK=WL(Z)
+Z=")IF #USEDOT  = Y THEN )DO                                           "
+OK=WL(Z)
+Z=")DOT #TSLISTE                                                       "
+OK=WL(Z)
+Z="    REPAIR LEVELID TABLESPACE #DBNAME..#TSNAME.                     "
+OK=WL(Z)
+Z=")SEL #Part NE 0                                                     "
+OK=WL(Z)
+Z="           PART #part                                               "
+OK=WL(Z)
+Z=")ENDSEL                                                             "
+OK=WL(Z)
+Z=")ENDDOT                                                             "
+OK=WL(Z)
+Z=")ENDDO                                                              "
+OK=WL(Z)
+Z=")ELSE )DO                                                           "
+OK=WL(Z)
+Z="    REPAIR LEVELID TABLESPACE #DB..#TS.                             "
+OK=WL(Z)
+Z=")SEL #Part NE 0                                                     "
+OK=WL(Z)
+Z="           PART #part                                               "
+OK=WL(Z)
+Z=")ENDSEL                                                             "
+OK=WL(Z)
+Z=")ENDDO                                                              "
+OK=WL(Z)
+Z="/*                                                                  "
+OK=WL(Z)
+Z="// IF (REPLVL.RC GT 4 OR REPLVL.ABEND = TRUE) THEN                  "
+OK=WL(Z)
+Z="//TERM    EXEC PGM=IKJEFT01,DYNAMNBR=20                             "
+OK=WL(Z)
+Z=")IM SKSTEPLI                                                        "
+OK=WL(Z)
+Z="//SYSTSPRT DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSPRINT DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSUDUMP DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSIN    DD  DUMMY                                                "
+OK=WL(Z)
+Z="//SYSTSIN  DD  *                                                    "
+OK=WL(Z)
+Z="  DSN SYSTEM(#SSID.)                                                "
+OK=WL(Z)
+Z="  -DIS  UTILITY(REPLVL.#TS)                                         "
+OK=WL(Z)
+Z="  -TERM UTILITY(REPLVL.#TS)                                         "
+OK=WL(Z)
+Z="  END                                                               "
+OK=WL(Z)
+Z="// ENDIF                                                            "
+OK=WL(Z)
+
+RETURN
+
+SKEL_SKREPTS1:
+Z=")DEFAULT  )#?ü<~>                                                   "
+OK=WL(Z)
+Z="//REPORT  EXEC PGM=DSNUTILB,                                        "
+OK=WL(Z)
+Z="//         REGION=8M,                                               "
+OK=WL(Z)
+Z=")SEL #TS EQ *                                                       "
+OK=WL(Z)
+Z="//         PARM=(#SSID,'REPORT.TABLESP')                            "
+OK=WL(Z)
+Z=")ENDSEL                                                             "
+OK=WL(Z)
+Z=")SEL #TS NE *                                                       "
+OK=WL(Z)
+Z="//         PARM=(#SSID,'REPORT.#TS')                                "
+OK=WL(Z)
+Z=")ENDSEL                                                             "
+OK=WL(Z)
+Z=")IM SKSTEPLI                                                        "
+OK=WL(Z)
+Z="//SYSPRINT  DD SYSOUT=*                                             "
+OK=WL(Z)
+Z="//UTPRINT   DD SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSLISTD DD *                                                     "
+OK=WL(Z)
+Z="  LISTDEF MODLIST                                                   "
+OK=WL(Z)
+Z=")IF #auswkz = DB THEN )DO                                           "
+OK=WL(Z)
+Z="          INCLUDE TABLESPACES DATABASE #DB                          "
+OK=WL(Z)
+Z=")ENDDO                                                              "
+OK=WL(Z)
+Z=")ELSE )DO                                                           "
+OK=WL(Z)
+Z=")IF #USEDOT  = Y THEN )DO                                           "
+OK=WL(Z)
+Z=")DOT #TSLISTE                                                       "
+OK=WL(Z)
+Z="          INCLUDE TABLESPACE #DBNAME..#TSNAME.                      "
+OK=WL(Z)
+Z=")ENDDOT                                                             "
+OK=WL(Z)
+Z=")ENDDO                                                              "
+OK=WL(Z)
+Z=")ELSE )DO                                                           "
+OK=WL(Z)
+Z="          INCLUDE TABLESPACE #DB..#TS.                              "
+OK=WL(Z)
+Z=")ENDDO                                                              "
+OK=WL(Z)
+Z=")ENDDO                                                              "
+OK=WL(Z)
+Z="/*                                                                  "
+OK=WL(Z)
+Z="//SYSIN DD *                                                        "
+OK=WL(Z)
+Z="--OPTIONS PREVIEW                                                   "
+OK=WL(Z)
+Z="--OPTIONS EVENT(ITEMERROR,SKIP)                                     "
+OK=WL(Z)
+Z="  REPORT RECOVERY TABLESPACE LIST MODLIST                           "
+OK=WL(Z)
+Z="/*                                                                  "
+OK=WL(Z)
+Z="// IF (REPORT.RC GT 4 OR REPORT.ABEND = TRUE) THEN                  "
+OK=WL(Z)
+Z="//TERM    EXEC PGM=IKJEFT01,DYNAMNBR=20                             "
+OK=WL(Z)
+Z=")IM SKSTEPLI                                                        "
+OK=WL(Z)
+Z="//SYSTSPRT DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSPRINT DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSUDUMP DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSIN    DD  DUMMY                                                "
+OK=WL(Z)
+Z="//SYSTSIN  DD  *                                                    "
+OK=WL(Z)
+Z="  DSN SYSTEM(#SSID.)                                                "
+OK=WL(Z)
+Z="  -DIS  UTILITY(REPORT.#TS)                                         "
+OK=WL(Z)
+Z="  -TERM UTILITY(REPORT.#TS)                                         "
+OK=WL(Z)
+Z="  END                                                               "
+OK=WL(Z)
+Z="// ENDIF                                                            "
+OK=WL(Z)
+
+RETURN
+
+SKEL_SKREPTS2:
+Z=")DEFAULT  )#?ü<~>                                                   "
+OK=WL(Z)
+Z="//REPORT  EXEC PGM=DSNUTILB,                                        "
+OK=WL(Z)
+Z="//         REGION=8M,                                               "
+OK=WL(Z)
+Z=")SEL #TS EQ *                                                       "
+OK=WL(Z)
+Z="//         PARM=(#SSID,'REPORT.TABLESP')                            "
+OK=WL(Z)
+Z=")ENDSEL                                                             "
+OK=WL(Z)
+Z=")SEL #TS NE *                                                       "
+OK=WL(Z)
+Z="//         PARM=(#SSID,'REPORT.#TS')                                "
+OK=WL(Z)
+Z=")ENDSEL                                                             "
+OK=WL(Z)
+Z=")IM SKSTEPLI                                                        "
+OK=WL(Z)
+Z="//SYSPRINT  DD SYSOUT=*                                             "
+OK=WL(Z)
+Z="//UTPRINT   DD SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSIN DD *                                                        "
+OK=WL(Z)
+Z=")IF #USEDOT  = Y THEN )DO                                           "
+OK=WL(Z)
+Z=")DOT #TSLISTE                                                       "
+OK=WL(Z)
+Z="  REPORT TABLESPACESET TABLESPACE #DBNAME..#TSNAME.                 "
+OK=WL(Z)
+Z=")ENDDOT                                                             "
+OK=WL(Z)
+Z=")ENDDO                                                              "
+OK=WL(Z)
+Z=")ELSE )DO                                                           "
+OK=WL(Z)
+Z="  REPORT TABLESPACESET TABLESPACE #DB..#TS.                         "
+OK=WL(Z)
+Z=")ENDDO                                                              "
+OK=WL(Z)
+Z="/*                                                                  "
+OK=WL(Z)
+Z="// IF (REPORT.RC GT 4 OR REPORT.ABEND = TRUE) THEN                  "
+OK=WL(Z)
+Z="//TERM    EXEC PGM=IKJEFT01,DYNAMNBR=20                             "
+OK=WL(Z)
+Z=")IM SKSTEPLI                                                        "
+OK=WL(Z)
+Z="//SYSTSPRT DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSPRINT DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSUDUMP DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSIN    DD  DUMMY                                                "
+OK=WL(Z)
+Z="//SYSTSIN  DD  *                                                    "
+OK=WL(Z)
+Z="  DSN SYSTEM(#SSID.)                                                "
+OK=WL(Z)
+Z="  -DIS  UTILITY(REPORT.#TS)                                         "
+OK=WL(Z)
+Z="  -TERM UTILITY(REPORT.#TS)                                         "
+OK=WL(Z)
+Z="  END                                                               "
+OK=WL(Z)
+Z="// ENDIF                                                            "
+OK=WL(Z)
+
+RETURN
+
+SKEL_SKREP01:
+Z=")DEFAULT  )#?ü<~>                                                   "
+OK=WL(Z)
+Z="//REPLVL  EXEC PGM=DSNUTILB,                                        "
+OK=WL(Z)
+Z=")SEL #TS EQ *                                                       "
+OK=WL(Z)
+Z="//         PARM=(#SSID,'REP.TABLESP')                               "
+OK=WL(Z)
+Z=")ENDSEL                                                             "
+OK=WL(Z)
+Z=")SEL #TS NE *                                                       "
+OK=WL(Z)
+Z="//         PARM=(#SSID,'REP.#TS')                                   "
+OK=WL(Z)
+Z=")ENDSEL                                                             "
+OK=WL(Z)
+Z=")IM SKSTEPLI                                                        "
+OK=WL(Z)
+Z="//SYSPRINT  DD SYSOUT=*                                             "
+OK=WL(Z)
+Z="//UTPRINT   DD SYSOUT=*                                             "
+OK=WL(Z)
+Z="/*                                                                  "
+OK=WL(Z)
+Z="//SYSIN DD *                                                        "
+OK=WL(Z)
+Z="--OPTIONS PREVIEW                                                   "
+OK=WL(Z)
+Z="--OPTIONS EVENT(ITEMERROR,SKIP)                                     "
+OK=WL(Z)
+Z=")IF #USEDOT  = Y THEN )DO                                           "
+OK=WL(Z)
+Z=")DOT #TSLISTE                                                       "
+OK=WL(Z)
+Z=")SEL #LEVEL   = Y                                                   "
+OK=WL(Z)
+Z="    REPAIR LEVELID  TABLESPACE #DBNAME..#TSNAME.                    "
+OK=WL(Z)
+Z=")SEL #part NE 0                                                     "
+OK=WL(Z)
+Z="           PART #part                                               "
+OK=WL(Z)
+Z=")ENDSEL                                                             "
+OK=WL(Z)
+Z=")ENDSEL                                                             "
+OK=WL(Z)
+Z=")SEL #VERS    = Y                                                   "
+OK=WL(Z)
+Z="    REPAIR VERSIONS TABLESPACE #DBNAME..#TSNAME.                    "
+OK=WL(Z)
+Z=")SEL #part NE 0                                                     "
+OK=WL(Z)
+Z="           PART #part                                               "
+OK=WL(Z)
+Z=")ENDSEL                                                             "
+OK=WL(Z)
+Z=")ENDSEL                                                             "
+OK=WL(Z)
+Z=")SEL #CAT     = Y                                                   "
+OK=WL(Z)
+Z="    REPAIR CATALOG  TABLESPACE #DBNAME..#TSNAME.                    "
+OK=WL(Z)
+Z=")SEL #part NE 0                                                     "
+OK=WL(Z)
+Z="           PART #part                                               "
+OK=WL(Z)
+Z=")ENDSEL                                                             "
+OK=WL(Z)
+Z=")ENDSEL                                                             "
+OK=WL(Z)
+Z=")SEL #SETTYPE NE #BLANK                                             "
+OK=WL(Z)
+Z=")SEL #TYPE    NE INDEX                                              "
+OK=WL(Z)
+Z="    REPAIR SET #TYPE #DBNAME..#TSNAME.  #SETTYPE                    "
+OK=WL(Z)
+Z=")SEL #part NE 0                                                     "
+OK=WL(Z)
+Z="           PART #part                                               "
+OK=WL(Z)
+Z=")ENDSEL                                                             "
+OK=WL(Z)
+Z=")ENDSEL                                                             "
+OK=WL(Z)
+Z=")SEL #TYPE    EQ INDEX                                              "
+OK=WL(Z)
+Z="    REPAIR SET #TYPE #CREATOR..#NAME.  #SETTYPE                     "
+OK=WL(Z)
+Z=")SEL #part NE 0                                                     "
+OK=WL(Z)
+Z="           PART #part                                               "
+OK=WL(Z)
+Z=")ENDSEL                                                             "
+OK=WL(Z)
+Z=")ENDSEL                                                             "
+OK=WL(Z)
+Z="                                                                    "
+OK=WL(Z)
+Z=")ENDSEL                                                             "
+OK=WL(Z)
+Z=")ENDDOT                                                             "
+OK=WL(Z)
+Z=")ENDDO                                                              "
+OK=WL(Z)
+Z=")ELSE )DO                                                           "
+OK=WL(Z)
+Z=")SEL #LEVEL   = Y                                                   "
+OK=WL(Z)
+Z="    REPAIR LEVELID  TABLESPACE #DB..#TS.                            "
+OK=WL(Z)
+Z=")SEL #part NE 0                                                     "
+OK=WL(Z)
+Z="           PART #part                                               "
+OK=WL(Z)
+Z=")ENDSEL                                                             "
+OK=WL(Z)
+Z=")ENDSEL                                                             "
+OK=WL(Z)
+Z=")SEL #VERS    = Y                                                   "
+OK=WL(Z)
+Z="    REPAIR VERSIONS TABLESPACE #DB..#TS.                            "
+OK=WL(Z)
+Z=")SEL #part NE 0                                                     "
+OK=WL(Z)
+Z="           PART #part                                               "
+OK=WL(Z)
+Z=")ENDSEL                                                             "
+OK=WL(Z)
+Z=")ENDSEL                                                             "
+OK=WL(Z)
+Z=")SEL #CAT     = Y                                                   "
+OK=WL(Z)
+Z="    REPAIR CATALOG  TABLESPACE #DB..#TS.                            "
+OK=WL(Z)
+Z=")SEL #part NE 0                                                     "
+OK=WL(Z)
+Z="           PART #part                                               "
+OK=WL(Z)
+Z=")ENDSEL                                                             "
+OK=WL(Z)
+Z=")ENDSEL                                                             "
+OK=WL(Z)
+Z=")SEL #SETTYPE NE #BLANK                                             "
+OK=WL(Z)
+Z=")SEL #TYPE    NE INDEX                                              "
+OK=WL(Z)
+Z="    REPAIR SET #TYPE #DB..#TS.  #SETTYPE                            "
+OK=WL(Z)
+Z=")SEL #part NE 0                                                     "
+OK=WL(Z)
+Z="           PART #part                                               "
+OK=WL(Z)
+Z=")ENDSEL                                                             "
+OK=WL(Z)
+Z=")ENDSEL                                                             "
+OK=WL(Z)
+Z=")SEL #TYPE    EQ INDEX                                              "
+OK=WL(Z)
+Z="    REPAIR SET #TYPE #CREATOR..#NAME.  #SETTYPE                     "
+OK=WL(Z)
+Z=")SEL #part NE 0                                                     "
+OK=WL(Z)
+Z="           PART #part                                               "
+OK=WL(Z)
+Z=")ENDSEL                                                             "
+OK=WL(Z)
+Z=")ENDSEL                                                             "
+OK=WL(Z)
+Z=")ENDSEL                                                             "
+OK=WL(Z)
+Z=")ENDDO                                                              "
+OK=WL(Z)
+Z="/*                                                                  "
+OK=WL(Z)
+Z="// IF (REPLVL.RC GT 4 OR REPLVL.ABEND = TRUE) THEN                  "
+OK=WL(Z)
+Z="//TERM    EXEC PGM=IKJEFT01,DYNAMNBR=20                             "
+OK=WL(Z)
+Z=")IM SKSTEPLI                                                        "
+OK=WL(Z)
+Z="//SYSTSPRT DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSPRINT DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSUDUMP DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSIN    DD  DUMMY                                                "
+OK=WL(Z)
+Z="//SYSTSIN  DD  *                                                    "
+OK=WL(Z)
+Z="  DSN SYSTEM(#SSID.)                                                "
+OK=WL(Z)
+Z="  -DIS  UTILITY(REPLVL.#TS)                                         "
+OK=WL(Z)
+Z="  -TERM UTILITY(REPLVL.#TS)                                         "
+OK=WL(Z)
+Z="  END                                                               "
+OK=WL(Z)
+Z="// ENDIF                                                            "
+OK=WL(Z)
+
+RETURN
+
+SKEL_SKRSIX1:
+Z=")DEFAULT  )#?ü<~>                                                   "
+OK=WL(Z)
+Z="//RUNSTATS EXEC PGM=DSNUTILB,                                       "
+OK=WL(Z)
+Z="//         REGION=8M,                                               "
+OK=WL(Z)
+Z="//         PARM=(#SSID,'RUNST.INDEX')                               "
+OK=WL(Z)
+Z=")IM SKSTEPLI                                                        "
+OK=WL(Z)
+Z="//SYSPRINT  DD SYSOUT=*                                             "
+OK=WL(Z)
+Z="//UTPRINT   DD SYSOUT=*                                             "
+OK=WL(Z)
+Z="//RNPRIN01  DD SYSOUT=*                                             "
+OK=WL(Z)
+Z="//STPRIN01  DD SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSIN     DD *                                                    "
+OK=WL(Z)
+Z="LISTDEF  RSLIST                                                     "
+OK=WL(Z)
+Z=")IF #USEDOT  = Y THEN )DO                                           "
+OK=WL(Z)
+Z=")DOT #TSLISTE                                                       "
+OK=WL(Z)
+Z="          INCLUDE INDEX      #CREATOR..#NAME.                       "
+OK=WL(Z)
+Z=")ENDDOT                                                             "
+OK=WL(Z)
+Z=")ENDDO                                                              "
+OK=WL(Z)
+Z=")ELSE )DO                                                           "
+OK=WL(Z)
+Z="          INCLUDE INDEX      #CREATOR..#NAME.                       "
+OK=WL(Z)
+Z=")ENDDO                                                              "
+OK=WL(Z)
+Z="                                                                    "
+OK=WL(Z)
+Z="--                                                                  "
+OK=WL(Z)
+Z="--OPTIONS PREVIEW                                                   "
+OK=WL(Z)
+Z="--OPTIONS EVENT(ITEMERROR,SKIP)                                     "
+OK=WL(Z)
+Z=" RUNSTATS INDEX LIST RSLIST                                         "
+OK=WL(Z)
+Z="          FREQVAL NUMCOLS 1 COUNT 10 BOTH                           "
+OK=WL(Z)
+Z="          SHRLEVEL CHANGE                                           "
+OK=WL(Z)
+Z="          UPDATE(ALL)                                               "
+OK=WL(Z)
+Z="/*                                                                  "
+OK=WL(Z)
+Z="// IF (RUNSTATS.RC GT 4 OR RUNSTATS.ABEND = TRUE) THEN              "
+OK=WL(Z)
+Z="//TERM    EXEC PGM=IKJEFT01,DYNAMNBR=20                             "
+OK=WL(Z)
+Z=")IM SKSTEPLI                                                        "
+OK=WL(Z)
+Z="//SYSTSPRT DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSPRINT DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSUDUMP DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSIN    DD  DUMMY                                                "
+OK=WL(Z)
+Z="//SYSTSIN  DD  *                                                    "
+OK=WL(Z)
+Z=" DSN SYSTEM(#SSID.)                                                 "
+OK=WL(Z)
+Z="     -DIS  UTILITY(RUNST.INDEX)                                     "
+OK=WL(Z)
+Z="     -TERM UTILITY(RUNST.INDEX)                                     "
+OK=WL(Z)
+Z="  END                                                               "
+OK=WL(Z)
+Z="// ENDIF                                                            "
+OK=WL(Z)
+
+RETURN
+SKEL_SKRSTS1:
+Z=")DEFAULT  )#?ü<~>                                                   "
+OK=WL(Z)
+Z="//RUNSTATS EXEC PGM=DSNUTILB,                                       "
+OK=WL(Z)
+Z="//         REGION=8M,                                               "
+OK=WL(Z)
+Z=")SEL #TS EQ *                                                       "
+OK=WL(Z)
+Z="//         PARM=(#SSID,'RUNST.TABLESP')                             "
+OK=WL(Z)
+Z=")ENDSEL                                                             "
+OK=WL(Z)
+Z=")SEL #TS NE *                                                       "
+OK=WL(Z)
+Z="//         PARM=(#SSID,'RUNST.#TS')                                 "
+OK=WL(Z)
+Z=")ENDSEL                                                             "
+OK=WL(Z)
+Z=")IM SKSTEPLI                                                        "
+OK=WL(Z)
+Z="//SYSPRINT  DD SYSOUT=*                                             "
+OK=WL(Z)
+Z="//UTPRINT   DD SYSOUT=*                                             "
+OK=WL(Z)
+Z="//RNPRIN01  DD SYSOUT=*                                             "
+OK=WL(Z)
+Z="//STPRIN01  DD SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSIN     DD *                                                    "
+OK=WL(Z)
+Z=" LISTDEF  RSLIST                                                    "
+OK=WL(Z)
+Z="                                                                    "
+OK=WL(Z)
+Z=")IF #auswkz = DB THEN )DO                                           "
+OK=WL(Z)
+Z="          INCLUDE TABLESPACES DATABASE #DB                          "
+OK=WL(Z)
+Z=")ENDDO                                                              "
+OK=WL(Z)
+Z=")ELSE )DO                                                           "
+OK=WL(Z)
+Z=")IF #USEDOT  = Y THEN )DO                                           "
+OK=WL(Z)
+Z=")DOT #TSLISTE                                                       "
+OK=WL(Z)
+Z="          INCLUDE TABLESPACE #DBNAME..#TSNAME.                      "
+OK=WL(Z)
+Z=")ENDDOT                                                             "
+OK=WL(Z)
+Z=")ENDDO                                                              "
+OK=WL(Z)
+Z=")ELSE )DO                                                           "
+OK=WL(Z)
+Z="          INCLUDE TABLESPACE #DB..#TS.                              "
+OK=WL(Z)
+Z=")ENDDO                                                              "
+OK=WL(Z)
+Z=")ENDDO                                                              "
+OK=WL(Z)
+Z="                                                                    "
+OK=WL(Z)
+Z="--                                                                  "
+OK=WL(Z)
+Z="--OPTIONS PREVIEW                                                   "
+OK=WL(Z)
+Z="--OPTIONS EVENT(ITEMERROR,SKIP)                                     "
+OK=WL(Z)
+Z=" RUNSTATS TABLESPACE LIST RSLIST                                    "
+OK=WL(Z)
+Z="          TABLE (ALL)                                               "
+OK=WL(Z)
+Z="          INDEX (ALL)                                               "
+OK=WL(Z)
+Z="          KEYCARD FREQVAL NUMCOLS 1 COUNT 10  BOTH                  "
+OK=WL(Z)
+Z="                  FREQVAL NUMCOLS 2 COUNT 10  BOTH                  "
+OK=WL(Z)
+Z="                  FREQVAL NUMCOLS 3 COUNT 10  BOTH                  "
+OK=WL(Z)
+Z="          SHRLEVEL CHANGE                                           "
+OK=WL(Z)
+Z="          UPDATE(ALL)                                               "
+OK=WL(Z)
+Z="/*                                                                  "
+OK=WL(Z)
+Z="// IF (RUNSTATS.RC GT 4 OR RUNSTATS.ABEND = TRUE) THEN              "
+OK=WL(Z)
+Z="//TERM    EXEC PGM=IKJEFT01,DYNAMNBR=20                             "
+OK=WL(Z)
+Z=")IM SKSTEPLI                                                        "
+OK=WL(Z)
+Z="//SYSTSPRT DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSPRINT DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSUDUMP DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSIN    DD  DUMMY                                                "
+OK=WL(Z)
+Z="//SYSTSIN  DD  *                                                    "
+OK=WL(Z)
+Z=" DSN SYSTEM(#SSID.)                                                 "
+OK=WL(Z)
+Z="     -DIS  UTILITY(RUNST.#TS.)                                      "
+OK=WL(Z)
+Z="     -TERM UTILITY(RUNST.#TS.)                                      "
+OK=WL(Z)
+Z="  END                                                               "
+OK=WL(Z)
+Z="// ENDIF                                                            "
+OK=WL(Z)
+
+RETURN
+
+SKEL_SKRSTS2:
+Z=")DEFAULT  )#?ü<~>                                                   "
+OK=WL(Z)
+Z=")CM RUNSTATS DETAIL FOR TABLE                                       "
+OK=WL(Z)
+Z="//RUNSTATS EXEC PGM=DSNUTILB,                                       "
+OK=WL(Z)
+Z="//         REGION=8M,                                               "
+OK=WL(Z)
+Z=")SEL #TS EQ *                                                       "
+OK=WL(Z)
+Z="//         PARM=(#SSID,'RUNST.TABLESP')                             "
+OK=WL(Z)
+Z=")ENDSEL                                                             "
+OK=WL(Z)
+Z=")SEL #TS NE *                                                       "
+OK=WL(Z)
+Z="//         PARM=(#SSID,'RUNST.#TS')                                 "
+OK=WL(Z)
+Z=")ENDSEL                                                             "
+OK=WL(Z)
+Z=")IM SKSTEPLI                                                        "
+OK=WL(Z)
+Z="//SYSPRINT  DD SYSOUT=*                                             "
+OK=WL(Z)
+Z="//UTPRINT   DD SYSOUT=*                                             "
+OK=WL(Z)
+Z="//RNPRIN01  DD SYSOUT=*                                             "
+OK=WL(Z)
+Z="//STPRIN01  DD SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSIN     DD *                                                    "
+OK=WL(Z)
+Z="--                                                                  "
+OK=WL(Z)
+Z="--OPTIONS PREVIEW                                                   "
+OK=WL(Z)
+Z="--OPTIONS EVENT(ITEMERROR,SKIP)                                     "
+OK=WL(Z)
+Z="                                                                    "
+OK=WL(Z)
+Z=")REXX TB                                                            "
+OK=WL(Z)
+Z="   /*   TB='HUGO'  */                                               "
+OK=WL(Z)
+Z="   return                                                           "
+OK=WL(Z)
+Z=")ENDREXX                                                            "
+OK=WL(Z)
+Z="                                                                    "
+OK=WL(Z)
+Z=")IF #USEDOT  = Y THEN )DO                                           "
+OK=WL(Z)
+Z=")DOT #TSLISTE                                                       "
+OK=WL(Z)
+Z=" RUNSTATS TABLESPACE #DBNAME..#TSNAME.                              "
+OK=WL(Z)
+Z="          SHRLEVEL CHANGE                                           "
+OK=WL(Z)
+Z=")IF #TYPE NE LOB THEN )DO                                           "
+OK=WL(Z)
+Z="          TABLE (#TB)                                               "
+OK=WL(Z)
+Z=")IF #USESTF = N THEN )DO                                            "
+OK=WL(Z)
+Z="          COLUMN (ALL)                                              "
+OK=WL(Z)
+Z=")ENDDO                                                              "
+OK=WL(Z)
+Z=")ELSE )DO                                                           "
+OK=WL(Z)
+Z=")DOT #COLLIST SCAN(TB,EQ)                                           "
+OK=WL(Z)
+Z="          #RSANW                                                    "
+OK=WL(Z)
+Z=")ENDDOT                                                             "
+OK=WL(Z)
+Z=")ENDDO                                                              "
+OK=WL(Z)
+Z=")ENDDO                                                              "
+OK=WL(Z)
+Z="          INDEX (ALL)                                               "
+OK=WL(Z)
+Z=")IF #TYPE NE LOB THEN )DO                                           "
+OK=WL(Z)
+Z="          KEYCARD FREQVAL NUMCOLS 1 COUNT 10  BOTH                  "
+OK=WL(Z)
+Z="                  FREQVAL NUMCOLS 2 COUNT 10  BOTH                  "
+OK=WL(Z)
+Z="                  FREQVAL NUMCOLS 3 COUNT 10  BOTH                  "
+OK=WL(Z)
+Z=")ENDDO                                                              "
+OK=WL(Z)
+Z="          UPDATE(ALL)                                               "
+OK=WL(Z)
+Z=")BLANK                                                              "
+OK=WL(Z)
+Z=")ENDDOT                                                             "
+OK=WL(Z)
+Z=")ENDDO                                                              "
+OK=WL(Z)
+Z=")ELSE )DO                                                           "
+OK=WL(Z)
+Z=" RUNSTATS TABLESPACE #DB..#TS.                                      "
+OK=WL(Z)
+Z="          SHRLEVEL CHANGE                                           "
+OK=WL(Z)
+Z=")IF #TYPE NE LOB THEN )DO                                           "
+OK=WL(Z)
+Z="          TABLE (#TB)                                               "
+OK=WL(Z)
+Z=")IF #USESTF = N THEN )DO                                            "
+OK=WL(Z)
+Z="          COLUMN (ALL)                                              "
+OK=WL(Z)
+Z=")ENDDO                                                              "
+OK=WL(Z)
+Z=")ELSE )DO                                                           "
+OK=WL(Z)
+Z=")DOT #COLLIST                                                       "
+OK=WL(Z)
+Z="          #RSANW                                                    "
+OK=WL(Z)
+Z=")ENDDOT                                                             "
+OK=WL(Z)
+Z=")ENDDO                                                              "
+OK=WL(Z)
+Z=")ENDDO                                                              "
+OK=WL(Z)
+Z="          INDEX (ALL)                                               "
+OK=WL(Z)
+Z=")IF #TYPE NE LOB THEN )DO                                           "
+OK=WL(Z)
+Z="          KEYCARD FREQVAL NUMCOLS 1 COUNT 10  BOTH                  "
+OK=WL(Z)
+Z="                  FREQVAL NUMCOLS 2 COUNT 10  BOTH                  "
+OK=WL(Z)
+Z="                  FREQVAL NUMCOLS 3 COUNT 10  BOTH                  "
+OK=WL(Z)
+Z=")ENDDO                                                              "
+OK=WL(Z)
+Z="          UPDATE(ALL)                                               "
+OK=WL(Z)
+Z=")ENDDO                                                              "
+OK=WL(Z)
+Z="                                                                    "
+OK=WL(Z)
+Z="/*                                                                  "
+OK=WL(Z)
+Z="// IF (RUNSTATS.RC GT 4 OR RUNSTATS.ABEND = TRUE) THEN              "
+OK=WL(Z)
+Z="//TERM    EXEC PGM=IKJEFT01,DYNAMNBR=20                             "
+OK=WL(Z)
+Z=")IM SKSTEPLI                                                        "
+OK=WL(Z)
+Z="//SYSTSPRT DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSPRINT DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSUDUMP DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSIN    DD  DUMMY                                                "
+OK=WL(Z)
+Z="//SYSTSIN  DD  *                                                    "
+OK=WL(Z)
+Z=" DSN SYSTEM(#SSID.)                                                 "
+OK=WL(Z)
+Z="     -DIS  UTILITY(RUNST.#TS.)                                      "
+OK=WL(Z)
+Z="     -TERM UTILITY(RUNST.#TS.)                                      "
+OK=WL(Z)
+Z="  END                                                               "
+OK=WL(Z)
+Z="// ENDIF                                                            "
+OK=WL(Z)
+
+RETURN
+
+SKEL_SKSDMP:
+Z=")DEFAULT  )#?ü<~|                                                   "
+OK=WL(Z)
+Z="//DELETE  EXEC  PGM=IDCAMS                                          "
+OK=WL(Z)
+Z="//SYSPRINT DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSIN    DD  *                                                    "
+OK=WL(Z)
+Z=" DELETE #USER..IFCSD.TRACE                                          "
+OK=WL(Z)
+Z=" SET MAXCC=0                                                        "
+OK=WL(Z)
+Z="/*                                                                  "
+OK=WL(Z)
+Z="//******************************************************************"
+OK=WL(Z)
+Z="//*                                                                 "
+OK=WL(Z)
+Z="//* THIS IS A SKELETON OF THE JCL USED TO RUN DSN1SDMP.             "
+OK=WL(Z)
+Z="//* YOU MUST INSERT SDMPIN DD.                                      "
+OK=WL(Z)
+Z="//*                                                                 "
+OK=WL(Z)
+Z="//******************************************************************"
+OK=WL(Z)
+Z="//IFCSD EXEC PGM=IKJEFT01,DYNAMNBR=20,COND=(4,LT)                   "
+OK=WL(Z)
+Z=")IM SKSTEPLI                                                        "
+OK=WL(Z)
+Z="//SYSPRINT DD SYSOUT=*                                              "
+OK=WL(Z)
+Z="//SYSTSPRT DD SYSOUT=*                                              "
+OK=WL(Z)
+Z="//SDMPPRNT DD SYSOUT=*                                              "
+OK=WL(Z)
+Z="//SDMPTRAC DD SYSOUT=*                                              "
+OK=WL(Z)
+Z="//*SDMPTRAC DD DISP=(NEW,CATLG,CATLG),                              "
+OK=WL(Z)
+Z="//* UNIT=#SYSDA,                                                    "
+OK=WL(Z)
+Z="//* SPACE=(CYL,(100,100)),                                          "
+OK=WL(Z)
+Z="//* DCB=(DSORG=PS,LRECL=32756,RECFM=VB,BLKSIZE=32760),              "
+OK=WL(Z)
+Z="//* DSN=#USER..IFCSD.TRACE                                          "
+OK=WL(Z)
+Z="//SYSUDUMP DD SYSOUT=*                                              "
+OK=WL(Z)
+Z="//SYSTSIN DD *                                                      "
+OK=WL(Z)
+Z="DSN SYSTEM(#SSID)                                                   "
+OK=WL(Z)
+Z="    RUN PROG(DSN1SDMP) PLAN(DSNEDCL)                                "
+OK=WL(Z)
+Z="END                                                                 "
+OK=WL(Z)
+Z="/*                                                                  "
+OK=WL(Z)
+Z="//******************************************************************"
+OK=WL(Z)
+Z="//*                                                                 "
+OK=WL(Z)
+Z="//* INSERT SDMPIN DD HERE. IT MUST BEGIN WITH A VALID               "
+OK=WL(Z)
+Z="//* START TRACE COMMAND (WITHOUT THE SUBSYSTEM RECOGNITION CHAR)    "
+OK=WL(Z)
+Z="//*                                                                 "
+OK=WL(Z)
+Z="//******************************************************************"
+OK=WL(Z)
+Z="//* (VALID SDMPIN GOES HERE)                                        "
+OK=WL(Z)
+Z="//*                                                                 "
+OK=WL(Z)
+Z="//SDMPIN DD *                                                       "
+OK=WL(Z)
+Z="* START ONLY IFCID 58, END SQL STATEMENT                            "
+OK=WL(Z)
+Z="  START TRACE=P CLASS(32) IFCID(53,58) DEST(OPX)                    "
+OK=WL(Z)
+Z="  FOR(1)                                                            "
+OK=WL(Z)
+Z="  ACTION(ABENDTER(00E60188))                                        "
+OK=WL(Z)
+Z="  SELECT                                                            "
+OK=WL(Z)
+Z="* OFFSET TO FIRST DATA SECTION CONTAINING THE SQLCA.                "
+OK=WL(Z)
+Z="  P4,08                                                             "
+OK=WL(Z)
+Z="* SQLCODE #sqlcd, RESOURCE UNAVAILABLE                              "
+OK=WL(Z)
+Z="  DR,74,X'#sqlcx'                                                   "
+OK=WL(Z)
+Z="/*                                                                  "
+OK=WL(Z)
+Z="//                                                                  "
+OK=WL(Z)
+Z="//XDMPIN DD *                                                       "
+OK=WL(Z)
+Z="--Starting a second trace                                           "
+OK=WL(Z)
+Z="                                                                    "
+OK=WL(Z)
+Z="* START ONLY IFCID 196, TIMEOUT                                     "
+OK=WL(Z)
+Z="START TRACE=P CLASS(32) IFCID(196) DEST(SMF)                        "
+OK=WL(Z)
+Z="AFTER(1)                                                            "
+OK=WL(Z)
+Z="* ACTION = START ACCOUNTING TRACE                                   "
+OK=WL(Z)
+Z="ACTION(STTRACE)                                                     "
+OK=WL(Z)
+Z="* FILTER ON JUST 196 RECORDS...                                     "
+OK=WL(Z)
+Z="SELECT                                                              "
+OK=WL(Z)
+Z="P4,00                                                               "
+OK=WL(Z)
+Z="DR,04,X'00C4'                                                       "
+OK=WL(Z)
+Z="* WHEN ACCOUNTING IS CUT, ABEND                                     "
+OK=WL(Z)
+Z="ACTION2(ABENDRET(00E60100))                                         "
+OK=WL(Z)
+Z="* START THE ACCOUNTING TRACE FILTER ON THE ACE OF THE AGENT         "
+OK=WL(Z)
+Z="* THAT TIMED OUT                                                    "
+OK=WL(Z)
+Z="COMMAND                                                             "
+OK=WL(Z)
+Z="START TRACE(ACCTG) CLASS(32) IFCID(3) DEST(SMF)                     "
+OK=WL(Z)
+Z="* Filter can be for ACE or EB                                       "
+OK=WL(Z)
+Z="FILTER(ACE)                                                         "
+OK=WL(Z)
+Z="--                                                                  "
+OK=WL(Z)
+Z="                                                                    "
+OK=WL(Z)
+Z="-- ABEND -904                                                       "
+OK=WL(Z)
+Z="START TRACE=A CLASS(32) IFCID(53,58) DEST(OPX)                      "
+OK=WL(Z)
+Z="FOR(1)                                                              "
+OK=WL(Z)
+Z="AFTER(1)                                                            "
+OK=WL(Z)
+Z="ACTION(ABENDRET(00E60188))                                          "
+OK=WL(Z)
+Z="SELECT                                                              "
+OK=WL(Z)
+Z="* Position to the product section                                   "
+OK=WL(Z)
+Z="P4,00                                                               "
+OK=WL(Z)
+Z="* Ensure QWHSIID = 58 or 53 (not IFCID 4)                           "
+OK=WL(Z)
+Z="GE,04,X'0005'                                                       "
+OK=WL(Z)
+Z="* Position to the data section 1                                    "
+OK=WL(Z)
+Z="P4,08                                                               "
+OK=WL(Z)
+Z="* Compare SQLCODE in QW0058SQ or QW0053SQ                           "
+OK=WL(Z)
+Z="DR,74,X'FFFFFC78'                                                   "
+OK=WL(Z)
+Z="                                                                    "
+OK=WL(Z)
+Z="-- ABEND -811 (Duplicate row )                                      "
+OK=WL(Z)
+Z="START TRACE=P CLASS(3) RMID(22) DEST(SMF) TDATA(COR,TRA)            "
+OK=WL(Z)
+Z="AFTER(1)                                                            "
+OK=WL(Z)
+Z="FOR(1)                                                              "
+OK=WL(Z)
+Z="SELECT                                                              "
+OK=WL(Z)
+Z="* POSITION TO HEADERS (QWHS IS ALWAYS FIRST)                        "
+OK=WL(Z)
+Z="P4,00                                                               "
+OK=WL(Z)
+Z="* CHECK QWHS 01, FOR RMID 16, IFCID 58                              "
+OK=WL(Z)
+Z="DR,02,X'0116003A'                                                   "
+OK=WL(Z)
+Z="* POSITION TO SECOND SECTION (1ST DATA SECTION)                     "
+OK=WL(Z)
+Z="P4,08                                                               "
+OK=WL(Z)
+Z="* COMPARE SQLCODE FOR 811                                           "
+OK=WL(Z)
+Z="DR,74,X'FFFFFCD5'                                                   "
+OK=WL(Z)
+Z="ACTION(ABENDRET(00E60188))                                          "
+OK=WL(Z)
+Z="/*                                                                  "
+OK=WL(Z)
+Z="//******************************************************************"
+OK=WL(Z)
+
+RETURN
+
+SKEL_SKSTEPLI:
+Z=")DEFAULT  )#?ü<~>                                                   "
+OK=WL(Z)
+Z=")SEL #LOAD1  NE #BLANK                                              "
+OK=WL(Z)
+Z="//STEPLIB DD DISP=SHR,DSN=#LOAD1                                    "
+OK=WL(Z)
+Z=")ENDSEL                                                             "
+OK=WL(Z)
+Z=")SEL #LOAD2  NE #BLANK                                              "
+OK=WL(Z)
+Z="//        DD DISP=SHR,DSN=#LOAD2                                    "
+OK=WL(Z)
+Z=")ENDSEL                                                             "
+OK=WL(Z)
+Z=")SEL #LOAD3  NE #BLANK                                              "
+OK=WL(Z)
+Z="//        DD DISP=SHR,DSN=#LOAD3                                    "
+OK=WL(Z)
+Z=")ENDSEL                                                             "
+OK=WL(Z)
+Z=")SEL #LOAD4  NE #BLANK                                              "
+OK=WL(Z)
+Z="//        DD DISP=SHR,DSN=#LOAD4                                    "
+OK=WL(Z)
+Z=")ENDSEL                                                             "
+OK=WL(Z)
+Z=")SEL #LOAD5  NE #BLANK                                              "
+OK=WL(Z)
+Z="//        DD DISP=SHR,DSN=#LOAD5                                    "
+OK=WL(Z)
+Z=")ENDSEL                                                             "
+OK=WL(Z)
+
+RETURN
+
+SKEL_SKSTOSPA:
+Z=")DEFAULT  )#?ü<~>                                                   "
+OK=WL(Z)
+Z="//STOSPACE EXEC PGM=DSNUTILB,                                       "
+OK=WL(Z)
+Z="//         PARM=(#SSID.,'STOSPACE')                                 "
+OK=WL(Z)
+Z=")IM SKSTEPLI                                                        "
+OK=WL(Z)
+Z="//SYSPRINT  DD SYSOUT=*                                             "
+OK=WL(Z)
+Z="//UTPRINT   DD SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSIN DD  *                                                       "
+OK=WL(Z)
+Z=" STOSPACE STOGROUP(#NM.)                                            "
+OK=WL(Z)
+Z="/*                                                                  "
+OK=WL(Z)
+Z="// IF (STOSPACE.RC GT 4 OR STOSPACE.ABEND = TRUE) THEN              "
+OK=WL(Z)
+Z="//TERM    EXEC PGM=IKJEFT01,DYNAMNBR=20                             "
+OK=WL(Z)
+Z=")IM SKSTEPLI                                                        "
+OK=WL(Z)
+Z="//SYSTSPRT DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSPRINT DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSUDUMP DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSIN    DD  DUMMY                                                "
+OK=WL(Z)
+Z="//SYSTSIN  DD  *                                                    "
+OK=WL(Z)
+Z="  DSN SYSTEM(#SSID.)                                                "
+OK=WL(Z)
+Z="  -DIS  UTILITY(STOSPACE)                                           "
+OK=WL(Z)
+Z="  -TERM UTILITY(STOSPACE)                                           "
+OK=WL(Z)
+Z="  END                                                               "
+OK=WL(Z)
+Z="// ENDIF                                                            "
+OK=WL(Z)
+
+RETURN
+
+SKEL_SKTEP2:
+Z=")DEFAULT  )#?ü<~>                                                   "
+OK=WL(Z)
+Z="//DSNTEP2 EXEC PGM=IKJEFT01,DYNAMNBR=20                             "
+OK=WL(Z)
+Z=")IM SKSTEPLI                                                        "
+OK=WL(Z)
+Z="//SYSTSPRT DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSPRINT DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSUDUMP DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSTSIN  DD  *                                                    "
+OK=WL(Z)
+Z="  DSN SYSTEM(#SSID.)                                                "
+OK=WL(Z)
+Z="      RUN  PROGRAM(DSNTEP2)     -                                   "
+OK=WL(Z)
+Z="           PLAN(DSNTEP2)        -                                   "
+OK=WL(Z)
+Z=")SEL #RUNLIB NE #BLANK                                              "
+OK=WL(Z)
+Z="           LIB('#RUNLIB')  -                                        "
+OK=WL(Z)
+Z=")ENDSEL                                                             "
+OK=WL(Z)
+Z="           PARMS('/ALIGN(MID)')                                     "
+OK=WL(Z)
+Z="   END                                                              "
+OK=WL(Z)
+Z="//SYSIN DD *                                                        "
+OK=WL(Z)
+Z="--##SET ROWS_FETCH -1                                               "
+OK=WL(Z)
+Z="--##SET ROWS_OUT  -1                                                "
+OK=WL(Z)
+Z="--##SET TOLWARN   YES                                               "
+OK=WL(Z)
+Z="--##SET TERMINATOR ;                                                "
+OK=WL(Z)
+Z="--##SET TOLARTHWRN YES                                              "
+OK=WL(Z)
+Z="--##SET MAXERRORS -1                                                "
+OK=WL(Z)
+Z="                                                                    "
+OK=WL(Z)
+Z="SELECT COUNT(*)                                                     "
+OK=WL(Z)
+Z="FROM SYSIBM.SYSTABLES                                               "
+OK=WL(Z)
+Z=";                                                                   "
+OK=WL(Z)
+Z="/*                                                                  "
+OK=WL(Z)
+
+RETURN
+
+SKEL_SKTEP4:
+Z=")DEFAULT  )#?ü<~>                                                   "
+OK=WL(Z)
+Z="//DSNTEP4 EXEC PGM=IKJEFT01,DYNAMNBR=20                             "
+OK=WL(Z)
+Z=")IM SKSTEPLI                                                        "
+OK=WL(Z)
+Z="//SYSTSPRT DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSPRINT DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSUDUMP DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSTSIN  DD  *                                                    "
+OK=WL(Z)
+Z="  DSN SYSTEM(#SSID.)                                                "
+OK=WL(Z)
+Z="      RUN  PROGRAM(DSNTEP4) -                                       "
+OK=WL(Z)
+Z="           PLAN(DSNTEP4)    -                                       "
+OK=WL(Z)
+Z=")SEL #RUNLIB NE #BLANK                                              "
+OK=WL(Z)
+Z="           LIB('#RUNLIB')   -                                       "
+OK=WL(Z)
+Z=")ENDSEL                                                             "
+OK=WL(Z)
+Z="           PARMS('/ALIGN(MID)')                                     "
+OK=WL(Z)
+Z="   END                                                              "
+OK=WL(Z)
+Z="//SYSIN DD *                                                        "
+OK=WL(Z)
+Z="--##SET ROWS_FETCH -1                                               "
+OK=WL(Z)
+Z="--##SET ROWS_OUT   -1                                               "
+OK=WL(Z)
+Z="--##SET TOLWARN    YES                                              "
+OK=WL(Z)
+Z="--##SET TERMINATOR ;                                                "
+OK=WL(Z)
+Z="--##SET TOLARTHWRN YES                                              "
+OK=WL(Z)
+Z="--##SET MAXERRORS  -1                                               "
+OK=WL(Z)
+Z="--##SET MULT_FETCH 1000                                             "
+OK=WL(Z)
+Z="                                                                    "
+OK=WL(Z)
+Z="  SELECT COUNT(*)                                                   "
+OK=WL(Z)
+Z="  FROM SYSIBM.SYSTABLES                                             "
+OK=WL(Z)
+Z="     ;                                                              "
+OK=WL(Z)
+
+RETURN
+
+SKEL_SKTIAD:
+Z=")DEFAULT  )#?ü<~>                                                   "
+OK=WL(Z)
+Z="//DSNTIAD EXEC PGM=IKJEFT01,DYNAMNBR=20                             "
+OK=WL(Z)
+Z=")IM SKSTEPLI                                                        "
+OK=WL(Z)
+Z="//SYSTSPRT DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSPRINT DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSUDUMP DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSTSIN  DD  *                                                    "
+OK=WL(Z)
+Z="  DSN SYSTEM(#SSID.)                                                "
+OK=WL(Z)
+Z="      RUN PROGRAM(DSNTIAD)    -                                     "
+OK=WL(Z)
+Z="          PLAN(DSNTIAD)       -                                     "
+OK=WL(Z)
+Z=")SEL #RUNLIB NE #BLANK                                              "
+OK=WL(Z)
+Z="          LIB('#RUNLIB')     -                                      "
+OK=WL(Z)
+Z=")ENDSEL                                                             "
+OK=WL(Z)
+Z="          PARMS('SQLTERM(;)')                                       "
+OK=WL(Z)
+Z="    END                                                             "
+OK=WL(Z)
+Z="//SYSIN    DD  *                                                    "
+OK=WL(Z)
+Z="  ALTER TABLESPACE DATABASE.TABLESPACE                              "
+OK=WL(Z)
+Z="        PRIQTY      7200                                            "
+OK=WL(Z)
+Z="        SECQTY      7200                                            "
+OK=WL(Z)
+Z="   ;                                                                "
+OK=WL(Z)
+Z="   COMMIT   ;                                                       "
+OK=WL(Z)
+Z="/*                                                                  "
+OK=WL(Z)
+
+RETURN
+
+SKEL_SKTIAUL:
+Z=")DEFAULT  )#?ü<~>                                                   "
+OK=WL(Z)
+Z="//DSNTIAUL EXEC PGM=IKJEFT01                                        "
+OK=WL(Z)
+Z=")IM SKSTEPLI                                                        "
+OK=WL(Z)
+Z="//SYSPRINT DD SYSOUT=*                                              "
+OK=WL(Z)
+Z="//SYSTSPRT DD SYSOUT=*                                              "
+OK=WL(Z)
+Z="//SYSMDUMP DD SYSOUT=*                                              "
+OK=WL(Z)
+Z="//SYSREC00 DD UNIT=#SYSDA,                                          "
+OK=WL(Z)
+Z="//            SPACE=(CYL,(10,10)),                                  "
+OK=WL(Z)
+Z="//            DISP=(NEW,CATLG,DELETE),                              "
+OK=WL(Z)
+Z="//            DSN=#JHLQ...UNLOAD.DATASET.UNLOAD                     "
+OK=WL(Z)
+Z="//SYSPUNCH DD UNIT=#SYSDA,                                          "
+OK=WL(Z)
+Z="//            SPACE=(CYL,(1,1)),                                    "
+OK=WL(Z)
+Z="//            DISP=(NEW,CATLG,DELETE),                              "
+OK=WL(Z)
+Z="//            DSN=#JHLQ...UNLOAD.DATASET.PUNCH                      "
+OK=WL(Z)
+Z="//* PARMS('SQL,1000,LOBFILE(#USER..DSNTIAUL.LOBDS)') -              "
+OK=WL(Z)
+Z="//SYSTSIN DD *                                                      "
+OK=WL(Z)
+Z=" DSN S(#SSID.)                                                      "
+OK=WL(Z)
+Z="     RUN PROGRAM(DSNTIAUL)          -                               "
+OK=WL(Z)
+Z="         PLAN(DSNTIAUL)             -                               "
+OK=WL(Z)
+Z=")SEL #RUNLIB NE #BLANK                                              "
+OK=WL(Z)
+Z="         LIB('#RUNLIB')   -                                         "
+OK=WL(Z)
+Z=")ENDSEL                                                             "
+OK=WL(Z)
+Z="         PARMS('SQL,1000')                                          "
+OK=WL(Z)
+Z=" END                                                                "
+OK=WL(Z)
+Z="/*                                                                  "
+OK=WL(Z)
+Z="//SYSIN   DD *                                                      "
+OK=WL(Z)
+Z="  SELECT * FROM XXX.TABLE                                           "
+OK=WL(Z)
+Z="  ;                                                                 "
+OK=WL(Z)
+Z="/*                                                                  "
+OK=WL(Z)
+
+RETURN
+
+SKEL_SKUNLIC:
+Z=")DEFAULT  )#?ü<~>                                                   "
+OK=WL(Z)
+Z="//UNLOAD EXEC PGM=DSNUTILB,                                         "
+OK=WL(Z)
+Z="//           REGION=8M,                                             "
+OK=WL(Z)
+Z="//           PARM=(#SSID,'UNLLOAD.#TS','')                          "
+OK=WL(Z)
+Z=")IM SKSTEPLI                                                        "
+OK=WL(Z)
+Z="//SYSPRINT DD SYSOUT=*                                              "
+OK=WL(Z)
+Z="//UTPRINT  DD SYSOUT=*                                              "
+OK=WL(Z)
+Z="//SYSIN   DD *                                                      "
+OK=WL(Z)
+Z="TEMPLATE UNLDSN                                                     "
+OK=WL(Z)
+Z="         DSN #MHLQUNL..&DB..&TS..UNLOAD                             "
+OK=WL(Z)
+Z="         UNIT #WORK                                                 "
+OK=WL(Z)
+Z="         DISP (NEW,CATLG,CATLG)                                     "
+OK=WL(Z)
+Z="         SPACE (50,20) CYL                                          "
+OK=WL(Z)
+Z="TEMPLATE PUNDSN                                                     "
+OK=WL(Z)
+Z="         DSN #MHLQUNL..&DB..&TS..PUNCH                              "
+OK=WL(Z)
+Z="         UNIT #WORK                                                 "
+OK=WL(Z)
+Z="         DISP (NEW,CATLG,CATLG)                                     "
+OK=WL(Z)
+Z="         SPACE (1,1) CYL                                            "
+OK=WL(Z)
+Z="--                                                                  "
+OK=WL(Z)
+Z="UNLOAD  TABLESPACE #DB..#TS.                                        "
+OK=WL(Z)
+Z="FROMCOPY       #ICDSN                                               "
+OK=WL(Z)
+Z="UNLDDN         UNLDSN                                               "
+OK=WL(Z)
+Z="PUNCHDDN       PUNDSN                                               "
+OK=WL(Z)
+Z="/*                                                                  "
+OK=WL(Z)
+Z="// IF (UNLOAD.RC GT 4 OR UNLOAD.ABEND = TRUE) THEN                  "
+OK=WL(Z)
+Z="//TERM    EXEC PGM=IKJEFT01,DYNAMNBR=20                             "
+OK=WL(Z)
+Z=")IM SKSTEPLI                                                        "
+OK=WL(Z)
+Z="//SYSTSPRT DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSPRINT DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSUDUMP DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSIN    DD  DUMMY                                                "
+OK=WL(Z)
+Z="//SYSTSIN  DD  *                                                    "
+OK=WL(Z)
+Z="  DSN SYSTEM(#SSID.)                                                "
+OK=WL(Z)
+Z="  -DIS  UTILITY(UNLLOAD.#TS)                                        "
+OK=WL(Z)
+Z="  -TERM UTILITY(UNLLOAD.#TS)                                        "
+OK=WL(Z)
+Z="  END                                                               "
+OK=WL(Z)
+Z="// ENDIF                                                            "
+OK=WL(Z)
+
+RETURN
+
+SKEL_SKUNLTB:
+Z=")DEFAULT  )#?ü<~>                                                   "
+OK=WL(Z)
+Z="//*  //DELETE  EXEC PGM=IDCAMS                                      "
+OK=WL(Z)
+Z="//*  //SYSPRINT  DD SYSOUT=*                                        "
+OK=WL(Z)
+Z="//*  //SYSIN     DD *                                               "
+OK=WL(Z)
+Z="//*    DELETE #MHLQUNL..#DB..#TS..SYSREC       NONVSAM              "
+OK=WL(Z)
+Z="//*    DELETE #MHLQUNL..#DB..#TS..PUNCH        NONVSAM              "
+OK=WL(Z)
+Z="//*    SET MAXCC = 0                                                "
+OK=WL(Z)
+Z="//*  /*                                                             "
+OK=WL(Z)
+Z="//UNLOAD EXEC PGM=DSNUTILB,                                         "
+OK=WL(Z)
+Z="//           REGION=8M,                                             "
+OK=WL(Z)
+Z="//           PARM=(#SSID,'UNLLOAD.#TS','')                          "
+OK=WL(Z)
+Z=")IM SKSTEPLI                                                        "
+OK=WL(Z)
+Z="//SYSPRINT DD SYSOUT=*                                              "
+OK=WL(Z)
+Z="//UTPRINT  DD SYSOUT=*                                              "
+OK=WL(Z)
+Z="//SYSIN   DD *                                                      "
+OK=WL(Z)
+Z="--  TEMPLATE UNLD                                                   "
+OK=WL(Z)
+Z="--        PATH('/tmp/unload.pipe1')                                 "
+OK=WL(Z)
+Z="--        PATHDISP(KEEP,KEEP)                                       "
+OK=WL(Z)
+Z="--        RECFM(VB)   LRECL(00000049)                               "
+OK=WL(Z)
+Z="--        FILEDATA(BINARY)                                          "
+OK=WL(Z)
+Z=")BLANK                                                              "
+OK=WL(Z)
+Z="--  TEMPLATE UNLD                                                   "
+OK=WL(Z)
+Z="--           DSN #MHLQUNL..&DB..&TS..SYSREC                         "
+OK=WL(Z)
+Z="--           UNIT #TAPE                                             "
+OK=WL(Z)
+Z="--           DISP (NEW,CATLG,CATLG)                                 "
+OK=WL(Z)
+Z="--           DATACLAS #RACDATAC                                     "
+OK=WL(Z)
+Z="--           VOLCNT   255                                           "
+OK=WL(Z)
+Z="--           RETPD 30                                               "
+OK=WL(Z)
+Z="--           STACK(YES)                                             "
+OK=WL(Z)
+Z=")BLANK                                                              "
+OK=WL(Z)
+Z="  TEMPLATE UNLD                                                     "
+OK=WL(Z)
+Z="          DSN #MHLQUNL..&DB..&TS..SYSREC                            "
+OK=WL(Z)
+Z="          DISP (NEW, CATLG, CATLG)                                  "
+OK=WL(Z)
+Z="          SPACE (900,900) CYL                                       "
+OK=WL(Z)
+Z="          UNIT #SYSDA                                               "
+OK=WL(Z)
+Z="          UNCNT 50                                                  "
+OK=WL(Z)
+Z=")BLANK                                                              "
+OK=WL(Z)
+Z="  TEMPLATE LDMAP                                                    "
+OK=WL(Z)
+Z="          DSN #MHLQUNL..&DB..&TS..PUNCH                             "
+OK=WL(Z)
+Z="          UNIT #SYSDA                                               "
+OK=WL(Z)
+Z="          UNCNT 1                                                   "
+OK=WL(Z)
+Z="          DISP (NEW, CATLG, CATLG)                                  "
+OK=WL(Z)
+Z="                                                                    "
+OK=WL(Z)
+Z=")BLANK                                                              "
+OK=WL(Z)
+Z="                                                                    "
+OK=WL(Z)
+Z="UNLOAD     TABLESPACE #DB..#TS.                                     "
+OK=WL(Z)
+Z="PUNCHDDN   LDMAP                                                    "
+OK=WL(Z)
+Z="UNLDDN     UNLD                                                     "
+OK=WL(Z)
+Z="SHRLEVEL   CHANGE                                                   "
+OK=WL(Z)
+Z="ISOLATION  UR                                                       "
+OK=WL(Z)
+Z="NOPAD                                                               "
+OK=WL(Z)
+Z=")SEL #SPAN = Y                                                      "
+OK=WL(Z)
+Z="SPANNED YES                                                         "
+OK=WL(Z)
+Z=")ENDSEL                                                             "
+OK=WL(Z)
+Z="FROM TABLE #TBC..#TBN.                                              "
+OK=WL(Z)
+Z=")DOT #COLLIST                                                       "
+OK=WL(Z)
+Z="  #COLNAM  #COLTYPE                                                 "
+OK=WL(Z)
+Z=")ENDDOT                                                             "
+OK=WL(Z)
+Z="-- EBCDIC/UNICODE/ASCII                                             "
+OK=WL(Z)
+Z="-- DELIMITED   COLDEL  ';' CHARDEL '"'"'"' DECPT   ','   "
+OK=WL(Z)
+Z="/*                                                                  "
+OK=WL(Z)
+Z="/*                                                                  "
+OK=WL(Z)
+Z="// IF (UNLOAD.RC GT 4 OR UNLOAD.ABEND = TRUE) THEN                  "
+OK=WL(Z)
+Z="//TERM    EXEC PGM=IKJEFT01,DYNAMNBR=20                             "
+OK=WL(Z)
+Z=")IM SKSTEPLI                                                        "
+OK=WL(Z)
+Z="//SYSTSPRT DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSPRINT DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSUDUMP DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSIN    DD  DUMMY                                                "
+OK=WL(Z)
+Z="//SYSTSIN  DD  *                                                    "
+OK=WL(Z)
+Z="  DSN SYSTEM(#SSID.)                                                "
+OK=WL(Z)
+Z="  -DIS  UTILITY(UNLLOAD.#TS)                                        "
+OK=WL(Z)
+Z="  -TERM UTILITY(UNLLOAD.#TS)                                        "
+OK=WL(Z)
+Z="  END                                                               "
+OK=WL(Z)
+Z="// ENDIF                                                            "
+OK=WL(Z)
+
+RETURN
+
+SKEL_SKUNLTS:
+Z=")DEFAULT  )#?ü<~>                                                   "
+OK=WL(Z)
+Z="//UNLOAD EXEC PGM=DSNUTILB,                                         "
+OK=WL(Z)
+Z="//           REGION=8M,                                             "
+OK=WL(Z)
+Z="//           PARM=(#SSID,'UNLLOAD.#TS','')                          "
+OK=WL(Z)
+Z=")IM SKSTEPLI                                                        "
+OK=WL(Z)
+Z="//SYSPRINT DD SYSOUT=*                                              "
+OK=WL(Z)
+Z="//UTPRINT  DD SYSOUT=*                                              "
+OK=WL(Z)
+Z="//SYSIN   DD *                                                      "
+OK=WL(Z)
+Z="LISTDEF  UNLDLIST                                                   "
+OK=WL(Z)
+Z=")IF #auswkz = DB THEN )DO                                           "
+OK=WL(Z)
+Z="          INCLUDE TABLESPACES DATABASE #DB                          "
+OK=WL(Z)
+Z=")ENDDO                                                              "
+OK=WL(Z)
+Z=")ELSE )DO                                                           "
+OK=WL(Z)
+Z=")IF #USEDOT  = Y THEN )DO                                           "
+OK=WL(Z)
+Z=")DOT #TSLISTE                                                       "
+OK=WL(Z)
+Z="          INCLUDE TABLESPACE #DBNAME..#TSNAME.                      "
+OK=WL(Z)
+Z=")ENDDOT                                                             "
+OK=WL(Z)
+Z=")ENDDO                                                              "
+OK=WL(Z)
+Z=")ELSE )DO                                                           "
+OK=WL(Z)
+Z="          INCLUDE TABLESPACE #DB..#TS.                              "
+OK=WL(Z)
+Z=")ENDDO                                                              "
+OK=WL(Z)
+Z=")ENDDO                                                              "
+OK=WL(Z)
+Z=")BLANK                                                              "
+OK=WL(Z)
+Z="--                                                                  "
+OK=WL(Z)
+Z="--  TEMPLATE UNLD                                                   "
+OK=WL(Z)
+Z="--        PATH('/tmp/unload.pipe1')                                 "
+OK=WL(Z)
+Z="--        PATHDISP(KEEP,KEEP)                                       "
+OK=WL(Z)
+Z="--        RECFM(VB)   LRECL(00000049)                               "
+OK=WL(Z)
+Z="--        FILEDATA(BINARY)                                          "
+OK=WL(Z)
+Z=")BLANK                                                              "
+OK=WL(Z)
+Z="--  TEMPLATE UNLD                                                   "
+OK=WL(Z)
+Z="--           DSN #MHLQUNL..&DB..&TS..SYSREC                         "
+OK=WL(Z)
+Z="--           UNIT #TAPE                                             "
+OK=WL(Z)
+Z="--           VOLCNT 255                                             "
+OK=WL(Z)
+Z="--           DISP (NEW,CATLG,CATLG)                                 "
+OK=WL(Z)
+Z="--           DATACLAS #RACDATAC                                     "
+OK=WL(Z)
+Z="--           RETPD 30                                               "
+OK=WL(Z)
+Z="--           STACK(YES)                                             "
+OK=WL(Z)
+Z=")BLANK                                                              "
+OK=WL(Z)
+Z="TEMPLATE UNLDSN                                                     "
+OK=WL(Z)
+Z="         DSN #MHLQUNL..&DB..&TS..SYSREC                             "
+OK=WL(Z)
+Z="         UNIT #WORK                                                 "
+OK=WL(Z)
+Z="         UNCNT    59                                                "
+OK=WL(Z)
+Z="         DISP (NEW,CATLG,CATLG)                                     "
+OK=WL(Z)
+Z="         SPACE (50,20) CYL                                          "
+OK=WL(Z)
+Z=")BLANK                                                              "
+OK=WL(Z)
+Z="TEMPLATE PUNDSN                                                     "
+OK=WL(Z)
+Z="         DSN #MHLQUNL..&DB..&TS..PUNCH                              "
+OK=WL(Z)
+Z="         UNIT #WORK                                                 "
+OK=WL(Z)
+Z="         UNCNT    1                                                 "
+OK=WL(Z)
+Z="         DISP (NEW,CATLG,CATLG)                                     "
+OK=WL(Z)
+Z="         SPACE (1,1) CYL                                            "
+OK=WL(Z)
+Z="--                                                                  "
+OK=WL(Z)
+Z="--OPTIONS PREVIEW                                                   "
+OK=WL(Z)
+Z="--OPTIONS EVENT(ITEMERROR,SKIP)                                     "
+OK=WL(Z)
+Z="UNLOAD    LIST UNLDLIST                                             "
+OK=WL(Z)
+Z="UNLDDN         UNLDSN                                               "
+OK=WL(Z)
+Z="PUNCHDDN       PUNDSN                                               "
+OK=WL(Z)
+Z="SHRLEVEL       CHANGE                                               "
+OK=WL(Z)
+Z="ISOLATION      UR                                                   "
+OK=WL(Z)
+Z="-- EBCDIC/UNICODE/ASCII                                             "
+OK=WL(Z)
+Z="NOPAD                                                               "
+OK=WL(Z)
+Z="-- DELIMITED  COLDEL ';' CHARDEL '"'"'"' DECPT ','       "
+OK=WL(Z)
+Z="/*                                                                  "
+OK=WL(Z)
+Z="/*                                                                  "
+OK=WL(Z)
+Z="// IF (UNLOAD.RC GT 4 OR UNLOAD.ABEND = TRUE) THEN                  "
+OK=WL(Z)
+Z="//TERM    EXEC PGM=IKJEFT01,DYNAMNBR=20                             "
+OK=WL(Z)
+Z=")IM SKSTEPLI                                                        "
+OK=WL(Z)
+Z="//SYSTSPRT DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSPRINT DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSUDUMP DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSIN    DD  DUMMY                                                "
+OK=WL(Z)
+Z="//SYSTSIN  DD  *                                                    "
+OK=WL(Z)
+Z="  DSN SYSTEM(#SSID.)                                                "
+OK=WL(Z)
+Z="  -DIS  UTILITY(UNLLOAD.#TS)                                        "
+OK=WL(Z)
+Z="  -TERM UTILITY(UNLLOAD.#TS)                                        "
+OK=WL(Z)
+Z="  END                                                               "
+OK=WL(Z)
+Z="// ENDIF                                                            "
+OK=WL(Z)
+
+RETURN
+
+SKEL_SK1COPY1:
+Z=")DEFAULT  )#?ü<~>                                                   "
+OK=WL(Z)
+Z="//STOPDB   EXEC PGM=IKJEFT01                                        "
+OK=WL(Z)
+Z=")IM SKSTEPLI                                                        "
+OK=WL(Z)
+Z="//SYSTSPRT DD SYSOUT=*                                              "
+OK=WL(Z)
+Z="//SYSPRINT DD SYSOUT=*                                              "
+OK=WL(Z)
+Z="//SYSTSIN  DD *                                                     "
+OK=WL(Z)
+Z="DSN SYSTEM(#SSID.)                                                  "
+OK=WL(Z)
+Z="  -STOP DATABASE(#DB.) SPACENAM(#TS.)                               "
+OK=WL(Z)
+Z=" END                                                                "
+OK=WL(Z)
+Z="/*                                                                  "
+OK=WL(Z)
+Z="//DSN1CPY  EXEC PGM=DSN1COPY,                                       "
+OK=WL(Z)
+Z=")IF #TSPART GT 0 THEN )DO                                           "
+OK=WL(Z)
+Z="//      PARM='FULLCOPY,OBIDXLAT,RESET,NUMPARTS(#TSPART)#TLOB'       "
+OK=WL(Z)
+Z=")ENDDO                                                              "
+OK=WL(Z)
+Z=")ELSE )DO                                                           "
+OK=WL(Z)
+Z="//      PARM='FULLCOPY,OBIDXLAT,RESET#TLOB'                         "
+OK=WL(Z)
+Z=")ENDDO                                                              "
+OK=WL(Z)
+Z=")IM SKSTEPLI                                                        "
+OK=WL(Z)
+Z="//SYSUT1   DD DISP=SHR,DSN=#FDSN                                    "
+OK=WL(Z)
+Z="//SYSUT2   DD DISP=SHR,DSN=#TDSN                                    "
+OK=WL(Z)
+Z="//SYSPRINT DD SYSOUT=*                                              "
+OK=WL(Z)
+Z="//* FROM,TO                                                         "
+OK=WL(Z)
+Z="//SYSXLAT  DD *                                                     "
+OK=WL(Z)
+Z="#FDBID.,#TDBID.  DB=#DB.                                            "
+OK=WL(Z)
+Z="#FTSID.,#TTSID.  TS=#TS.                                            "
+OK=WL(Z)
+Z="#FTBID.,#TTBID   TB=#FTB/#TTB                                       "
+OK=WL(Z)
+Z="/*                                                                  "
+OK=WL(Z)
+Z="//STARTDB  EXEC PGM=IKJEFT01                                        "
+OK=WL(Z)
+Z=")IM SKSTEPLI                                                        "
+OK=WL(Z)
+Z="//SYSTSPRT DD SYSOUT=*                                              "
+OK=WL(Z)
+Z="//SYSPRINT DD SYSOUT=*                                              "
+OK=WL(Z)
+Z="//SYSTSIN  DD *                                                     "
+OK=WL(Z)
+Z="DSN SYSTEM(#SSID.)                                                  "
+OK=WL(Z)
+Z="  -START DATABASE(#DB.) SPACENAM(#TS.)                              "
+OK=WL(Z)
+Z=" END                                                                "
+OK=WL(Z)
+Z="/*                                                                  "
+OK=WL(Z)
+Z="//REBUILD EXEC PGM=DSNUTILB,                                        "
+OK=WL(Z)
+Z="//*        REGION=8M,                                               "
+OK=WL(Z)
+Z="//         PARM=(#SSID,'REBUILD.#TS')                               "
+OK=WL(Z)
+Z=")IM SKSTEPLI                                                        "
+OK=WL(Z)
+Z="//SYSPRINT  DD SYSOUT=*                                             "
+OK=WL(Z)
+Z="//UTPRINT   DD SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSIN    DD *                                                     "
+OK=WL(Z)
+Z="  REBUILD INDEX(ALL) TABLESPACE #DB..#TS.                           "
+OK=WL(Z)
+Z="/*                                                                  "
+OK=WL(Z)
+Z="// IF (REBUILD.RC GT 4 OR REBUILD.ABEND = TRUE) THEN                "
+OK=WL(Z)
+Z="//TERM    EXEC PGM=IKJEFT01,DYNAMNBR=20                             "
+OK=WL(Z)
+Z=")IM SKSTEPLI                                                        "
+OK=WL(Z)
+Z="//SYSTSPRT DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSPRINT DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSUDUMP DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSIN    DD  DUMMY                                                "
+OK=WL(Z)
+Z="//SYSTSIN  DD  *                                                    "
+OK=WL(Z)
+Z="  DSN SYSTEM(#SSID.)                                                "
+OK=WL(Z)
+Z="  -DIS  UTILITY(RECOVER.#TS.)                                       "
+OK=WL(Z)
+Z="  -TERM UTILITY(RECOVER.#TS.)                                       "
+OK=WL(Z)
+Z="  END                                                               "
+OK=WL(Z)
+Z="// ENDIF                                                            "
+OK=WL(Z)
+
+RETURN
+
+SKEL_SK1LOGP:
+Z=")DEFAULT  )#?ü<~>                                                   "
+OK=WL(Z)
+Z="//DELETE  EXEC PGM=IDCAMS                                           "
+OK=WL(Z)
+Z="//SYSPRINT DD SYSOUT=*                                              "
+OK=WL(Z)
+Z="//SYSIN    DD *                                                     "
+OK=WL(Z)
+Z=" DELETE (#USERID.DB2LOGP.DETAIL)    NONVSAM                         "
+OK=WL(Z)
+Z=" DELETE (#USERID.DB2LOGP.SUMMARY)    NONVSAM                        "
+OK=WL(Z)
+Z="//*                                                                 "
+OK=WL(Z)
+Z="//PRNTLOG  EXEC PGM=DSN1LOGP                                        "
+OK=WL(Z)
+Z=")IM SKSTEPLI                                                        "
+OK=WL(Z)
+Z="//SYSABEND DD SYSOUT=*                                              "
+OK=WL(Z)
+Z="//SYSPRINT DD DISP=(,CATLG,CATLG),                                  "
+OK=WL(Z)
+Z="//         SPACE=(CYL,(50,50),RLSE),                                "
+OK=WL(Z)
+Z="//         UNIT=#SYSDA,                                             "
+OK=WL(Z)
+Z="//         DCB=(LRECL=131,BLKSIZE=27903,RECFM=VBA),                 "
+OK=WL(Z)
+Z="//         DSN=#USERID.DB2LOGP.DETAIL                               "
+OK=WL(Z)
+Z="//SYSSUMRY DD DISP=(,CATLG,CATLG),                                  "
+OK=WL(Z)
+Z="//         SPACE=(CYL,(50,50),RLSE),                                "
+OK=WL(Z)
+Z="//         UNIT=#SYSDA,                                             "
+OK=WL(Z)
+Z="//         DCB=(LRECL=131,BLKSIZE=27903,RECFM=VBA),                 "
+OK=WL(Z)
+Z="//         DSN=#USERID.DB2LOGP.SUMMARY,                             "
+OK=WL(Z)
+Z="//*ARCHIVE  DD DISP=SHR,DSN=#SSID.ARCHLOG1.......                   "
+OK=WL(Z)
+Z="//SYSIN    DD *                                                     "
+OK=WL(Z)
+Z="  RBASTART(00269FB20000)                                            "
+OK=WL(Z)
+Z="  DATAONLY(NO)                                                      "
+OK=WL(Z)
+Z="  SUMMARY(ONLY)                                                     "
+OK=WL(Z)
+Z="//*   SUMMARY(YES/ONLY/NO)                                          "
+OK=WL(Z)
+Z="//*   URID(XXXXXXXXXXXX)                                            "
+OK=WL(Z)
+Z="//*   LUWID(NNNNNNNN.LLLLLLLL.XXXXXXXXXXXX.XXXX)                    "
+OK=WL(Z)
+Z="//*   DBID(XXXX)                                                    "
+OK=WL(Z)
+Z="//*   OBID(XXXX) MANY TIMES                                         "
+OK=WL(Z)
+Z="//*   PAGE(XXXXXXXX) MANY TIMES                                     "
+OK=WL(Z)
+Z="//*   TYPE(XX)                                                      "
+OK=WL(Z)
+Z="//*   SUBTYPE(XX)                                                   "
+OK=WL(Z)
+
+RETURN
+
+SKEL_SK1PRINT:
+Z=")DEFAULT  )#? <~>                                                   "
+OK=WL(Z)
+Z="//RUNPRNT EXEC PGM=DSN1PRNT,PARM=(PRINT(00000,00100),FORMAT)        "
+OK=WL(Z)
+Z=")IM SKSTEPLI                                                        "
+OK=WL(Z)
+Z="//SYSUDUMP DD SYSOUT=*                                              "
+OK=WL(Z)
+Z="//SYSPRINT DD SYSOUT=*                                              "
+OK=WL(Z)
+Z="//SYSUT1 DD DISP=SHR,DSN=DB2.DSNDBC.DSNDB01.SPT01.I0001.A001        "
+OK=WL(Z)
+Z="/*                                                                  "
+OK=WL(Z)
+
+RETURN

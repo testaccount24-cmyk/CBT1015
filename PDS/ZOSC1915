@@ -1,0 +1,5945 @@
+/* REXX */
+/*******************************************************************/
+/*                                                                 */
+/* ProgramNAME      : ZOSC1315                                     */
+/* AUSRUF           : Procedure  x=ZOSC1915(ssid,loc,ausw,obj)     */
+/* AUTHER           : ULRICH BRAEUER                               */
+/* FUNKTION         : AG : Build Statements (UTILITIES oder delete)*/
+/*                                                                 */
+/*******************************************************************/
+
+SIGNAL ON ERROR
+SIGNAL OFF FAILURE
+SIGNAL OFF ERROR
+
+PARSE SOURCE SRC.1  , /* ENVIRONMENT  (TSO)            */
+             SRC.2  , /* AUFRUF ALS (COMMAND)          */
+             SRC.3  , /* Program NAME (LUW97000)       */
+             SRC.4  , /* SYS00186 (TEMP FILE)          */
+             SRC.5  , /* AUFRUF AUS LIB (X.X.CLISTUDB) */
+             SRC.6  , /* ?                             */
+             SRC.7  , /* TSO                           */
+             SRC.8  , /* ISPF                          */
+             SRC.9  , /* ?                             */
+
+/* PROCLIB = Strip(sysdsname) */
+
+ENV        = "TSO"
+X          = MSG('OFF')
+USER       = USERID()
+SYSCATS    = "SYSCAT"
+SYSIBMS    = "SYSIBM"
+SYSIBMA    = "SYSIBMADM"
+SYSPROCA   = "SYSPROC"
+RECLEN     = 4096
+STMTLEN    = 4096
+TRACKS     = 60
+DSNRECON   = "N"
+SYSUID  = ""
+SYSPWD  = ""
+ADDRESS ISPEXEC 'VGET (DSNRECON) PROFILE'
+ADDRESS ISPEXEC 'VGET (TRACKS)   PROFILE'
+ADDRESS ISPEXEC 'VGET (RECLEN)   PROFILE'
+ADDRESS ISPEXEC 'VGET (STMTLEN)  PROFILE'
+ADDRESS ISPEXEC 'VGET (SYSIBMS)  PROFILE'
+ADDRESS ISPEXEC 'VGET (SYSCATS)  PROFILE'
+ADDRESS ISPEXEC 'VGET (SYSIBMA)  PROFILE'
+ADDRESS ISPEXEC 'VGET (SYSPROCA) PROFILE'
+ADDRESS ISPEXEC 'VGET (CURSCHEM) PROFILE'
+ADDRESS ISPEXEC 'VGET (SYSUID)   PROFILE'
+ADDRESS ISPEXEC 'VGET (SYSPWD)   PROFILE'
+
+if CURSCHEM = '' Then CURSCHEM = USERID()
+
+ssid        = arg(1)
+location    = arg(2)
+auswkz      = arg(3)
+lnr         = arg(4)
+tabnr       = arg(5)
+ISPFILE     = arg(6)
+eingabe     = arg(7)
+eingabe2    = arg(8)
+object1     = arg(9)
+object2     = arg(10)
+object3     = arg(11)
+object4     = arg(12)
+object5     = arg(13)
+EDIT        = arg(14)
+DB2Vers     = arg(15)
+DB2CatL     = arg(16)
+proclib     = arg(17)
+curnr       = arg(18)
+
+obj         = ""
+tablespace  = ""
+SELTAB         = "SELTB"tabnr
+Drop  Auto_Parse_Cols.
+
+DB2_SSID    = SSID
+
+CZEILE  = ""
+
+If Datatype(Curnr) = "NUM" Then do
+   tabnr = tabnr -1  /* Aktuelle Table in ZOSC1210 verwendet */
+   LUWTABLE       = "LUWTB" || tabnr
+   COLTAB         = "COLTB" || tabnr
+   TBCOL          = "TBCOL" || tabnr
+   address ispexec 'TBOPEN  'COLTAB
+   address ispexec 'TBTOP   'COLTAB
+   address ispexec 'TBSKIP  'COLTAB' NUMBER('curnr')'
+   address ispexec 'TBGET   'COLTAB
+   address ispexec 'TBCLOSE 'COLTAB
+ End
+
+
+parse value DB2Vers with DBENV 4 DBVers 6 DBRel 7 DBMod
+parse value Object1 with DB2_CREATOR1 '.' DB2_NAME1
+parse value Object2 with DB2_CREATOR2 '.' DB2_NAME2
+parse value Object3 with DB2_CREATOR3 '.' DB2_NAME3
+parse value Object4 with DB2_CREATOR4 '.' DB2_NAME4
+parse value Object5 with DB2_CREATOR5 '.' DB2_NAME5
+compatmode = "V"DBVers"R"DBRel"M"DBMod
+
+CURSQLID  = ""
+ADDRESS ISPEXEC 'VGET (CURSQLID) PROFILE'
+ADDRESS ISPEXEC 'VGET ('STRIP(SSID)'SQID) PROFILE'
+SSID_CURRENT_SQLID = value(STRIP(SSID)"SQID")
+If length(SSID_CURRENT_SQLID) > 0 then do
+   CURSQLID = SSID_CURRENT_SQLID
+ End
+IF CURSQLID   = "NONE" THEN CURSQLID = ""
+IF CURSQLID   = ""     THEN CURSQLID = ""
+
+eingabe3 = subword(eingabe2, 2)
+eingabe2 = Word(eingabe2, 1)
+if Substr(eingabe2, 1, 4) = "UTIL" Then eingabe2 = "UTIL"
+
+crlf           = "0a0d"x
+
+red   = '01'x                              /* Assign colors to       */
+blue  = '02'x                              /*   Attribute bytes      */
+green = '03'x                              /*   found in the data    */
+white = '04'x
+in1   = '05'x
+in2   = '06'x
+in3   = '07'x
+uid   = '08'x
+pwd   = '09'x
+endin = '3a'x
+keyw  = '3b'x
+keytab.0 = 5
+keytab.1 = in1
+keytab.2 = in2
+keytab.3 = in3
+keytab.4 = uid
+keytab.5 = pwd
+maxlines = 0                               /* set max number of lines*/
+dyndata  = ''                              /* initialize data        */
+cmddata  = ''                              /* initialize data        */
+curline = 1                                /* set current line #     */
+USEDOT  = "N"                              /* set current line #     */
+TSTYPE  = ""
+EXCLUDE_AUTO_PARSE = ""
+MAX_AUTO_PARSE = 0
+IC2Disk  = N
+
+
+Call Get_CFG_FILE
+
+RLIB = 'N'
+
+Select
+   when eingabe = "COPY"       ,
+      & eingabe2 = "ALL" Then Call Build_Include_all
+   when eingabe = "REORG"      ,
+      & eingabe2 = "ALL" Then Call Build_Include_all
+   when eingabe = "RUNSTATS"   ,
+      & eingabe2 = "ALL" Then Call Build_Include_all
+   when eingabe = "QUIESCE"    ,
+      & eingabe2 = "ALL" Then Call Build_Include_all
+   when eingabe = "REPCAT"     ,
+      & eingabe2 = "ALL" Then Call Build_Include_all
+   when eingabe = "UNLOAD"     ,
+      & eingabe2 = "ALL" Then Call Build_Include_all
+   when eingabe = "MODHIST"    ,
+      & eingabe2 = "ALL" Then Call Build_Include_all
+   when eingabe = "MODIFY" & eingabe2 = "HISTORY" ,
+      & eingabe3 = "ALL" Then Call Build_Include_all
+   when eingabe = "REPORT"     ,
+      & eingabe2 = "TABLESPACESET" ,
+      & eingabe3 = "ALL" Then Call Build_Include_all
+   when eingabe = "REPORT"     ,
+      & eingabe2 = "ALL" Then Call Build_Include_all
+   when eingabe = "REBUILD"    ,
+      & eingabe2 = "ALL" Then Call Build_Include_all
+   when eingabe = "RECOVER"    ,
+      & eingabe2 = "ALL" Then Call Build_Include_all
+   when eingabe   = "CHECK" ,
+      & eingabe2 = "ALL" Then Call Build_Include_all
+   when eingabe   = "REPAIR"  & eingabe2 = "LEVELID"  ,
+      & eingabe3 = "ALL" Then Call Build_Include_all
+   when eingabe   = "REPAIR"  ,
+      & eingabe2 = "ALL" Then Call Build_Include_all
+   when eingabe   = "COPYTOCOPY" ,
+      & eingabe2 = "ALL" Then Call Build_Include_all
+   when eingabe   = "BIND" & auswkz = 'PG' ,
+      & eingabe2 = "ALL" Then Call Build_IncludePG_all
+   when eingabe   = "BINDCOPY" & auswkz = 'PG' ,
+      & eingabe2 = "ALL" Then Call Build_IncludePG_all
+   when eingabe   = "REBIND" & auswkz = 'PG' ,
+      & eingabe2 = "ALL" Then Call Build_IncludePG_all
+   when eingabe   = "FREE" & auswkz = 'PG' ,
+      & eingabe2 = "ALL" Then Call Build_IncludePG_all
+   Otherwise NOP
+ End
+
+select
+  when eingabe   = "DROP" Then do
+       CALL Drop_Auswahl
+   End
+  when eingabe   = "DIS"   ,
+     | eingabe   = "START" ,
+     | eingabe   = "STOP"  ,
+     | eingabe   = "TERM"  ,
+     | eingabe   = "CAN"  Then do
+       CALL List_Display
+       EDIT   = 'NO'
+   End
+  when eingabe = 'RECOVER' & auswkz = 'THD' Then Do
+       CALL List_Display
+       EDIT   = 'NO'
+   End
+  when eingabe = 'DROPIP'  & auswkz = 'THD' Then Do
+       CALL DROP_IP
+       EDIT   = 'NO'
+   End
+  when eingabe = 'RESET' & auswkz = 'THD' Then Do
+       CALL List_Display
+       EDIT   = 'NO'
+   End
+  when eingabe   = "LC" Then do
+       CALL Listcat_Tablespace
+       EDIT   = 'NO'
+   End
+  when auswkz = 'DB' & eingabe   = "RUNSTATS" Then do
+       CALL Runstats_Tablespace
+       EDIT   = 'NO'
+   End
+  when auswkz = 'TS' & eingabe   = "RUNSTATS" Then do
+       CALL Runstats_Tablespace
+       EDIT   = 'NO'
+   End
+  when auswkz = 'PDDL' & eingabe   = "RUNSTATS" Then do
+       CALL Runstats_Tablespace
+       EDIT   = 'NO'
+   End
+  when auswkz = 'PDDL' & eingabe  = "REORG"    Then do
+       CALL Reorg_Tablespace
+       EDIT   = 'NO'
+   End
+  when auswkz = 'TB' & eingabe   = "RUNSTATS" Then do
+       CALL Runstats_Table
+       EDIT   = 'NO'
+   End
+  when auswkz = 'STF' & eingabe   = "RUNSTATS" Then do
+       CALL Runstats_Table
+       EDIT   = 'NO'
+   End
+  when auswkz = 'STP' & eingabe   = "RUNSTATS" Then do
+       CALL Runstats_Tablespace
+       EDIT   = 'NO'
+   End
+  when auswkz = 'IX' & eingabe   = "RUNSTATS" Then do
+       CALL Runstats_Index
+       EDIT   = 'NO'
+   End
+  when auswkz = 'DB' & eingabe    = "REORG"    Then do
+       CALL Reorg_Tablespace
+       EDIT   = 'NO'
+   End
+  when auswkz = 'TS' & eingabe    = "REORG"    Then do
+       CALL Reorg_Tablespace
+       EDIT   = 'NO'
+   End
+  when auswkz = 'TB' & eingabe    = "REORG"    Then do
+       CALL Reorg_Tablespace
+       EDIT   = 'NO'
+   End
+  when auswkz = 'DISTS' & eingabe = "REORG"    Then do
+       CALL Reorg_Tablespace
+       EDIT   = 'NO'
+   End
+  when auswkz = 'IX' & eingabe    = "REORG"    Then do
+       CALL Reorg_Index
+       EDIT   = 'NO'
+   End
+  when auswkz = 'IX' & eingabe    = "COPY"    Then do
+       CALL COPY_Index
+       EDIT   = 'NO'
+   End
+  when eingabe   = "REBUILD"    Then do
+       CALL Rebuild_index
+       EDIT   = 'NO'
+   End
+  when eingabe   = "COPY"       Then do
+       CALL COPY_Tablespace
+       EDIT   = 'NO'
+   End
+  when eingabe   = "REPORT" & eingabe2 = "TABLESPACESET"    Then do
+       CALL REPORT_Tablespaceset
+       EDIT   = 'NO'
+   End
+  when eingabe   = "REPORT"     Then do
+       CALL REPORT_Tablespace
+       EDIT   = 'NO'
+   End
+  when eingabe   = "DSNTEP2"    Then do
+       CALL JOB_DSNTEP2
+       EDIT   = 'NO'
+   End
+  when eingabe   = "DSNTEP4"    Then do
+       CALL JOB_DSNTEP4
+       EDIT   = 'NO'
+   End
+  when eingabe   = "DSNTIAD"    Then do
+       CALL JOB_DSNTIAD
+       EDIT   = 'NO'
+   End
+  when eingabe   = "DSNTIAUL"   Then do
+       CALL JOB_DSNTIAUL
+       EDIT   = 'NO'
+   End
+  when eingabe   = "DSNJU003"   Then do
+       CALL JOB_DSNJU003
+       EDIT   = 'NO'
+   End
+  when eingabe   = "DSNJU004"   Then do
+       CALL JOB_DSNJU004
+       EDIT   = 'NO'
+   End
+  when eingabe   = "DIAGNOSE"   Then do
+       CALL JOB_DIAGNOSE
+       EDIT   = 'NO'
+   End
+  when eingabe   = "DSN1SDMP"   Then do
+       CALL JOB_DSN1SDMP
+       EDIT   = 'NO'
+   End
+  when eingabe   = "DSN1LOGP"   Then do
+       daten = "N"
+       If auswkz  = "LGRX" Then do
+          daten   = "Y"
+          DBID    = DB2_Creator1
+          PSID    = DB2_NAME1
+          RBASTR  = DB2_creator2
+          RBAEND  = DB2_NAME2
+          LRSNSTR = DB2_creator3
+          LRSNEND = DB2_NAME3
+        End
+       CALL JOB_DSN1LOGP
+       EDIT   = 'NO'
+   End
+  when eingabe   = "DSN1PRNT"   Then do
+       If length(Object5) > 0 Then VSAMDS = Object5
+       Else                        VSAMDS = "......."
+       CALL JOB_DSN1PRNT
+       EDIT   = 'NO'
+   End
+   when auswkz = 'IC' & eingabe   = "DSN1COPY" Then do
+        CALL JOB_DSN1COPY_NR1
+        EDIT   = 'NO'
+    End
+   when auswkz = 'IX' & eingabe   = "CHECK"    Then do
+        CALL Check_Index
+        EDIT   = 'NO'
+    End
+   when auswkz = 'TS' & eingabe   = "CHECK"    Then do
+        CALL Check_Data
+        EDIT   = 'NO'
+    End
+   when auswkz = 'TB' & eingabe   = "CHECK"    Then do
+        CALL Check_Data
+        EDIT   = 'NO'
+    End
+   when auswkz = 'DB' & eingabe   = "UNLOAD"   Then do
+        CALL Unload_Tablespace
+        EDIT   = 'NO'
+    End
+   when auswkz = 'TS' & eingabe   = "UNLOAD"   Then do
+        CALL Unload_Tablespace
+        EDIT   = 'NO'
+    End
+   when auswkz = 'TB' & eingabe   = "UNLOAD"   ,
+      &                 eingabe2  = "ALL"      Then do
+        CALL Unload_Table_All
+        EDIT   = 'NO'
+    End
+   when auswkz = 'TB' & eingabe   = "UNLOAD"   Then do
+        CALL Unload_Table
+        EDIT   = 'NO'
+    End
+   when auswkz = 'IC' & eingabe   = "UNLOAD"   Then do
+        CALL Unload_Fromcopy
+        EDIT   = 'NO'
+    End
+   when eingabe   = "QUIESCE"  Then do
+        CALL QUIESCE_Tablespace
+        EDIT   = 'NO'
+    End
+   when eingabe   = "REPCAT"   Then do
+        CALL REPAIR_Catalog_Tablespace
+        EDIT   = 'NO'
+    End
+   when auswkz = 'IC' ,
+      & eingabe   = "RECOVER" ,
+      & eingabe2 = "ALL" Then Do
+        CALL Recover_Tablespace_All
+        EDIT   = 'NO'
+    End
+   when auswkz = 'DB' ,
+      & eingabe   = "RECOVER"  Then do
+        CALL Recover_Database
+        EDIT   = 'NO'
+    End
+   when eingabe   = "RECOVER"  Then do
+        CALL Recover_Tablespace
+        EDIT   = 'NO'
+    End
+   when eingabe   = "MODRECOVER"  Then do
+        CALL MODIFY_RECOVERY
+        EDIT   = 'NO'
+    End
+   when eingabe   = "MODIFY"  & eingabe2 = "RECOVERY"  Then do
+        CALL MODIFY_RECOVERY
+        EDIT   = 'NO'
+    End
+   when eingabe   = "MODHIST"  Then do
+        CALL MODIFY_HISTORY
+        EDIT   = 'NO'
+    End
+   when eingabe   = "MODIFY"  & eingabe2 = "HISTORY"   Then do
+        CALL MODIFY_HISTORY
+        EDIT   = 'NO'
+    End
+   when auswkz = 'PG' & eingabe   = "FREE"     Then do
+        CALL FREE_Package
+        EDIT   = 'NO'
+    End
+   when auswkz = 'PG' & eingabe   = "REBIND"   Then do
+        CALL Rebind_Package
+        EDIT   = 'NO'
+    End
+   when auswkz = 'PG' & eingabe   = "BIND"   Then do
+        CALL Bind_Package
+        EDIT   = 'NO'
+    End
+   when auswkz = 'PG' & eingabe   = "BINDCOPY"  Then do
+        CALL Bind_Package
+        EDIT   = 'NO'
+    End
+   when auswkz = 'PL' & eingabe   = "REBIND"   Then do
+        CALL Rebind_Plan
+        EDIT   = 'NO'
+    End
+   when auswkz = 'PL' & eingabe   = "BIND"   Then do
+        CALL bind_Plan
+        EDIT   = 'NO'
+    End
+   when auswkz = 'DB' & eingabe   = "GEN"   Then do
+        CALL GEN_DDL
+        EDIT   = 'NO'
+    End
+   when auswkz = 'SC' & eingabe   = "GEN"   Then do
+        CALL GEN_DDL
+        EDIT   = 'NO'
+    End
+   when eingabe   = "STOSPACE" Then do
+        CALL Stospace
+        EDIT   = 'NO'
+    End
+   when eingabe   = "MERGECOPY"  Then do
+        CALL Mergecopy_Tablespace
+        EDIT   = 'NO'
+    End
+   when eingabe   = "COPYTOCOPY"  Then do
+        CALL CopyToCopy_Tablespace
+        EDIT   = 'NO'
+    End
+   when eingabe   = "ICINFO"      Then do
+        CALL ImageCopy_Info
+        EDIT   = 'NO'
+    End
+   when eingabe   = "REPAIR"  & eingabe2 = "LEVELID"   Then do
+        CALL Repair_Levelid
+        EDIT   = 'NO'
+    End
+   when eingabe   = "REPAIR"                 Then do
+        CALL Repair
+        EDIT   = 'NO'
+    End
+  when eingabe = 'GRANT'   & auswkz = 'TB'   Then do
+       CALL GRANT_Table
+   End
+  when eingabe = 'GRANT'   & auswkz = 'CO'   Then do
+       CALL GRANT_Column
+   End
+  when eingabe = 'GRANT'   & auswkz = 'TBA'  Then do
+       CALL GRANT_Table
+   End
+  when eingabe = 'GRANT'   & auswkz = 'VW'   Then do
+       CALL GRANT_Table
+   End
+  when eingabe = 'GRANT'   & auswkz = 'MQT'  Then do
+       CALL GRANT_Table
+   End
+  when eingabe = 'GRANT'   & auswkz = 'TS'   Then do
+       Use_OF  = "TABLESPACE"
+       CALL GRANT_Use
+   End
+  when eingabe = 'GRANT'   & auswkz = 'BP'   Then do
+       Use_OF  = "BUFFERPOOL"
+       CALL GRANT_Use
+   End
+  when eingabe = 'GRANT'   & auswkz = 'SG'   Then do
+       Use_OF  = "STOGROUP"
+       CALL GRANT_Use
+   End
+  when eingabe = 'GRANT'   & auswkz = 'JAR'  Then do
+       Use_OF  = "JAR"
+       CALL GRANT_Use
+   End
+  when eingabe = 'GRANT'   & auswkz = 'JARC' Then do
+       Use_OF  = "JAR"
+       CALL GRANT_Use
+   End
+  when eingabe = 'GRANT'   & auswkz = 'PG'   Then do
+       CALL GRANT_Package
+   End
+  when eingabe = 'GRANT'   & auswkz = 'PL'   Then do
+       CALL GRANT_Plan
+   End
+  when eingabe = 'GRANT'   & auswkz = 'DB'   Then do
+       CALL GRANT_DB
+   End
+  when eingabe = 'GRANT'   & auswkz = 'UA'   Then do
+       CALL GRANT_SYS
+   End
+  when eingabe = 'GRANT'   & auswkz = 'SE'   Then do
+       CALL GRANT_SEQUENCE
+   End
+  when eingabe = 'GRANT'   & auswkz = 'RT' & object3 = 'P' Then do
+       OBJTYPE = "PROCEDURE "
+       Call Grant_Routine
+   End
+  when eingabe = 'GRANT'   & auswkz = 'SCA' Then do
+       Call Grant_Schema
+   End
+  when eingabe = 'GRANT'   & auswkz = 'SC'  Then do
+       Call Grant_Schema
+   End
+  when eingabe = 'GRANT'   & auswkz = 'RT' & object3 = 'F' Then do
+       OBJTYPE = "SPECIFIC FUNCTION "
+       Call Grant_Routine
+   End
+  when eingabe = 'GRANT'   & auswkz = 'CID'  Then do
+       CALL GRANT_Collection
+   End
+  when eingabe = 'GRANT'   & auswkz = 'RA'  Then do
+       select
+         When Object1 = "C" Then Do
+              CALL GRANT_Collection
+          End
+         When Object1 = "J" Then Do
+              Object1 = ""
+              Use_OF  = "JAR"
+              CALL GRANT_Use
+          End
+         When Object1 = "B" Then Do
+              Object1 = ""
+              Use_OF  = "BUFFERPOOL"
+              CALL GRANT_Use
+          End
+         When Object1 = "S" Then Do
+              Object1 = ""
+              Use_OF  = "STOGROUP"
+              CALL GRANT_Use
+          End
+         When Object1 = "R" Then Do
+              Object1 = ""
+              Use_OF  = "TABLESPACE"
+              CALL GRANT_Use
+          End
+         When Object1 = "T" Then Do
+              Object1 = ""
+              Use_OF  = "TABLESPACE"
+              CALL GRANT_Use
+          End
+         When Object1 = "D" Then Do
+              Object1 = ""
+              USE_OF  = "TYPE"
+              CALL GRANT_Use
+          End
+         Otherwise DO
+              say object1
+              NOP
+          End
+        End
+   End
+  when eingabe = 'LOCK'    & auswkz = 'TB' Then do
+       sl.0 = 3
+       sl.1 = 'LOCK TABLE '
+       sl.2 = object1
+       sl.3 = 'IN EXCLUSIVE MODE  ; '
+   End
+  when eingabe = 'GRANT'   & auswkz = 'VAR'  Then do
+       Call Grant_GV
+   End
+  when eingabe = 'REVOKE'  & auswkz = 'VARA'  Then do
+       Call REVOKE_GV
+   End
+  when eingabe = 'REVOKE'  & auswkz = 'TBA'  Then do
+       CALL Revoke_Table
+   End
+  when eingabe = 'REVOKE'  ,
+     & (auswkz = 'CO' | auswkz = 'COA' ) Then Do
+       CALL Revoke_COlumn
+   End
+  when eingabe = 'REVOKE'    ,
+     & auswkz  = 'RA'        ,
+     & Substr(Object1, 1, 1) = 'C' Then do
+       CALL REVOKE_Collection
+   End
+  when eingabe = 'REVOKE'  & auswkz = 'RA'   Then do
+       Use_OF  = "TABLESPACE"
+       CALL REVOKE_Use
+   End
+  when eingabe = 'REVOKE'  & auswkz = 'BP'   Then do
+       Use_OF  = "BUFFERPOOL"
+       CALL REVOKE_Use
+   End
+  when eingabe = 'REVOKE'  & auswkz = 'SG'   Then do
+       Use_OF  = "STOGROUP"
+       CALL REVOKE_Use
+   End
+  when eingabe = 'REVOKE'  & auswkz = 'JAR'  Then do
+       Use_OF  = "JAR"
+       CALL REVOKE_Use
+   End
+  when eingabe = 'REVOKE'  & auswkz = 'JARC' Then do
+       Use_OF  = "JAR"
+       CALL REVOKE_Use
+   End
+  when eingabe = 'REVOKE'  & auswkz = 'PGA'   Then do
+       CALL REVOKE_Package
+   End
+  when eingabe = 'REVOKE'  & auswkz = 'PLA'   Then do
+       CALL REVOKE_Plan
+   End
+  when eingabe = 'REVOKE'  & auswkz = 'RTA' Then do
+       Call Revoke_Routine
+   End
+  when eingabe = 'REVOKE'  & auswkz = 'SCA' Then do
+       Call REVOKE_Schema
+   End
+  when eingabe = 'REVOKE'  & auswkz = 'SEA' Then do
+       Call REVOKE_SEQUENCE
+   End
+  when eingabe = 'REVOKE'  & auswkz = 'DBA'  Then do
+       CALL REVOKE_DB
+   End
+  when eingabe = 'REVOKE'  & auswkz = 'UA'   Then do
+       CALL REVOKE_SYS
+   End
+  when auswkz = 'TB' & eingabe   = "DCLGEN"   Then do
+       CALL TABLE_DCLGEN
+       EDIT   = 'YES'
+    End
+  Otherwise do
+       anzcols = 0
+   End
+ End
+
+If USEDOT = "Y" Then do
+   address ispexec 'TBCLOSE 'TSLISTE
+ End
+
+if anzcols = 0 THEN RETURN 12
+if EDIT = "YES" THEN Call Edit_Stmt  /* Anzeige Erwuenscht */
+
+
+Return Stmt
+
+Check_data:
+
+db  = DB2_CREATOR1
+TS  = DB2_NAME1
+TBC = DB2_CREATOR2
+TBN = DB2_NAME2
+LOBTYPE = db2_creator5
+select
+   when LOBTYPE = "O" Then TSTYPE = 'LOB'
+   when LOBTYPE = "P" Then TSTYPE = 'LOB'
+   otherwise               TSTYPE = 'DATA'
+ End
+
+If Length(TBN) > 0 then LTB = "Y"
+If Length(TBN) > 0 then LTB = "N"
+
+MEM   = "CHKDATA"
+SKEL  = "SKCHKDT1"
+
+Call Utility_Execute
+
+RETURN
+
+Runstats_Tablespace:
+
+
+db = DB2_CREATOR1
+TS = DB2_NAME1
+
+select
+ when AUSWKZ = "STP"  Then do
+      DB = DB2_CREATOR1
+      TS = DB2_NAME1
+      SKEL  = "SKRSTS3"
+  End
+ Otherwise Do
+      DB = DB2_CREATOR1
+      TS = DB2_NAME1
+      TB = DB2_CREATOR2 || "." || DB2_NAME2
+      SKEL  = "SKRSTS1"
+    End
+ END
+
+MEM   = "RSTS"
+
+Call Utility_Execute
+
+RETURN
+
+Runstats_Table:
+
+USESTF         = "N"
+DETSTATS       = "N"
+INVALCH        = "N"
+
+area.0  = 8
+area.1  = white"  Runstats Tablespace       "  Object1
+area.2  = white"           Table            "  Object2
+area.3  = white"  "
+area.4  = white"  create Detail Statistics from Statsfeedback ",
+               " Tabe ? "
+area.5  = white"                                             "
+area.6  = white""keyw"Detail Stats Y/N "IN1 || DETSTATS ||  endin
+area.7  = endin
+area.8  = endin
+
+if auswkz = 'STF' Then do
+   Call Anzeige_Dyn_Panel
+ End
+
+If INVALDATECACHE_Val = "Y" Then INVALCH = "Y"
+
+OAUSWKZ = AUSWKZ
+If Detail_Val = "Y" Then Do
+   AUSWKZ         = "STF"
+   /*tabnr = tabnr +1 */  /* Aktuelle Table in ZOSC1210 verwendet */
+   LUWTABLE       = "LUWTB"tabnr
+   LUWTAB         = "LUWTB"tabnr
+   COLTAB         = "COLTB"tabnr
+   COLLIST        = "COLLI"tabnr
+   /* address ispexec 'TBOPEN  'COLTAB */
+   address ispexec  'TBOPEN  'COLTAB
+   ADDRESS ISPEXEC  'TBCLOSE 'COLLIST
+   ADDRESS ISPEXEC  'TBERASE 'COLLIST
+   ADDRESS ISPEXEC  'TBOPEN  'COLLIST
+   IF RC <> 0 THEN Do
+      ADDRESS ISPEXEC 'TBCREATE 'COLLIST' NAMES(DBNAME, TSNAME,' ,
+                                               'TB,' ,
+                                               'RSANW)'
+      If rc <> 0 Then DO
+         say 'TBCREATE 'COLLIST "RC="RC
+         say "ZEDSMSG="ZEDSMSG
+         say "ZERRLM="ZERRLM
+         say "ZERRMSG="ZERRMSG
+         say "ZERRSM="ZERRSM
+       End
+    End
+
+   counter = 0
+
+   If USEDOT = "N" Then do
+      SAUSWKZ        = AUSWKZ
+      object         = ""
+      object2        = SPACE(DB2_CREATOR2 "." DB2_NAME2, 0)
+      call Lesen_daten
+      Call Runstats_Table_Detail_Stats
+    End
+   Else Do li = 1 to ColListe.0
+      counter = 0
+      SAUSWKZ        = AUSWKZ
+      TB = Space(Word(ColListe.li, 1) "." Word(Colliste.li, 2), 0)
+      object  = TB
+      object2 = SPACE(Word(ColListe.li, 4) "." Word(Colliste.li, 5), 0)
+      call Lesen_daten
+      Call Runstats_Table_Detail_Stats
+    End
+   address ispexec 'TBCLOSE 'COLLIST
+   address ispexec 'TBOPEN  'COLLIST
+ End
+
+AUSWKZ = OAUSWKZ /* AUSWKZ wieder auf den Originalzustand setzen */
+
+If DB2_CREATOR3 = 'X' Then Type = 'LOB'
+
+select
+ when AUSWKZ = "STF"  Then do
+      TB = DB2_CREATOR1 || "." || DB2_NAME1
+      DB = DB2_CREATOR2
+      TS = DB2_NAME2
+      SKEL  = "SKRSTS2"
+  End
+ Otherwise Do
+      DB = DB2_CREATOR1
+      TS = DB2_NAME1
+      TB = DB2_CREATOR2 || "." || DB2_NAME2
+      SKEL  = "SKRSTS2"
+    End
+ END
+
+MEM   = "RSTS"
+
+Call Utility_Execute
+
+address ispexec 'TBCLOSE 'COLLIST
+
+RETURN
+
+Runstats_Table_Detail_Stats:
+
+address ispexec 'TBOPEN  'COLTAB
+address ispexec 'TBTOP   'COLTAB
+address ispexec 'TBSKIP  'COLTAB
+
+Do while RC = 0
+   Call Auto_Parse
+
+   TYPE = WORD(TYPE, 1)
+   TB   = Space(TBCREATOR "." TBNAME, 0)
+
+   If Strip(COLNAME) = "" THEN TYPE = " "
+   Select
+     WHEN  TYPE = "F" Then do
+           RSANW = "COLGROUP("COLNAME")"
+           ADDRESS ISPEXEC 'TBADD   'COLLIST
+           RSANW = "FREQVAL COUNT 10"
+           ADDRESS ISPEXEC 'TBADD   'COLLIST
+      End
+     WHEN  TYPE = "H" Then do
+           RSANW = "COLGROUP("COLNAME")"
+           ADDRESS ISPEXEC 'TBADD   'COLLIST
+           RSANW = "HISTOGRAM "
+           ADDRESS ISPEXEC 'TBADD   'COLLIST
+      End
+     WHEN  TYPE = "C" Then Do
+           counter = counter + 1
+           IF NUMCOLUMNS = 1 Then Do
+              If counter = 1 THEN  RSANW = "COLUMN("COLNAME")"
+              ELSE                 RSANW = "COLGROUP("COLNAME")"
+              ADDRESS ISPEXEC 'TBADD   'COLLIST
+            END
+            Else Do
+
+              tabnr     = tabnr + 1
+              oAUSWKZ   = AUSWKZ
+              oobject   = object
+              oObject2  = Object2
+              AUSWKZ    = "STFCOLS"
+              object    = "*."
+              Do COLIN = 1 to NUMCOLUMNS
+                 Start = colin * 2 - 1
+                 object = object||c2d(Substr(COLGROUPCOLNO,start,2))
+                 If COLIN <> NUMCOLUMNS Then object = object||","
+               End
+              Object2   = TB
+              Call Lesen_daten
+
+              ADDRESS ISPEXEC 'TBADD   'COLLIST
+              Do COLIN = 1 to Words(DDLTEXT)
+                 IF COLIN = 1  Then Do
+                    RSANW = "COLGROUP("WORD(DDLTEXT, COLIN)
+                  End
+                 Else Do
+                    RSANW = "        ,"WORD(DDLTEXT, COLIN)
+                  End
+                 ADDRESS ISPEXEC 'TBADD   'COLLIST
+               End
+              RSANW = "        )"
+              ADDRESS ISPEXEC 'TBADD   'COLLIST
+              AUSWKZ   = oAUSWKZ
+              object   = oobject
+              Object2  = oObject2
+              tabnr     = tabnr - 1
+            END
+      End
+     Otherwise do
+           ADDRESS ISPEXEC 'TBSKIP  'COLTAB
+           ITERATE
+      End
+     End
+
+    RSANW = " "
+    ADDRESS ISPEXEC 'TBADD   'COLLIST
+    USESTF         = "Y"
+    ADDRESS ISPEXEC 'TBSKIP  'COLTAB
+ End
+
+address ispexec 'TBCLOSE 'COLTAB
+
+Return
+
+Unload_Tablespace:
+
+db = DB2_CREATOR1
+TS = DB2_NAME1
+
+MEM   = "UNLTSDEL"
+SKEL  = "SKUNLTS"
+
+Call Utility_Execute
+
+RETURN
+
+QUIESCE_Tablespace:
+
+db = DB2_CREATOR1
+TS = DB2_NAME1
+
+MEM   = "UNLTSDEL"
+SKEL  = "SKQUIES1"
+
+Call Utility_Execute
+
+RETURN
+
+REPAIR_Catalog_Tablespace:
+
+db   = DB2_CREATOR1
+TS   = DB2_NAME1
+type = DB2_CREATOR2
+If eingabe2 <> "ALL" ,
+ & ( type = 'O'  ,
+   | type = 'P')  Then do   /* XML oder LOB nicht erlaubt */
+ Return
+ End
+
+
+MEM   = "TSREPCAT"
+SKEL  = "SKREPCAT"
+
+Call Utility_Execute
+
+RETURN
+
+Unload_Table:
+
+AUSWKZ         = "CO"
+object         = ""
+object2        = Space(DB2_CREATOR1 '.' DB2_NAME1, 0)
+tabnr = tabnr +1  /* Aktuelle Table in ZOSC1210 verwendet */
+LUWTABLE       = "LUWTB"tabnr
+LUWTAB         = "LUWTB"tabnr
+COLTAB         = "COLTB"tabnr
+COLLIST        = "COLLI"tabnr
+TBCOL          = "TBCOL"tabnr
+call Lesen_daten
+/* address ispexec 'TBOPEN  'COLTAB */
+address ispexec  'TBOPEN  'COLTAB
+ADDRESS ISPEXEC  'TBCLOSE 'COLLIST
+ADDRESS ISPEXEC  'TBERASE 'COLLIST
+ADDRESS ISPEXEC  'TBOPEN  'COLLIST
+IF RC <> 0 THEN Do
+   ADDRESS ISPEXEC 'TBCREATE 'COLLIST' NAMES(COLNO, COLNAM, COLTYPE)'
+   If rc <> 0 Then DO
+      say 'TBCREATE 'COLLIST "RC="RC
+      say "ZEDSMSG="ZEDSMSG
+      say "ZERRLM="ZERRLM
+      say "ZERRMSG="ZERRMSG
+      say "ZERRSM="ZERRSM
+    End
+ End
+address ispexec 'TBOPEN  'COLTAB
+address ispexec 'TBTOP   'COLTAB
+address ispexec 'TBSKIP  'COLTAB
+anz         = 0
+drop lobtab.
+lobtab.0 = 0
+
+Do while RC = 0
+   Call Auto_Parse
+   COLNAM  = NAME
+
+   select
+     when COLTYPE = 'TIMESTMP' THEN COLTYPE = "TIMESTAMP EXTERNAL "
+     when COLTYPE = 'TIMESTZ'  THEN COLTYPE = "TIMESTAMP EXTERNAL "
+     when COLTYPE = 'DATE'     THEN COLTYPE = "DATE EXTERNAL "
+     when COLTYPE = 'TIME'     THEN COLTYPE = "TIME EXTERNAL "
+     when COLTYPE = 'ROWID' ,
+        & Substr(COLNAM, 1, 23)  = 'DB2_GENERATED_ROWID_FOR' Then do
+          address ispexec 'TBSKIP  'COLTAB
+          Iterate
+      End
+     otherwise nop
+    end
+
+   If COLTYPE = 'BLOB' ,
+    | COLTYPE = 'CLOB' ,
+    | COLTYPE = 'XML'      THEN DO
+      SPAN    = "Y"
+      lobtab.0 = lobtab.0 + 1
+      lobi     = lobtab.0
+      lobtab.lobi = colno + 999 COLNAM COLTYPE
+    End
+   else do
+      anz      = anz + 1
+      if anz   = 1 Then COLNAM = "( " || COLNAM
+      ELSE              COLNAM = ", " || COLNAM
+      ADDRESS ISPEXEC 'TBADD   'COLLIST
+   end
+   address ispexec 'TBSKIP  'COLTAB
+ End
+
+do lobi = 1 to lobtab.0
+   parse value lobtab.lobi with COLNO      ,
+                                COLNAM     ,
+                                COLTYPE    ,
+                                ""
+   anz      = anz + 1
+   if anz   = 1 Then COLNAM = "( " || COLNAM
+   ELSE              COLNAM = ", " || COLNAM
+   ADDRESS ISPEXEC 'TBADD   'COLLIST
+ end
+
+colno   = 99999
+colnam  = ")"
+coltype = " "
+ADDRESS ISPEXEC 'TBADD   'COLLIST
+
+address ispexec 'TBCLOSE 'COLTAB
+address ispexec 'TBCLOSE 'COLLIST
+address ispexec 'TBOPEN  'COLLIST
+
+
+tbc = DB2_CREATOR1
+tbn = DB2_NAME1
+db  = DB2_CREATOR2
+TS  = DB2_NAME2
+
+IF EXUTIL <> "NO" Then do
+   MEM   = "UNLTBDEL"
+   SKEL  = "SKUNLTB"
+   Call Utility_Execute
+ End
+address ispexec 'TBCLOSE 'COLLIST
+
+RETURN
+
+Unload_Table_All:
+
+EXUTIL = "NO"
+MEM   = "UNLTBALL"
+SKEL  = "SKUNLTB"
+
+OK    =  LISTDSI(ISPFILE "FILE")
+If SYSDSNAME = "" Then do
+   ADDRESS "TSO" "ALLOC F(ISPFILE) DA('"ISPFILE"') SHR"
+ End
+CLMEM = Strip(ISPFILE) || "(" || MEM || ")"
+ADDRESS ISPEXEC 'FTOPEN'
+If rc > 4 Then Do
+  Say 'FTOPEN  RC='RC
+  Say 'ZERRSM = 'ZERRSM
+  Say 'ZERRLM = 'ZERRLM
+ End
+CZEILE  = ""
+tabnr = tabnr -1          /* Aktuelle Table in ZOSX1210 verwendet */
+LUWTABLE       = "LUWTB"tabnr
+COLTAB         = "COLTB"tabnr
+TBCOL          = "TBCOL"tabnr
+address ispexec 'TBOPEN  'COLTAB
+address ispexec 'TBTOP   'COLTAB
+address ispexec 'TBSKIP  'COLTAB
+DROP AUSWLISTE.
+AUSWLISTE.0 = 0
+Do while RC = 0
+   Call Auto_Parse
+   IF type =  'T' Then Do
+      AUSWLISTE.0    = AUSWLISTE.0 + 1
+      IAL            = AUSWLISTE.0
+      AUSWLISTE.IAL  = cr nm db ts
+      AUSWLISTE.IAL  = Creator NAME DBNAME TSNAME
+    End
+   address ispexec 'TBSKIP  'COLTAB
+ End
+address ispexec 'TBCLOSE 'COLTAB
+
+do ial = 1 to AUSWLISTE.0
+   parse value AUSWLISTE.ial with DB2_CREATOR1 DB2_NAME1    ,
+                                  DB2_CREATOR2 DB2_NAME2    .
+   Call Unload_Table
+   tabnr = tabnr -1
+
+   ADDRESS ISPEXEC 'FTINCL 'SKEL
+   If rc > 4 Then Do
+      Say 'FTINCL   '
+      Say 'ZERRSM = 'ZERRSM
+      Say 'ZERRLM = 'ZERRLM
+      LEAVE
+     End
+
+ End
+ADDRESS ISPEXEC "FTCLOSE NAME(" || MEM || ") LIBRARY(ISPFILE)"
+ADDRESS ISPEXEC "EDIT DATASET('"CLMEM"') PANEL(ISREFR01)"
+
+
+return
+
+
+Unload_Fromcopy:
+
+db    = DB2_CREATOR1
+ts    = DB2_NAME1
+ICDSN = Object2
+
+MEM   = "UNLICDSN"
+SKEL  = "SKUNLIC"
+
+Call Utility_Execute
+
+RETURN
+
+Runstats_Index:
+
+DBNAME  = DB2_CREATOR1
+IXSPACE = DB2_NAME1
+
+MEM   = "RSIX"
+SKEL  = "SKRSIX1"
+
+Call Utility_Execute
+
+RETURN
+
+Rebuild_index:
+
+If AUSWKZ = "DB" Then AUSWKZ = "TS"
+If AUSWKZ = "TB" Then AUSWKZ = "TS"
+IXCR    = DB2_CREATOR1
+IXNM    = DB2_NAME1
+OBJECT  = Object1
+
+MEM   = "REBIX"
+SKEL  = "SKREBIX1"
+
+Call Utility_Execute
+
+RETURN
+
+Check_Index:
+
+IXCR    = DB2_CREATOR1
+IXNM    = DB2_NAME1
+OBJECT  = Object1
+
+MEM   = "CHKIX"
+SKEL  = "SKCHKIX1"
+
+Call Utility_Execute
+
+RETURN
+
+COPY_Tablespace:
+
+db      = DB2_CREATOR1
+ts      = DB2_NAME1
+OBJECT  = Object1
+
+area.0  = 4
+area.1  = white"               ImageCopy Tablespace          "
+area.2  = white"                                             "
+area.3  = white""keyw"IC2Disk    "IN1 || IC2Disk  || endin ,
+          white"Image Copy to Disk or Tape  "
+area.4  = endin
+
+EnterBack = "Y"
+Call Anzeige_Dyn_Panel
+
+IC2Disk     = IC2Disk_Val
+
+MEM   = "COPYTS"
+SKEL  = "SKCPYTS1"
+
+Call Utility_Execute
+
+RETURN
+
+COPY_Index:
+
+db      = DB2_CREATOR1
+is      = DB2_NAME1
+OBJECT  = Object1
+
+area.0  = 4
+area.1  = white"               ImageCopy Tablespace          "
+area.2  = white"                                             "
+area.3  = white""keyw"IC2Disk    "IN1 || IC2Disk  || endin ,
+          white"Image Copy to Disk or Tape  "
+area.4  = endin
+
+EnterBack = "Y"
+
+Call Anzeige_Dyn_Panel
+
+IC2Disk     = IC2Disk_Val
+MEM   = "COPYIY"
+SKEL  = "SKCPYIX1"
+
+Call Utility_Execute
+
+RETURN
+
+Mergecopy_Tablespace:
+
+db      = DB2_CREATOR1
+ts      = DB2_NAME1
+OBJECT  = Object1
+
+MEM   = "MCOPYTS"
+SKEL  = "SKCPYMER"
+
+Call Utility_Execute
+
+RETURN
+
+CopyToCopy_Tablespace:
+
+db      = DB2_CREATOR1
+ts      = DB2_NAME1
+ICDSN   = DB2_NAME2
+ICDSN   = Object2
+
+MEM   = "MCOPYTS"
+SKEL  = "SKCPYCPY"
+
+Call Utility_Execute
+
+RETURN
+
+REPORT_TablespaceSET:
+
+db      = DB2_CREATOR1
+ts      = DB2_NAME1
+OBJECT  = Object1
+
+MEM   = "REPORTTS"
+SKEL  = "SKREPTS2"
+
+Call Utility_Execute
+
+RETURN
+
+REPORT_Tablespace:
+
+db      = DB2_CREATOR1
+ts      = DB2_NAME1
+OBJECT  = Object1
+
+MEM   = "REPORTTS"
+SKEL  = "SKREPTS1"
+If EINGABE2 = 'SET' Then SKEL  = "SKREPTS2"
+
+Call Utility_Execute
+
+RETURN
+
+MODIFY_RECOVERY:
+
+db      = DB2_CREATOR1
+ts      = DB2_NAME1
+OBJECT  = Object1
+
+MEM   = "MODREC"
+SKEL  = "SKMODREC"
+If eingabe3 = "ALL" Then SKEL = "SKMODALL"
+
+Call Utility_Execute
+
+RETURN
+
+MODIFY_HISTORY:
+
+db      = DB2_CREATOR1
+ts      = DB2_NAME1
+OBJECT  = Object1
+
+DELAG   = 10
+#HISDAT = '20100131'
+
+MEM   = "MODREC"
+SKEL  = "SKMODHIS"
+
+Call Utility_Execute
+
+RETURN
+
+Repair:
+
+db       = DB2_CREATOR1
+ts       = DB2_NAME1
+Creator  = DB2_CREATOR1
+Name     = DB2_NAME1
+Part     = DB2_CREATOR2
+If Part  = "" Then Part = 0
+
+Select
+  when auswkz = "TS"   THEN AKZ = "TABLESPACE "
+  when auswkz = "TB"   THEN AKZ = "TABLESPACE "
+  when auswkz = "TP"   THEN AKZ = "TABLEPART  "
+  when auswkz = "IX"   THEN AKZ = "INDEX      "
+  when auswkz = "IP"   THEN AKZ = "INDEXPART  "
+  when auswkz = "IS"   THEN AKZ = "INDEXSPACE "
+  Otherwise                 AKZ = "           "
+ End
+
+TYPE = "TABLESPACE "
+If Substr(AKZ, 1, 1)    = "T" Then TYPE = "TABLESPACE "
+If Substr(AKZ, 1, 1)    = "I" Then TYPE = "INDEX "
+
+SETTYPE     = ""
+
+NO1         = Left("N", 1 )
+NO2         = Left("N", 1 )
+NO3         = Left("N", 1 )
+NO4         = Left("N", 1 )
+NO5         = Left("N", 1 )
+NO6         = Left("N", 1 )
+NO7         = Left("N", 1 )
+NO8         = Left("N", 1 )
+NO9         = Left("N", 1 )
+
+NO10        = Left("N", 1 )
+NO11        = Left("N", 1 )
+NO12        = Left("N", 1 )
+NO13        = Left("N", 1 )
+NO14        = Left("N", 1 )
+NO15        = Left("N", 1 )
+NO16        = Left("N", 1 )
+NO17        = Left("N", 1 )
+NO18        = Left("N", 1 )
+NO19        = Left("N", 1 )
+NO29        = Left("N", 1 )
+
+NO20        = Left("N", 1 )
+NO21        = Left("N", 1 )
+NO22        = Left("N", 1 )
+NO23        = Left("N", 1 )
+NO24        = Left("N", 1 )
+NO25        = Left("N", 1 )
+NO26        = Left("N", 1 )
+NO27        = Left("N", 1 )
+NO28        = Left("N", 1 )
+NO29        = Left("N", 1 )
+NO29        = Left("N", 1 )
+
+area.0  = 20
+area.1  = white"REPAIR : "AKZ space(db "." ts, 0) "Part "Part
+area.2  = white"                                              "
+area.3  = white"       "keyw"Levelid            "in1 || NO1|| endin
+area.4  = white"       "keyw"Versions           "in1 || NO2|| endin
+area.5  = white"       "keyw"Catalog            "in1 || NO3|| endin
+area.6  = white"       "keyw"InsertVersionPages "In1 || NO4|| endin
+area.7  = white"       "keyw"SetCurrentVersion  "in1 || NO5|| endin
+area.8  =      "  SET "TYPE
+If Substr(AKZ, 1, 1)    = "T" Then do
+   area.9  = white"       "keyw"NOCOPYPEND         "in1 || NO10 || endin
+   area.10 = white"       "keyw"NORCVRPEND         "in1 || NO11 || endin
+   area.11 = white"       "keyw"NOCHECKPEND        "in1 || NO12 || endin
+   area.12 = white"       "keyw"NOAUXWARN          "in1 || NO13 || endin
+   area.13 = white"       "keyw"NOAUXCHKP          "in1 || NO14 || endin
+   area.14 = white"       "keyw"NOAREORPENDSTAR    "in1 || NO15 || endin
+   area.15 = white"       "keyw"NOAREORPEND        "in1 || NO16 || endin
+   area.16 = white"       "keyw"PRO                "in1 || NO17 || endin
+   area.17 = white"       "keyw"NOPRO              "in1 || NO18 || endin
+ End
+Else Do
+   area.9  = white"       "keyw"NOCOPYPEND         "in1 || NO20 || endin
+   area.10 = white"       "keyw"NORCVRPEND         "in1 || NO21 || endin
+   area.11 = white"       "keyw"NORBDPEND          "in1 || NO22 || endin
+   area.12 = white"       "keyw"NOCHECKPEND        "in1 || NO23 || endin
+   area.13 = white"       "keyw"NOAREORPENDSTAR    "in1 || NO24 || endin
+   area.14 = white"       "keyw"NOAREORPEND        "in1 || NO25 || endin
+   area.15 = white"       "keyw"RBDPEND            "in1 || NO26 || endin
+   area.16 = white"       "keyw"PSRBDPEND          "in1 || NO27 || endin
+   area.17 =      "                                             "
+ End
+area.18 =      "                                             "
+area.19 =      "                                             "
+area.20 =      "                                             "
+
+Call Anzeige_Dyn_Panel
+
+If Levelid_VAL             <> NO1 Then do
+   LEVEL = "Y"
+ End
+
+If Versions_Val            <> NO2 Then do
+   VERS  = "Y"
+ End
+
+If Catalog_Val             <> NO3 Then do
+   CAT   = "Y"
+ End
+
+If InsertVersionPages_Val  <> NO4 Then do
+   IVerP = "Y"
+ End
+
+If SetCurrentVersion_Val   <> NO5 Then do
+   CurVers = "Y"
+ End
+
+
+If Substr(AKZ, 1, 1)    = "T" Then do
+  TYPE     = "TABLESPACE "
+  Select
+    When NOCOPYPEND_Val      <> NO10 Then SETTYPE  = "NOCOPYPEND"
+    When NORCVRPEND_Val      <> NO11 Then SETTYPE  = "NORCVRPEND"
+    When NOCHECKPEND_Val     <> NO12 Then SETTYPE  = "NOCHECKPEND"
+    When NOAUXWARN_Val       <> NO13 Then SETTYPE  = "NOAUXWARN"
+    When NOAUXCHKP_Val       <> NO14 Then SETTYPE  = "NOAUXCHKP"
+    When NOAREORPENDSTAR_Val <> NO15 Then SETTYPE  = "NOAREORPENDSTAR"
+    When NOAREORPEND_Val     <> NO16 Then SETTYPE  = "NOAREORPEND"
+    When PRO_Val             <> NO17 Then SETTYPE  = "PRO"
+    When NOPRO_Val           <> NO16 Then SETTYPE  = "NOPRO"
+    Otherwise SETTYPE  = ""
+   End
+ End
+Else DO
+  TYPE     = "INDEX      "
+  Select
+    When NOCOPYPEND_Val      <> NO20 Then SETTYPE  = "NOCOPYPEND"
+    When NORCVRPEND_Val      <> NO21 Then SETTYPE  = "NORCVRPEND"
+    When NORBDPEND_Val       <> NO22 Then SETTYPE  = "NORBDPEND  "
+    When NOCHECKPEND_Val     <> NO23 Then SETTYPE  = "NOCHECKPEND"
+    When NOAREORPENDSTAR_Val <> NO24 Then SETTYPE  = "NOAREORPENDSTAR"
+    When NOAREORPEND_Val     <> NO25 Then SETTYPE  = "NOAREORPEND"
+    When RBDPEND_Val         <> NO26 Then SETTYPE  = "RBDPEND "
+    When PSRBDPEND_Val       <> NO27 Then SETTYPE  = "PSRBDPEND "
+    Otherwise SETTYPE  = ""
+   End
+ End
+
+If auswkz = 'TS' Then Part = 0
+OBJECT  = Object1
+
+
+MEM   = "REPLVL"
+SKEL  = "SKREP01"
+
+Call Utility_Execute
+
+RETURN
+
+Repair_Levelid:
+
+db      = DB2_CREATOR1
+ts      = DB2_NAME1
+Part    = DB2_CREATOR2
+If auswkz = 'TS' Then Part = 0
+OBJECT  = Object1
+
+
+MEM   = "REPLVL"
+SKEL  = "SKREPLVL"
+
+Call Utility_Execute
+
+RETURN
+
+ImageCopy_Info:
+
+ICDSN   = Object1
+DB      = DB2_CREATOR2
+TS      = DB2_NAME2
+
+/*    call ICInfo ICDSN, tape  */
+
+MEM   = "ICINFO"
+SKEL  = "SKICINFO"
+
+Call Utility_Execute
+
+RETURN
+
+Reorg_Index:
+IXCR    = DB2_CREATOR1
+IXNM    = DB2_NAME1
+IXSPACE = DB2_CREATOR2
+
+MEM   = "REOIX"
+SKEL  = "SKREOIX1"
+
+Call Utility_Execute
+
+Return
+
+JOB_DSNTEP2:
+IXCR    = DB2_CREATOR1
+IXNM    = DB2_NAME1
+RLIB    = 'Y'
+MEM     = "DSNTEP2"
+SKEL    = "SKTEP2"
+
+Call Utility_Execute
+
+Return
+
+JOB_DSNTEP4:
+IXCR    = DB2_CREATOR1
+IXNM    = DB2_NAME1
+RLIB    = 'Y'
+MEM     = "DSNTEP4"
+SKEL    = "SKTEP4"
+
+Call Utility_Execute
+
+Return
+
+JOB_DSN1SDMP:
+SQLC        = Left("-104", 10)
+SQLs        = Left(" ", 10)
+
+area.0  = 6
+area.1  = white"DSN1SDMP                                     "
+area.2  = white"                                              "
+area.3  = white"       "keyw"Sqlcode    "in1|| SQLC       || endin
+area.4  = white"       "keyw"Sqlstate   "in1|| sqls       || endin
+area.5  =      "                                             "
+area.6  =      "                                             "
+
+Call Anzeige_Dyn_Panel
+
+If sqlc <> Sqlstate_val & datatype(Sqlstate_val) = "NUM" Then do
+   sqlsd =  Sqlstate_val
+   sqlsx =  d2x(Sqlstate_val, 8)
+   sqlc  =  "Y"
+ End
+
+If sqls <> Sqlcode_val & datatype(Sqlcode_val) = "NUM" Then do
+   sqlcd =  Strip(Sqlcode_val)
+   sqlcx =  d2x(Sqlcode_val, 8)
+   sqlc  =  "Y"
+ End
+
+
+MEM     = "DSN1SDMP"
+SKEL    = "SKSDMP"
+
+Call Utility_Execute
+
+Return
+
+JOB_DSNTIAD:
+IXCR    = DB2_CREATOR1
+IXNM    = DB2_NAME1
+RLIB    = 'Y'
+MEM     = "DSNTIAD"
+SKEL    = "SKTIAD"
+
+Call Utility_Execute
+
+Return
+
+JOB_DSNTIAUL:
+IXCR    = DB2_CREATOR1
+IXNM    = DB2_NAME1
+RLIB    = 'Y'
+MEM     = "DSNTIAUL"
+SKEL    = "SKTIAUL"
+
+Call Utility_Execute
+
+Return
+
+JOB_DSNJU003:
+RLIB    = 'Y'
+MEM     = "DSNJU003"
+SKEL    = "SKJU003"
+
+Call Utility_Execute
+
+Return
+
+JOB_DSNJU004:
+RLIB    = 'Y'
+MEM     = "DSNJU003"
+SKEL    = "SKJU004"
+
+Call Utility_Execute
+
+Return
+
+JOB_DSN1LOGP:
+RLIB    = 'Y'
+MEM     = "DSN1LOGP"
+SKEL    = "SKLOGP"
+
+Call Utility_Execute
+
+Return
+
+JOB_DSN1PRNT:
+RLIB    = 'Y'
+MEM     = "DSN1PRNT"
+SKEL    = "SKPRNT"
+
+Call Utility_Execute
+
+Return
+
+JOB_DSN1COPY_NR1:
+DB      = DB2_CREATOR1
+TS      = DB2_NAME1
+FDSN    = object2
+ICTYPE  = DB2_CREATOR3
+STYPE   = DB2_NAME3
+
+IF ICTYPE = 'F'  THEN CPTYPE = "FULLCOPY"
+IF ICTYPE = 'I'  THEN CPTYPE = "INCRCOPY"
+IF STYPE  = 'R'  THEN CPTYPE = SPACE(CPTYPE "," "INLCOPY", 0)
+IF STYPE  = 'S'  THEN CPTYPE = SPACE(CPTYPE "," "INLCOPY", 0)
+IF STYPE  = 'W'  THEN CPTYPE = SPACE(CPTYPE "," "INLCOPY", 0)
+IF STYPE  = 'X'  THEN CPTYPE = SPACE(CPTYPE "," "INLCOPY", 0)
+
+
+MEM     = "DSN1CPY1"
+SKEL    = "SK1COPY1"
+
+SQLSTMT =   "SELECT DB.NAME AS DBNAME                      ",
+            "   ,   TS.NAME AS TSNAME                      ",
+            "   ,   TS.TYPE AS TSTYPE                      ",
+            "   ,   STRIP(TB.CREATOR)                      ",
+            "       CONCAT '.'                             ",
+            "       CONCAT STRIP(TB.NAME) AS TABNAME       ",
+            "   ,   DB.DBID AS DBID                        ",
+            "   ,   TS.PSID AS TSID                        ",
+            "   ,   TB.OBID AS TBID                        ",
+            "   ,   TS.PARTITIONS                          ",
+            "   ,  CHAR(RTRIM(TP.VCATNAME)                 ",
+            "     CONCAT '.'                               ",
+            "     CONCAT 'DSNDBC'                          ",
+            "     CONCAT '.'                               ",
+            "     CONCAT RTRIM(TS.DBNAME)                  ",
+            "     CONCAT '.'                               ",
+            "     CONCAT RTRIM(TS.NAME)                    ",
+            "     CONCAT '.'                               ",
+            "     CONCAT RTRIM(TP.IPREFIX)                 ",
+            " CONCAT CHAR(SUBSTR(DIGITS(INT(TS.INSTANCE)), 7, 4), 4)",
+            "     CONCAT '.'                               ",
+            "     CONCAT 'A001'                            ",
+            "      , 44) AS VSAMDS                         ",
+            "FROM "SYSIBMS".SYSTABLESPACE     TS           ",
+            "INNER JOIN "SYSIBMS".SYSTABLEPART TP          ",
+            "ON    TS.DBNAME  = TP.DBNAME                  ",
+            "AND   TS.NAME    = TP.TSNAME                  ",
+            "INNER JOIN "SYSIBMS".SYSTABLES   TB           ",
+            "ON    TS.DBNAME  = TB.DBNAME                  ",
+            "AND   TS.NAME    = TB.TSNAME                  ",
+            "INNER JOIN "SYSIBMS".SYSDATABASE DB           ",
+            "ON    TS.DBNAME  = DB.NAME                    ",
+            "where TS.DBNAME = '"DB2_CREATOR1"'            ",
+            "And   TS.NAME   = '"DB2_NAME1"'               ",
+            "ORDER BY TS.DBNAME desc, TS.NAME, TP.PARTITION ",
+            "FETCH FIRST 1 ROWS ONLY                        ",
+            ""
+
+ADDRESS ISPEXEC  'TBCLOSE 'SELTAB
+OAUSWKZ = AUSWKZ
+oobject = object
+AUSWKZ  = "SQLEX"
+object  = sqlstmt
+call LESEN_DATEN
+AUSWKZ  = oAUSWKZ
+object  = oobject
+
+ADDRESS ISPEXEC  'TBOPEN  'SELTAB
+ADDRESS ISPEXEC  'TBTOP   'SELTAB
+ADDRESS ISPEXEC  'TBSKIP  'SELTAB
+
+DBNAME        =  col1
+TSNAME        =  col2
+TSTYPE        =  col3
+TABNAME       =  col4
+DBID          =  col5
+TSID          =  col6
+TBID          =  col7
+PARTITIONS    =  col8
+VSAMDS        =  col9
+
+DB            = DBNAME
+TS            = TSNAME
+
+TSPART  = PARTITIONS
+
+TLOB  = ""
+IF TSTYPE  = 'O' THEN TLOB = ",LOB"
+TDSN  = VSAMDS
+FDBID = DBID
+FtSID = TSID
+FtBID = TBID
+FTB   = TABNAME
+
+TDBID = DBID
+TtSID = TSID
+TtBID = TBID
+TTB   = TABNAME
+
+Call Utility_Execute
+
+Return
+
+Rebind_Plan:
+CR      = DB2_CREATOR1
+NM      = DB2_NAME1
+
+Call Auto_Parse
+
+MEM   = "REBINDPL"
+SKEL  = "SKRBPL1"
+
+Call Utility_Execute
+
+Return
+
+bind_Plan:
+CR      = DB2_CREATOR1
+NM      = DB2_NAME1
+
+Call Auto_Parse
+
+PLAN    = NAME
+QUAL    = QUALIFIER
+OWNER   = QUALIFIER
+PKL     = ""
+VALID   = VALIDATE
+select
+    WHEN ISOLATION = "R"  THEN ISOL = "RR"
+    WHEN ISOLATION = "T"  THEN ISOL = "RS"
+    WHEN ISOLATION = "S"  THEN ISOL = "CS"
+    WHEN ISOLATION = "U"  THEN ISOL = "UR"
+    OTHERWISE                  ISOL = "CS"
+ END
+
+CACHESZ  = CACHESIZE
+ACQ      = ACQUIRE
+REL      = RELEASE
+EXPL     = EXPLAN
+ACTION   = "REPLACE"
+CURD     = "N"
+RETAIN   = "RETAIN"
+
+SELECT
+    WHEN DEGREE = "A" THEN DEGREE = "ANY"
+    WHEN DEGREE = "1" THEN DEGREE = "1"
+    WHEN DEGREE = ""  THEN DEGREE = "1"
+    otherwise              DEGREE = "ANY"
+ END
+
+SELECT
+    WHEN SQLRULES = "D" THEN SQLR = "DB2"
+    WHEN SQLRULES = "S" THEN SQLR = "STD"
+    otherwise                SQLR = "STD"
+ END
+SELECT
+    WHEN DISCONNECT = "D" THEN DISC = "E"
+    WHEN DISCONNECT = ""  THEN DISC = "E"
+    WHEN DISCONNECT = "A" THEN DISC = "A"
+    WHEN DISCONNECT = "C" THEN DISC = "A"
+    otherwise                  DISC = "E"
+ END
+KEEPD   = KEEPDYNAMIC
+REOPT   = REOPTVAR
+ENCOD   = ENCODING_CCSID
+SELECT
+    WHEN IMMEDWRITE = "N" THEN IMMWR = "NO"
+    WHEN IMMEDWRITE = "Y" THEN IMMWR = "YES"
+    WHEN IMMEDWRITE = "1" THEN IMMWR = "PH1"
+    otherwise                  IMMWR = "NO"
+ END
+SELECT
+    WHEN ROUNDING   = "C" THEN ROUND = "CEILING"
+    WHEN ROUNDING   = "D" THEN ROUND = "DOWN"
+    WHEN ROUNDING   = "F" THEN ROUND = "FLOOR"
+    WHEN ROUNDING   = "G" THEN ROUND = "HALFDOWN"
+    WHEN ROUNDING   = "E" THEN ROUND = "HALFEVEN"
+    WHEN ROUNDING   = "H" THEN ROUND = "HALFUP"
+    WHEN ROUNDING   = "U" THEN ROUND = "UP"
+    otherwise                  ROUND = ""
+ END
+
+SELECT
+    WHEN DEFERPREP  = "N" THEN DEFPR = "NODEFER(PREPARE)"
+    WHEN DEFERPREP  = "Y" THEN DEFPR = "DEFER(PREPARE)"
+    otherwise                  DEFPR = "NODEFER(PREPARE)"
+ END
+
+CZEILE         = ""
+AUSWKZ         = "PGL"
+object         = SPACE(CREATOR "." NAME, 0)
+tabnr          = tabnr + 1
+LUWTABLE       = "LUWTB"tabnr
+LUWTAB         = "LUWTB"tabnr
+COLTAB         = "COLTB"tabnr
+COLLIST        = "COLLI"tabnr
+TBCOL          = "TBCOL"tabnr
+PGLISTE        = "PGLI"tabnr
+
+PKLIST         = ""
+call Lesen_daten
+
+address ispexec 'TBOPEN  'COLTAB
+address ispexec 'TBTOP   'COLTAB
+address ispexec 'TBSKIP  'COLTAB
+Do while RC = 0
+   Call Auto_Parse
+
+   PKLIST = PKLIST Space(COLLID"."NAME, 0 )
+   address ispexec 'TBSKIP  'COLTAB
+ End
+
+IF LENGTH(PKLIST) > 0 Then do
+   ADDRESS ISPEXEC  'TBCLOSE 'PGLISTE
+   ADDRESS ISPEXEC  'TBERASE 'PGLISTE
+   ADDRESS ISPEXEC  'TBOPEN  'PGLISTE
+   IF RC <> 0 THEN Do
+      ADDRESS ISPEXEC 'TBCREATE 'PGLISTE' NAMES(PGNAME ) '
+    END
+
+    PKL = PKLIST
+    DO PGLI = 1 to Words(PKL)
+       PGNAME = WORD(PKL, PGLI)
+       ADDRESS ISPEXEC  'TBADD 'PGLISTE
+     End
+ END
+
+MEM   = "REBINDPL"
+SKEL  = "SKRBPL2"
+
+Call Utility_Execute
+tabnr          = tabnr - 1
+ADDRESS ISPEXEC  'TBERASE 'PGLISTE
+
+Return
+
+FREE_Package:
+CR      = DB2_CREATOR2
+NM      = DB2_NAME2
+Ver     = DB2_CREATOR3
+Ver     = object3
+DO      = "FREE"
+
+MEM   = "FREEPG"
+SKEL  = "SKRBPG2"
+
+Call Utility_Execute
+
+Return
+
+Rebind_Package:
+CR      = DB2_CREATOR2
+NM      = DB2_NAME2
+Ver     = DB2_CREATOR3
+Ver     = object3
+Call Auto_Parse
+
+APPLCMP = APPLCOMPAT
+If APPLCMP = "" Then APPLCMP = compatmode
+
+select
+   When CONC_STMT          = "N"  THEN CONSTMT = "NO"
+   When CONC_STMT          = "Y"  THEN CONSTMT = "YES"
+   Otherwise NOP
+ End
+
+DO      = "REBIND"
+
+MEM     = "REBINDPG"
+SKEL    = "SKRBPG1"
+
+Call Utility_Execute
+
+Return
+
+Bind_Package:
+CR      = DB2_CREATOR2
+NM      = DB2_NAME2
+Ver     = DB2_CREATOR3
+Ver     = object3
+Call Auto_Parse
+
+CR          = COLLID
+NM          = NAME
+VER         = VERSION
+OWNER       = OWNER
+QUALIF      = QUALIFIER
+DEGREE      = DEGREE
+KEEPDY      = KEEPDYNAMIC
+ENCCCS      = ENCODING_CCSID
+IMMWRITE    = IMMEDWRITE
+VALOPT      = VALIDATE
+ACTION      = "REPLACE"
+PDSNAME     = Space("'" PDSNAME "'", 0)
+EXPL        = EXPLAIN
+ISOLAT      = ISOLATION
+ROUND       = ROUNDING
+SQLERR      = SQLERROR
+APPLCMP     = APPLCOMPAT
+If APPLCMP = "" Then APPLCMP = compatmode
+
+select
+   When CONC_STMT          = "N"  THEN CONSTMT = "NO"
+   When CONC_STMT          = "Y"  THEN CONSTMT = "YES"
+   Otherwise NOP
+ End
+
+select
+   when ROUND = 'C'  Then Round = 'CEILING'
+   when ROUND = 'D'  Then Round = 'DOWN'
+   when ROUND = 'F'  Then Round = 'FLOOR'
+   when ROUND = 'G'  Then Round = 'HALFDOWN'
+   when ROUND = 'E'  Then Round = 'HALFEVEN'
+   when ROUND = 'H'  Then Round = 'HALFUP'
+   when ROUND = 'U'  Then Round = 'UP'
+   otherwise nop
+ end
+
+
+select
+  When ISOLAT  = 'R'  Then ISOLAT = 'RR'
+  When ISOLAT  = 'S'  Then ISOLAT = 'CS'
+  When ISOLAT  = 'T'  Then ISOLAT = 'RS'
+  When ISOLAT  = 'U'  Then ISOLAT = 'UR'
+  Otherwise NOP
+ End
+
+select
+  When SQLERR  = 'C'  Then SQLERR = 'CONTINUE'
+  When SQLERR  = 'N'  Then SQLERR = 'NOPACKAGE'
+  Otherwise NOP
+ End
+
+select
+  When REOPTV  = 'A'  Then REOPTV = 'AUTO'
+  When REOPTV  = 'B'  Then REOPTV = 'NONE'
+  When REOPTV  = 'Y'  Then REOPTV = 'ALWAYS'
+  When REOPTV  = '1'  Then REOPTV = 'ONCE'
+  Otherwise REOPTV = 'NONE'
+ End
+
+select
+  When EXPL    = 'N'  Then EXPL   = 'NO'
+  When EXPL    = 'Y'  Then EXPL   = 'YES'
+  Otherwise NOP
+ End
+
+select
+  When VALOPT  = 'B'  Then VALOPT = 'BIND'
+  When VALOPT  = 'R'  Then VALOPT = 'RUN'
+  Otherwise NOP
+ End
+
+
+Select
+  When DYNAMICRULES = "B"   THEN DYNRUL = "BIND"
+  When DYNAMICRULES = "D"   THEN DYNRUL = "DEFINEBIND"
+  When DYNAMICRULES = "E"   THEN DYNRUL = "DEFINERUN"
+  When DYNAMICRULES = "H"   THEN DYNRUL = "INVOKEBIND"
+  When DYNAMICRULES = "I"   THEN DYNRUL = "INVOKERUN"
+  When DYNAMICRULES = "R"   THEN DYNRUL = "RUN"
+  Otherwise                      DYNRUL = "BIND"
+ End
+
+select
+  When SYSTIMESENSITIVE   = "N"  THEN SYSSEN = "NO"
+  When SYSTIMESENSITIVE   = "Y"  THEN SYSSEN = "YES"
+  Otherwise NOP
+ End
+
+select
+  When BUSTIMESENSITIVE   = "N"  THEN BUSSEN = "NO"
+  When BUSTIMESENSITIVE   = "Y"  THEN BUSSEN = "YES"
+  Otherwise NOP
+ End
+
+ACTION = "REPLACE"
+
+MEM   = "BINDPG"
+If eingabe =  "BINDCOPY" THEN Do
+   SKEL   = "SKBPGCP"
+   TOSSID = Left("", 4)
+   area.0 = 5
+   area.1  = white" ENTER SSID FOR Target SSID     "
+   area.2  = white" "
+   area.3  = endin""white"     "keyw"TO_SSID "IN1 || TOSSID ||endin
+   area.4  =      "                                             "
+   area.5  =      "                                             "
+
+   Call Anzeige_Dyn_Panel
+
+   TOSSID = Strip(TO_SSID_VAL)
+ End
+ELSE DO
+   SKEL  = "SKBPG1"
+ End
+
+Call Utility_Execute
+
+Return
+
+Stospace:
+NM      = DB2_CREATOR1
+If NM = "" Then NM = "*"
+
+MEM   = "STOSPACE"
+SKEL  = "SKSTOSPA"
+
+Call Utility_Execute
+
+Return
+
+GRANT_Table:
+CR      = DB2_CREATOR1
+NM      = DB2_NAME1
+drop sl.
+sl.0 = 0
+
+All         = " "
+Select      = " "
+Insert      = " "
+Update      = " "
+Delete      = " "
+Alter       = " "
+Index       = " "
+Trigger     = " "
+References  = " "
+Unload      = " "
+
+area.0 = 22
+area.1  = white"Grant Table/View                             "
+area.2  = white"                   G WITH GRANT     "
+area.3  = white"                   other            "
+area.4  = white"                                             "
+area.5  = white"                                              "
+area.6  = white" Grant "keyw"All        "in1|| All        || endin
+area.7  = white"       "keyw"Select     "in1|| Select     || endin
+area.8  = white"       "keyw"Insert     "in1|| Insert     || endin
+area.9  = white"       "keyw"Update     "in1|| Update     || endin
+area.10 = white"       "keyw"Delete     "in1|| Delete     || endin
+area.11 = white"       "keyw"Alter      "in1|| Alter      || endin
+area.12 = white"       "keyw"Index      "in1|| Index      || endin
+area.13 = white"       "keyw"Trigger    "in1|| Trigger    || endin
+area.14 = white"       "keyw"References "in1|| References || endin
+area.15 = white"       "keyw"Unload     "in1|| Unload     || endin
+area.16 = white"                                             "
+area.17 = white"    "keyw"ON_TABLE      "in1"" object1
+area.18 =      "                                             "
+area.19 =      "                                             "
+area.20 = endin""white"     "keyw"TO     "IN1"               "
+area.21 =      "                                             "
+area.22 =      "                                             "
+
+Call Anzeige_Dyn_Panel
+
+keyw    = "GRANT  "
+komma   = " "
+ende    = "N"
+GOPT    = "N"
+If All_Val <> "" Then do
+   If All_Val = "G" Then GOPT  = "Y"
+   Select_Val     = All_Val
+   Insert_Val     = All_Val
+   Update_Val     = All_Val
+   Delete_Val     = All_Val
+   Alter_Val      = All_Val
+   Index_Val      = All_Val
+   Trigger_Val    = All_Val
+   References_Val = All_Val
+   Unload_Val     = All_Val
+ End
+If Select_Val <> "" Then do
+   If Select_Val = "G" Then GOPT  = "Y"
+   OK = NextSl(keyw komma "Select ")
+   komma = "," ; keyw    = "       " ;
+ End
+If Insert_Val <> "" Then do
+   If Insert_Val = "G" Then GOPT  = "Y"
+   OK = NextSl(keyw komma "Insert ")
+   komma = "," ; keyw    = "       " ;
+ End
+If Update_Val <> "" Then do
+   If Update_Val = "G" Then GOPT  = "Y"
+   OK = NextSl(keyw komma "Update ")
+   komma = "," ; keyw    = "       " ;
+ End
+If Delete_Val <> "" Then do
+   If Delete_Val = "G" Then GOPT  = "Y"
+   OK = NextSl(keyw komma "Delete ")
+   komma = "," ; keyw    = "       " ;
+ End
+If Alter_Val <> "" Then do
+   If Alter_Val = "G" Then GOPT   = "Y"
+   OK = NextSl(keyw komma "Alter ")
+   komma = "," ; keyw    = "       " ;
+ End
+If index_Val <> "" Then do
+   If index_Val = "G" Then GOPT   = "Y"
+   OK = NextSl(keyw komma "index ")
+   komma = "," ; keyw    = "       " ;
+ End
+If Trigger_Val <> "" Then do
+   If Trigger_Val = "G" Then GOPT = "Y"
+   OK = NextSl(keyw komma "Trigger ")
+   komma = "," ; keyw    = "       " ;
+ End
+If References_Val <> "" Then do
+   If References_Val = "G" Then GOPT = "Y"
+   OK = NextSl(keyw komma "References ")
+   komma = "," ; keyw    = "       " ;
+ End
+If Unload_Val     <> "" Then do
+   If Unload_Val = "G" Then GOPT = "Y"
+   OK = NextSl(keyw komma "Unload ")
+   komma = "," ; keyw    = "       " ;
+ End
+OK = NextSl("ON Table " ON_TABLE_VAL)
+OK = NextSl("TO       " TO_Val      )
+If GOPT = "Y" Then OK = NextSl("WITH GRANT OPTION ")
+OK = NextSl(";")
+
+Return
+
+
+Grant_Column:
+
+Select
+  when auswkz  = "COA" Then Do
+       Call Auto_Parse
+   End
+  Otherwise NOP
+ End
+
+TBCRATOR = DB2_CREATOR1
+TBNAME   = DB2_NAME1
+COLNAME  = DB2_NAME2
+GRANTOR  = "        "
+
+drop sl.
+sl.0 = 0
+
+area.0 = 8
+area.1  = white"GRANT UPDATE ON TABLE " Space(TBCRATOR "." TBNAME, 0)
+area.2  = white"         COLUMN "Space(COLNAME, 0)
+area.3  = white"                                             "
+area.4  = white"     "keyw"TO     "IN1 || GRANTOR || endin
+area.5  = white"                                             "
+area.6  = white"                                             " endin
+area.7  = white"                                             " endin
+area.8  = white"                                             " endin
+
+Call Anzeige_Dyn_Panel
+
+OK = NextSl("GRANT UPDATE("COLNAME")" )
+OK = NextSl("   ON TABLE "Space(TBCRATOR "." TBNAME, 0) )
+OK = NextSl("TO       " TO_Val      )
+OK = NextSl(";")
+
+Return
+
+Grant_use:
+
+Select
+  when auswkz  = "RA" Then Do
+       Call Auto_Parse
+       OBTYPE = Substr(OBTYPE, 1, 1)
+       Select
+         When OBTYPE = "R" Then object1 = Space(QUALIFIER "." NAME, 0)
+         When OBTYPE = "T" Then object1 = Space(QUALIFIER "." NAME, 0)
+         When OBTYPE = "J" Then object1 = Space(QUALIFIER "." NAME, 0)
+         When OBTYPE = "D" Then object1 = Space(QUALIFIER "." NAME, 0)
+         Otherwise object1 = NAME
+        End
+   End
+  Otherwise NOP
+ End
+
+CR      = DB2_CREATOR1
+NM      = DB2_NAME1
+drop sl.
+sl.0 = 0
+Select
+  When use_of = "JAR"  Then Grant_Text = "Grant USAGE ON "
+  When use_of = "TYPE" Then Grant_Text = "Grant USAGE ON "
+  Otherwise Grant_TEXT = "Grant USE OF "
+ End
+
+
+area.0 = 8
+area.1  = white"                   G WITH GRANT     "
+area.2  = white"                   other            "
+area.3  = white"                                             "
+area.4  = white || Grant_text Use_Of Object1"       "   endin
+area.5  = white"     "keyw"TO     "IN1"               " endin
+area.6  =      "                                             "
+area.7  =      "                                             " endin
+area.8  = white"Grant Option   "keyw"Grant  "IN1"     "
+
+Call Anzeige_Dyn_Panel
+
+If TO_Val <> "" Then do
+   If Object_Val = "G" Then GOPT  = "Y"
+   OK = NextSl(Grant_Text Use_OF Object1)
+ End
+OK = NextSl("TO       " TO_Val      )
+If Grant_Val = "G" Then GOPT = "Y"
+If GOPT = "Y" Then OK = NextSl("WITH GRANT OPTION ")
+OK = NextSl(";")
+
+Return
+
+
+Grant_Schema:
+
+SCH     = DB2_CREATOR1
+If auswkz = 'SCA'  Then Do
+   Call Auto_Parse
+ End
+ Else Do
+   GRANTOR        = ""
+   GRANTEE        = ""
+   SCHEMANAME     = ""
+   CREATEINAUTH   = ""
+   ALTERINAUTH    = ""
+   DROPINAUTH     = ""
+ End
+
+ If CREATEINAUTH = "" Then CREATEINAUTH = "N"
+ If ALTERINAUTH  = "" Then ALTERINAUTH  = "N"
+ If DROPINAUTH   = "" Then DROPINAUTH   = "N"
+
+drop sl.
+sl.0 = 0
+
+area.0 = 10
+area.1  = white"                   G WITH GRANT     "
+area.2  = white"                   other            "
+area.3  = white"                                             "
+area.4  = white"Grant "keyw"CreateIN  " || IN1 || CREATEINAUTH || endin
+area.5  = white"      "keyw"AlterIN   " || IN1 || ALTERINAUTH  || endin
+area.6  = white"      "keyw"DropIN    " || IN1 || DROPINAUTH   || endin
+area.7  = white"      "keyw"ON Schema "in1 || SCH
+area.8  = endin""white"    "keyw"TO         "IN1"               "
+area.9  = endin"                                             "
+area.10 =      "                                             "
+
+Call Anzeige_Dyn_Panel
+
+Opt   = ""
+komma = ""
+VAL_GR_OPT = "Y J G"
+
+If POS(CreateIN_Val, VAL_GR_OPT) > 0 Then Do
+   Opt   = opt || komma || " CREATEIN"
+   If CreateIN_Val = "G" Then GOPT = "Y"
+   komma = ","
+ End
+
+If POS(ALTERIN_Val, VAL_GR_OPT) > 0 Then Do
+   Opt   = opt || komma || " ALTERIN"
+   If AlterIN_Val = "G" Then GOPT = "Y"
+   komma = ","
+ End
+
+If POS(DROPIN_Val, VAL_GR_OPT) > 0 Then Do
+   Opt   = opt || komma || " DROPIN"
+   If DropIN_Val = "G" Then GOPT = "Y"
+   komma = ","
+ End
+
+If Opt <> "" Then do
+   OK = NextSl("Grant  " Strip(opt)      )
+   OK = NextSl("   ON SCHEMA "ON_Val )
+   OK = NextSl("   TO "TO_Val        )
+   If GOPT = "Y" Then OK = NextSl("WITH GRANT OPTION ")
+   OK = NextSl(";")
+ End
+
+Return
+
+
+Grant_GV:
+
+GVAR    = SPACE(DB2_CREATOR1 || "." ||  DB2_NAME1, 0)
+
+drop sl.
+sl.0 = 0
+
+area.0 = 10
+area.1  = white"                   G WITH GRANT     "
+area.2  = white"                   other            "
+area.3  = white"                                             "
+area.4  = white"Grant "keyw"Read      "IN1" "endin
+area.5  = white"      "keyw"Write     "IN1" "endin
+area.6  = white"      "keyw"ON VARIABLE "in1 || GVAR
+area.7  = endin""white"     "keyw"TO         "IN1"           "
+area.8  = endin"                                             "
+area.9  =      "                                             "
+area.10 =      "                                             "
+
+Call Anzeige_Dyn_Panel
+
+Opt   = ""
+komma = ""
+If Read_Val <> "" Then do
+   Opt   = opt || komma || " Read"
+   If Read_Val = "G" Then GOPT = "Y"
+   komma = ","
+ End
+If Write_Val <> "" Then do
+   Opt   = opt || komma || " Write "
+   If Read_Val = "G" Then GOPT = "Y"
+   komma = ","
+ End
+
+If Opt <> "" Then do
+   OK = NextSl("Grant        " opt      )
+   OK = NextSl("   ON Variable "ON_Val )
+   OK = NextSl("   TO "TO_Val        )
+   If GOPT = "Y" Then OK = NextSl("WITH GRANT OPTION ")
+   OK = NextSl(";")
+ End
+
+Return
+
+
+Grant_Collection:
+
+
+Call Auto_Parse
+drop sl.
+sl.0    = 0
+
+Select
+  when auswkz  = "RA" Then Collid = Name
+  Otherwise NOP
+ End
+
+area.0 =  9
+area.1  = white"                   G WITH GRANT              "
+area.2  = white"                   other                     "
+area.3  = white"                                             "
+area.4  = white"Grant  "keyw"Create  "IN1" "endin
+area.5  = white"       "keyw"Packadm "IN1" "endin
+area.6  = white"                                             "
+area.7  = white"       "keyw"Collection  "IN1 || Collid || endin
+area.8  = white"       "keyw"To     "IN1"                       " endin
+area.9  = white" "
+
+Call Anzeige_Dyn_Panel
+
+keyw    = "GRANT  "
+komma   = " "
+ende    = "N"
+GOPT    = "N"
+If Create_Val <> "" Then do
+   If Create_Val = "G" Then GOPT  = "Y"
+   OK = NextSl(keyw "Create ")
+   OK = NextSl("IN COLLECTION " Collection_Val )
+   OK = NextSl("TO       " TO_Val      )
+   If GOPT = "Y" Then OK = NextSl("WITH GRANT OPTION ")
+   OK = NextSl(";")
+ End
+
+If Packadm_Val <> "" Then do
+   If Packadm_Val = "G" Then GOPT = "Y"
+   OK = NextSl(keyw komma "Packadm ")
+   OK = NextSl("ON COLLECTION " Collection_Val )
+   OK = NextSl("TO       " TO_Val      )
+   If GOPT = "Y" Then OK = NextSl("WITH GRANT OPTION ")
+   OK = NextSl(";")
+ End
+
+
+Return
+
+Grant_Routine:
+
+CR      = DB2_CREATOR1
+NM      = DB2_NAME1
+If  object3 = 'F' Then Do
+    NM      = DB2_CREATOR2 /* Specific Function */
+ End
+OBJNAME = Strip(CR) || "." || Strip(NM)
+
+drop sl.
+sl.0    = 0
+
+area.0 = 7
+area.1  = white"                   G WITH GRANT Option     "
+area.2  = white"               other   NO GRANT Option     "
+area.3  = white"                                             "
+area.4  = white"Grant  "OBJTYPE OBJNAME
+area.5  = white"       "keyw"Execute "IN1" "endin
+area.6  = white"       "keyw"To      "IN1"     "
+area.7  = endin
+
+Call Anzeige_Dyn_Panel
+
+If Execute_Val  <> "" Then do
+   OK = NextSl("Grant EXECUTE ON "OBJTYPE )
+   OK = NextSl("     " OBJNAME             )
+   OK = NextSl("TO   " TO_Val             )
+   If Execute_Val = "G" Then OK = NextSl("WITH GRANT OPTION ")
+   OK = NextSl(";")
+ End
+
+Return
+
+Grant_Package:
+
+CR      = DB2_CREATOR1
+NM      = DB2_NAME1
+drop sl.
+sl.0    = 0
+
+Pack   = Object1
+if Length(Object2) > 0 Then do
+   Pack   = Strip(Object1) || ".("Strip(Object2) || ")"
+ End
+area.0 = 11
+area.1  = white"                   G WITH GRANT              "
+area.2  = white"                   other                     "
+area.3  = white"                                             "
+area.4  = white"Grant  "keyw"Bind    "IN1" "endin
+area.5  = white"       "keyw"Execute "IN1" "endin
+area.6  = white"       "keyw"Copy    "IN1" "endin
+area.7  = white"                                             "
+area.8  = white"       "keyw"Package "IN1 || Object1
+area.9  =      "                                             "endin
+area.10 = white"       "keyw"To     "IN1"     "
+area.11 = endin
+
+Call Anzeige_Dyn_Panel
+
+keyw    = "GRANT  "
+komma   = " "
+ende    = "N"
+GOPT    = "N"
+If Bind_Val <> "" Then do
+   If Bind_Val = "G" Then GOPT  = "Y"
+   OK = NextSl(keyw komma "Bind ")
+   komma = "," ; keyw    = "       " ;
+ End
+If Execute_Val <> "" Then do
+   If Execute_Val = "G" Then GOPT = "Y"
+   OK = NextSl(keyw komma "Execute ")
+   komma = "," ; keyw    = "       " ;
+ End
+If Copy_Val <> "" Then do
+   If Copy_Val = "G" Then GOPT    = "Y"
+   OK = NextSl(keyw komma "Copy ")
+   komma = "," ; keyw    = "       " ;
+ End
+
+OK = NextSl("ON PACKAGE " Package_Val )
+OK = NextSl("TO       " TO_Val      )
+If GOPT = "Y" Then OK = NextSl("WITH GRANT OPTION ")
+OK = NextSl(";")
+
+Return
+
+Grant_Plan:
+
+CR      = DB2_CREATOR1
+NM      = DB2_NAME1
+drop sl.
+sl.0    = 0
+
+area.0 = 10
+area.1  = white"                   G WITH GRANT              "
+area.2  = white"                   other                     "
+area.3  = white"                                             "
+area.4  = white"Grant  "keyw"Bind    "IN1" "endin
+area.5  = white"       "keyw"Execute "IN1" "endin
+area.6  = white"                                             "
+area.7  = white"       "keyw"Plan    "IN1 || Strip(DB2_NAME1)
+area.8  =      "                                             "endin
+area.9  = white"       "keyw"To     "IN1"                    "
+area.10 = endin
+
+Call Anzeige_Dyn_Panel
+
+keyw    = "GRANT  "
+komma   = " "
+ende    = "N"
+GOPT    = "N"
+If Bind_Val <> "" Then do
+   If Bind_Val = "G" Then GOPT  = "Y"
+   OK = NextSl(keyw komma "Bind ")
+   komma = "," ; keyw    = "       " ;
+ End
+If Execute_Val <> "" Then do
+   If Execute_Val = "G" Then GOPT = "Y"
+   OK = NextSl(keyw komma "Execute ")
+   komma = "," ; keyw    = "       " ;
+ End
+
+OK = NextSl("ON Plan    " Plan_Val )
+OK = NextSl("TO       " TO_Val      )
+If GOPT = "Y" Then OK = NextSl("WITH GRANT OPTION ")
+OK = NextSl(";")
+
+Return
+
+Grant_DB:
+
+CR      = DB2_CREATOR1
+NM      = DB2_NAME1
+drop sl.
+sl.0    = 0
+
+area.0 = 13
+area.1  = white"                   G WITH GRANT              "
+area.2  = white"                   other                     "
+area.3  = white"                                             "
+area.4  = white"Grant  "keyw"DBADM     "IN1" "endin ,
+                     " "keyw"CREATETAB "IN1" "endin ,
+                     " "keyw"DROP      "IN1" "endin ,
+                     " "keyw"STARTDB   "IN1" "endin
+area.5  = white"       "keyw"DBCTRL    "IN1" "endin ,
+                     " "keyw"CREATETS  "IN1" "endin ,
+                     " "keyw"IMAGCOPY  "IN1" "endin ,
+                     " "keyw"REORG     "IN1" "endin
+area.6  = white"       "keyw"RECOVERDB "IN1" "endin ,
+                     " "keyw"STATS     "IN1" "endin ,
+                     " "keyw"LOAD      "IN1" "endin ,
+                     " "keyw"REPAIR    "IN1" "endin
+area.7  = white"       "keyw"DBMAINT   "IN1" "endin ,
+                     " "keyw"DISPLAYDB "IN1" "endin ,
+                     " "keyw"STOPDB    "IN1" "endin
+area.8  = white"                                             "
+area.9  = white"                                             "endin
+area.10 = white""keyw"ON     "IN1 || Strip(Object1)
+area.11 = endin
+area.12 = white""keyw"TO     "IN1"                    "
+area.13 = endin
+
+Call Anzeige_Dyn_Panel
+
+keyw    = "GRANT  "
+komma   = " "
+ende    = "N"
+GOPT    = "N"
+If DBADM_Val <> "" Then do
+   If DBADM_Val = "G" Then GOPT  = "Y"
+   OK = NextSl(keyw komma "DBADM      ")
+   komma = "," ; keyw    = "       " ;
+ End
+
+If CREATETAB_Val <> "" Then do
+   If CREATETAB_Val = "G" Then GOPT = "Y"
+   OK = NextSl(keyw komma "CREATETAB  ")
+   komma = "," ; keyw    = "       " ;
+ End
+
+If DROP_Val <> "" Then do
+   If DROP_Val = "G" Then GOPT   = "Y"
+   OK = NextSl(keyw komma "DROP       ")
+   komma = "," ; keyw    = "       " ;
+ End
+
+If STARTDB_Val <> "" Then do
+   If STARTDB_Val = "G" Then GOPT = "Y"
+   OK = NextSl(keyw komma "STARTDB    ")
+   komma = "," ; keyw    = "       " ;
+ End
+
+If DBCTRL_Val <> "" Then do
+   If DBCTRL_Val = "G" Then GOPT = "Y"
+   OK = NextSl(keyw komma "DBCTRL     ")
+   komma = "," ; keyw    = "       " ;
+ End
+
+If CREATETS_Val <> "" Then do
+   If CREATETS_Val = "G" Then GOPT = "Y"
+   OK = NextSl(keyw komma "CREATETS   ")
+   komma = "," ; keyw    = "       " ;
+ End
+
+If IMAGCOPY_Val <> "" Then do
+   If IMAGCOPY_Val = "G" Then GOPT = "Y"
+   OK = NextSl(keyw komma "IMAGCOPY   ")
+   komma = "," ; keyw    = "       " ;
+ End
+
+If REORG_Val <> "" Then do
+   If REORG_Val = "G" Then GOPT  = "Y"
+   OK = NextSl(keyw komma "REORG      ")
+   komma = "," ; keyw    = "       " ;
+ End
+
+If RECOVERDB_Val <> "" Then do
+   If RECOVERDB_Val = "G" Then GOPT = "Y"
+   OK = NextSl(keyw komma "RECOVERDB  ")
+   komma = "," ; keyw    = "       " ;
+ End
+
+If STATS_Val <> "" Then do
+   If STATS_Val = "G" Then GOPT  = "Y"
+   OK = NextSl(keyw komma "STATS      ")
+   komma = "," ; keyw    = "       " ;
+ End
+
+If LOAD_Val <> "" Then do
+   If LOAD_Val = "G" Then GOPT   = "Y"
+   OK = NextSl(keyw komma "LOAD       ")
+   komma = "," ; keyw    = "       " ;
+ End
+
+If REPAIR_Val <> "" Then do
+   If REPAIR_Val = "G" Then GOPT = "Y"
+   OK = NextSl(keyw komma "REPAIR     ")
+   komma = "," ; keyw    = "       " ;
+ End
+
+If DBMAINT_Val <> "" Then do
+   If DBMAINT_Val = "G" Then GOPT = "Y"
+   OK = NextSl(keyw komma "DBMAINT    ")
+   komma = "," ; keyw    = "       " ;
+ End
+
+If DISPLAYDB_Val <> "" Then do
+   If DISPLAYDB_Val = "G" Then GOPT = "Y"
+   OK = NextSl(keyw komma "DISPLAYDB  ")
+   komma = "," ; keyw    = "       " ;
+ End
+
+If STOPDB_Val <> "" Then do
+   If STOPDB_Val = "G" Then GOPT = "Y"
+   OK = NextSl(keyw komma "STOPDB     ")
+   komma = "," ; keyw    = "       " ;
+ End
+
+
+OK = NextSl("ON DATABASE " On_Val )
+OK = NextSl("TO       " TO_Val      )
+If GOPT = "Y" Then OK = NextSl("WITH GRANT OPTION ")
+OK = NextSl(";")
+
+Return
+
+Grant_SYS:
+
+
+CR      = DB2_CREATOR1
+NM      = DB2_NAME1
+drop sl.
+sl.0    = 0
+
+area.0 = 14
+area.1  = white"                   G WITH GRANT              "
+area.2  = white"                   other                     "
+area.3  = white"                                             "
+area.4  = white"Grant  "keyw"ACCESSCTRL  "IN1" "endin ,
+                     " "keyw"BINDADD     "IN1" "endin ,
+                     " "keyw"BINDAGENT   "IN1" "endin ,
+                     " "keyw"BSDS        "IN1" "endin
+area.5  = white"       "keyw"CREATEALIAS "IN1" "endin ,
+                     " "keyw"CREATEDBA   "IN1" "endin ,
+                     " "keyw"CREATEDBC   "IN1" "endin ,
+                     " "keyw"CREATESG    "IN1" "endin
+area.6  = white"       "keyw"CREATETMTAB "IN1" "endin ,
+                     " "keyw"DATAACCESS  "IN1" "endin ,
+                     " "keyw"DBADM       "IN1" "endin ,
+                     " "keyw"DISPLAY     "IN1" "endin
+area.7  = white"       "keyw"EXPLAIN     "IN1" "endin ,
+                     " "keyw"MONITOR1    "IN1" "endin ,
+                     " "keyw"MONITOR2    "IN1" "endin ,
+                     " "keyw"DEBUGSESSION"IN1" "endin
+area.8  = white"       "keyw"RECOVER     "IN1" "endin ,
+                     " "keyw"SQLADM      "IN1" "endin ,
+                     " "keyw"STOPALL     "IN1" "endin ,
+                     " "keyw"STOSPACE    "IN1" "endin
+area.9  = white"       "keyw"SYSADM      "IN1" "endin ,
+                     " "keyw"SYSCTRL     "IN1" "endin ,
+                     " "keyw"SYSOPR      "IN1" "endin ,
+                     " "keyw"TRACE       "IN1" "endin
+area.10 = white"       "keyw"CREATE_SECURE_OBJECT "IN1" "endin ,
+                     "        " ,
+                     " "keyw"ARCHIVE_ON_SYSTEM" IN1" "endin
+area.11 = white"                                             "
+area.12 = white"                                             "endin
+area.13 = white"       "keyw"TO     "IN1 || Strip(Object1)
+area.14 = endin
+
+Call Anzeige_Dyn_Panel
+
+keyw    = "GRANT  "
+komma   = " "
+ende    = "N"
+GOPT    = "N"
+If ACCESSCTRL_Val <> "" Then do
+   If ACCESSCTRL_Val = "G" Then GOPT  = "Y"
+   OK = NextSl(keyw komma "ACCESSCTRL ")
+    komma = "," ; keyw    = "       " ;
+  End
+ If BINDADD_Val <> "" Then do
+    If BINDADD_Val = "G" Then GOPT  = "Y"
+    OK = NextSl(keyw komma "BINDADD ")
+    komma = "," ; keyw    = "       " ;
+  End
+ If BINDAGENT_Val <> "" Then do
+    If BINDAGENT_Val = "G" Then GOPT  = "Y"
+    OK = NextSl(keyw komma "BINDAGENT ")
+    komma = "," ; keyw    = "       " ;
+  End
+
+If BSDS_Val <> "" Then do
+    If BSDS_Val = "G" Then GOPT  = "Y"
+    OK = NextSl(keyw komma "BSDS ")
+    komma = "," ; keyw    = "       " ;
+  End
+If CREATEALIAS_Val <> "" Then do
+   If CREATEALIAS_Val = "G" Then GOPT  = "Y"
+   OK = NextSl(keyw komma "CREATEALIAS ")
+   komma = "," ; keyw    = "       " ;
+ End
+if CREATEDBA_Val <> "" Then do
+   If CREATEDBA_Val = "G" Then GOPT  = "Y"
+   OK = NextSl(keyw komma "CREATEDBA ")
+   komma = "," ; keyw    = "       " ;
+ End
+if CREATEDBC_Val <> "" Then do
+   If CREATEDBC_Val = "G" Then GOPT  = "Y"
+   OK = NextSl(keyw komma "CREATEDBC ")
+   komma = "," ; keyw    = "       " ;
+ End
+if CREATESG_Val <> "" Then do
+   If CREATESG_Val = "G" Then GOPT  = "Y"
+   OK = NextSl(keyw komma "CREATESG ")
+   komma = "," ; keyw    = "       " ;
+End
+If CREATETMTAB_Val <> "" Then do
+   If CREATETMTAB_Val = "G" Then GOPT  = "Y"
+   OK = NextSl(keyw komma "CREATETMTAB ")
+   komma = "," ; keyw    = "       " ;
+ End
+If DATAACCESS_Val <> "" Then do
+   If DATAACCESS_Val = "G" Then GOPT  = "Y"
+   OK = NextSl(keyw komma "DATAACCESS ")
+   komma = "," ; keyw    = "       " ;
+ End
+If DBADM_Val <> "" Then do
+   If DBADM_Val = "G" Then GOPT  = "Y"
+   OK = NextSl(keyw komma "DBADM ")
+   komma = "," ; keyw    = "       " ;
+ End
+If DISPLAY_Val <> "" Then do
+   If DISPLAY_Val = "G" Then GOPT  = "Y"
+   OK = NextSl(keyw komma "DISPLAY ")
+   komma = "," ; keyw    = "       " ;
+ End
+If EXPLAIN_Val <> "" Then do
+   If EXPLAIN_Val = "G" Then GOPT  = "Y"
+   OK = NextSl(keyw komma "EXPLAIN ")
+   komma = "," ; keyw    = "       " ;
+ End
+
+If MONITOR1_Val <> "" Then do
+   If MONITOR1_Val = "G" Then GOPT  = "Y"
+   OK = NextSl(keyw komma "MONITOR1 ")
+   komma = "," ; keyw    = "       " ;
+ End
+If MONITOR2_Val <> "" Then do
+   If MONITOR2_Val = "G" Then GOPT  = "Y"
+   OK = NextSl(keyw komma "MONITOR2 ")
+   komma = "," ; keyw    = "       " ;
+ End
+If DEBUGSESSION_Val <> "" Then do
+   If DEBUGSESSION_Val = "G" Then GOPT  = "Y"
+   OK = NextSl(keyw komma "DEBUGSESSION ")
+   komma = "," ; keyw    = "       " ;
+ End
+If RECOVER_Val <> "" Then do
+   If RECOVER_Val = "G" Then GOPT  = "Y"
+   OK = NextSl(keyw komma "RECOVER ")
+   komma = "," ; keyw    = "       " ;
+ End
+If SQLADM_Val <> "" Then do
+   If SQLADM_Val = "G" Then GOPT  = "Y"
+   OK = NextSl(keyw komma "SQLADM ")
+   komma = "," ; keyw    = "       " ;
+ End
+If STOPALL_Val <> "" Then do
+   If STOPALL_Val = "G" Then GOPT  = "Y"
+   OK = NextSl(keyw komma "STOPALL ")
+   komma = "," ; keyw    = "       " ;
+ End
+If STOSPACE_Val <> "" Then do
+   If STOSPACE_Val = "G" Then GOPT  = "Y"
+   OK = NextSl(keyw komma "STOSPACE ")
+   komma = "," ; keyw    = "       " ;
+ End
+
+If SYSADM_Val <> "" Then do
+   If SYSADM_Val = "G" Then GOPT  = "Y"
+   OK = NextSl(keyw komma "SYSADM ")
+   komma = "," ; keyw    = "       " ;
+ End
+If SYSCTRL_Val <> "" Then do
+   If SYSCTRL_Val = "G" Then GOPT  = "Y"
+   OK = NextSl(keyw komma "SYSCTRL ")
+   komma = "," ; keyw    = "       " ;
+ End
+If SYSOPR_Val <> "" Then do
+   If SYSOPR_Val = "G" Then GOPT  = "Y"
+   OK = NextSl(keyw komma "SYSOPR ")
+   komma = "," ; keyw    = "       " ;
+ End
+
+If TRACE_Val <> "" Then do
+   If TRACE_Val = "G" Then GOPT  = "Y"
+   OK = NextSl(keyw komma "TRACE ")
+   komma = "," ; keyw    = "       " ;
+ End
+If CREATE_SECURE_OBJECT_Val <> "" Then do
+   If CREATE_SECURE_OBJECT_Val = "G" Then GOPT  = "Y"
+   OK = NextSl(keyw komma "CREATE_SECURE_OBJECT ")
+   komma = "," ; keyw    = "       " ;
+ End
+If ARCHIVE_ON_SYSTEM_Val <> "" Then do
+   If ARCHIVE_ON_SYSTEM_Val = "G" Then GOPT  = "Y"
+   OK = NextSl(keyw komma "ARCHIVE ON SYSTEM ")
+   komma = "," ; keyw    = "       " ;
+ End
+
+
+OK = NextSl("TO       " TO_Val      )
+If GOPT = "Y" Then OK = NextSl("WITH GRANT OPTION ")
+OK = NextSl(";")
+
+Return
+
+Grant_SEQUENCE:
+
+CR      = DB2_CREATOR1
+NM      = DB2_NAME1
+drop sl.
+sl.0 = 0
+
+area.0 = 11
+area.1  = white"                   G WITH GRANT     "
+area.2  = white"                   other            "
+area.3  = white"                                             "
+area.4  = white"Grant "keyw"Usage "IN1" " || endin
+area.5  = white"      "keyw"Alter "IN1" " || endin
+area.6  =      "                                             "
+area.7  = white"Of "Object1""
+area.8  = white"     "keyw"TO     "IN1" "
+area.9  =      "                                             "
+area.10 =      "                                             "
+area.11 = endin""
+
+Call Anzeige_Dyn_Panel
+
+Alter = ""
+Komma = " "
+If Usage_Val <> "" Then do
+   If Alter_Val = "G" Then GOPT  = "Y"
+   Alter = Alter || Komma "USAGE"
+   Komma = ","
+ End
+If Alter_Val <> "" Then do
+   If Alter_Val = "G" Then GOPT  = "Y"
+   Alter = Alter || Komma "ALTER"
+   Komma = ","
+ End
+If Length(Alter) > 0 then do
+   OK = NextSl("Grant "Alter )
+   OK = NextSl("ON SEQUENCE " Object1)
+   OK = NextSl("TO       " TO_Val      )
+   If Grant_Val = "G" Then GOPT = "Y"
+   If GOPT = "Y" Then OK = NextSl("WITH GRANT OPTION ")
+   OK = NextSl(";")
+ End
+
+Return
+
+
+Revoke_GV:
+
+Call Auto_Parse
+
+GVAR    = SPACE(SCHEMA       || "." ||  NAME , 0)
+GRANTOR = Left(GRANTOR, 30, ' ')
+GRANTEE = Left(GRANTEE, 30, ' ')
+
+drop sl.
+sl.0 = 0
+
+area.0 = 10
+area.1  = white"                                    "
+area.2  = white"                                             "
+area.3  = white"Revoke "keyw"Read        "IN1 || READAUTH  || endin
+area.4  = white"       "keyw"Write       "IN1 || WRITEAUTH || endin
+area.5  = white"       "keyw"ON VARIABLE "in1 || GVAR      || endin
+area.6  = white "      "keyw"From        "IN1 || GRANTEE   || endin
+area.7  = white "      "keyw"By          "IN1 || GRANTOR   || endin
+area.8  = white "      "keyw"RESTRICT    "IN1 || " " || endin " Y/N  "
+area.9  = white "                                            "
+area.10 = white "                                            "
+
+Call Anzeige_Dyn_Panel
+
+Opt   = ""
+komma = ""
+If Read_Val <> ReadAuth Then do
+   Opt   = opt || komma || " Read"
+   komma = ","
+ End
+If Write_Val <> WriteAuth Then do
+   Opt   = opt || komma || " Write "
+   komma = ","
+ End
+
+If Opt <> "" Then do
+   OK = NextSl("REVOKE       " opt      )
+   OK = NextSl("   ON Variable "ON_Val )
+   OK = NextSl("   FROM  "From_Val      )
+   OK = NextSl("   BY    "By_Val        )
+   If RESTRICT_val  = "Y" Then OK = NextSl("RESTRICT  ")
+   OK = NextSl(";")
+ End
+
+Return
+
+Revoke_Table:
+Call Auto_Parse
+CR      = TCREATOR
+NM      = TTNAME
+drop sl.
+sl.0 = 0
+
+All         = " "
+Select      = Substr(SELECTAUTH      , 1, 20)
+Insert      = Substr(InsertAUTH      , 1, 20)
+Update      = Substr(UpdateAUTH      , 1, 20)
+Delete      = Substr(DeleteAUTH      , 1, 20)
+Alter       = Substr(ALTERAUTH       , 1, 20)
+Index       = Substr(INDEXAUTH       , 1, 20)
+Trigger     = Substr(TRIGGERAUTH     , 1, 20)
+References  = Substr(REFERENCESAUTH  , 1, 20)
+Unload      = Substr(UNLOADAUTH      , 1, 20)
+Table       = Space(TCREATOR '.' TTNAME, 0)
+Grantee     = Substr(GRANTEE, 1, 20)
+
+area.0 = 20
+area.1  = white"Revoke Table/View                             "
+area.2  = white"                                              "
+area.3  = white"                                              "
+area.4  = white"Revoke "keyw"All        "in1|| All        || endin
+area.5  = white"       "keyw"Select     "in1|| Select     || endin
+area.6  = white"       "keyw"Insert     "in1|| Insert     || endin
+area.7  = white"       "keyw"Update     "in1|| Update     || endin
+area.8  = white"       "keyw"Delete     "in1|| Delete     || endin
+area.9  = white"       "keyw"Alter      "in1|| Alter      || endin
+area.10 = white"       "keyw"Index      "in1|| Index      || endin
+area.11 = white"       "keyw"Trigger    "in1|| Trigger    || endin
+area.12 = white"       "keyw"References "in1|| References || endin
+area.13 = white"       "keyw"Unload     "in1|| Unload     || endin
+area.14 = white"       "keyw"Table      "in1|| Table      || endin
+area.15 = white"       "keyw"Grantee    "IN1|| Grantee    || endin
+area.16 =      "                                             "
+area.17 = white"   BY  "keyw"Grantor    "IN1|| Grantor    || endin
+area.18 =      "                                             "
+area.19 =      "                                             "
+area.20 =      "                                             "
+
+Call Anzeige_Dyn_Panel
+
+keyw    = "REVOKE "
+komma   = " "
+ende    = "N"
+If All_Val =  "Y" Then do
+   OK = NextSl(keyw komma "ALL    ")
+ End
+ Else Do
+
+   If Select_Val <> Select  Then do
+      OK = NextSl(keyw komma "Select ")
+      komma = "," ; keyw    = "       " ;
+    End
+   If Insert_Val <> Insert  Then do
+      OK = NextSl(keyw komma "Insert ")
+      komma = "," ; keyw    = "       " ;
+    End
+   If Update_Val <> Update   Then do
+      OK = NextSl(keyw komma "Update ")
+      komma = "," ; keyw    = "       " ;
+    End
+   If Delete_Val <> Delete  Then do
+      OK = NextSl(keyw komma "Delete ")
+      komma = "," ; keyw    = "       " ;
+    End
+   If Alter_Val <> Alter    Then do
+      OK = NextSl(keyw komma "Alter ")
+      komma = "," ; keyw    = "       " ;
+    End
+   If index_Val <> Index    Then do
+      OK = NextSl(keyw komma "index ")
+      komma = "," ; keyw    = "       " ;
+    End
+   If Trigger_Val <> Trigger Then do
+      OK = NextSl(keyw komma "Trigger ")
+      komma = "," ; keyw    = "       " ;
+    End
+   If References_Val <> References Then Do
+      OK = NextSl(keyw komma "References ")
+      komma = "," ; keyw    = "       " ;
+    End
+   If Unload_Val     <> Unload  Then do
+      OK = NextSl(keyw komma "Unload ")
+      komma = "," ; keyw    = "       " ;
+    End
+ End
+
+OK = NextSl("ON Table " Table_val   )
+OK = NextSl("FROM     " Grantee_Val )
+If Grantor_val <> "" Then Do
+   OK = NextSl("BY       " Grantor_Val )
+ End
+OK = NextSl(";")
+
+Return
+
+Revoke_COlumn:
+
+drop sl.
+sl.0 = 0
+
+Select
+  When auswkz = 'COA' Then Do
+       Call Auto_Parse
+       OK = NextSl("REVOKE UPDATE           "  )
+       OK = NextSl("   ON "SPACE(CREATOR "."  TNAME, 0) )
+       OK = NextSl(" FROM "GRANTEE )
+       OK = NextSl( "; " )
+   END
+  OTHERWISE DO
+       Call Auto_Parse
+       OK = NextSl("REVOKE UPDATE        "  )
+       OK = NextSl("   ON "SPACE(TBCREATOR "."  TBNAME, 0) )
+       OK = NextSl(" FROM "GRANTEE )
+       OK = NextSl( "; " )
+   END
+ END
+
+
+Return
+
+
+Revoke_Use:
+
+Call Auto_Parse
+Use_OF  = Translate(OBTYPE)
+IF USE_OF = 'STORAGEGROUP' THEN USE_OF = "STOGROUP"
+
+Select
+  When use_of = "JAR-FILE" Then  Do
+       USE_OF     = "JAR"
+       Revoke_Text = "REVOKE USAGE ON "
+   End
+  Otherwise Revoke_Text = "REVOKE USE OF "
+ End
+
+CR      = QUALIFIER
+NM      = NAME
+if qualifier   = "" Then Do
+   use_OBJECT = name
+ End
+Else do
+   use_OBJECT = space(QUALIFIER "." NAME , 0)
+ End
+
+drop sl.
+sl.0 = 0
+
+area.0 = 7
+area.1  = white" REVOKE USER OF " USE_OF
+area.2  = white"                                             "
+area.3  = white || Revoke_Text Use_Of use_OBJECT "  "
+area.4  = white"     "keyw"From   " IN1 || Grantee ||    endin
+area.5  =      "                                             "
+area.6  = White""white"BY   "keyw"Grantor "IN1 || Grantor ||    endin
+area.7  = White"                                      "
+
+Call Anzeige_Dyn_Panel
+
+If TO_Val <> "" Then do
+   If Object_Val = "G" Then GOPT  = "Y"
+   OK = NextSl(Revoke_Text Use_OF use_OBJECT    )
+ End
+OK = NextSl("From     " From_Val    )
+If Grantor_val <> "" Then Do
+   OK = NextSl("BY       " Grantor_Val )
+ End
+OK = NextSl(";")
+
+Return
+
+
+REVOKE_Collection:
+
+Call Auto_Parse
+
+select
+  when QUALIFIER  = "PACKADM" Then do
+       Create  = 'N'
+       PACKADM = 'Y'
+   end
+  Otherwise do
+       CREATE  = 'Y'
+       PACKADM = 'N'
+   end
+ end
+
+collid = name
+drop sl.
+sl.0    = 0
+
+area.0 =  9
+area.1  = white"Revoke "keyw"Create      "IN1 || Create   || endin
+area.2  = white"       "keyw"Packadm     "IN1 || Packadm  || endin
+area.3  = white" "
+area.4  = white"       "keyw"Collection  "IN1 || Collid   || endin
+area.5  = white"       "keyw"From        "IN1 || GRANTEE  || endin
+area.6  = white" "
+area.7  = white"       "keyw"BY          "IN1 || GRANTOR  || endin
+area.8  = white" "
+area.9  = white" "
+
+Call Anzeige_Dyn_Panel
+
+keyw    = "REVOKE "
+komma   = " "
+If Create_Val <> Create Then do
+   OK = NextSl(keyw "Create ")
+   OK = NextSl("ON COLLECTION " Collection_Val  )
+   OK = NextSl("From    " From_Val    )
+   If by_val <> "" THEN DO
+      OK = NextSl("BY      " BY_Val    )
+    End
+   OK = NextSl(";")
+ End
+
+If Packadm_Val <> PACKADM Then do
+   OK = NextSl(keyw komma "Packadm ")
+   OK = NextSl("ON COLLECTION " Collection_Val )
+   OK = NextSl("From    " From_Val    )
+   If by_val <> "" THEN DO
+      OK = NextSl("BY      " BY_Val    )
+    End
+   OK = NextSl(";")
+ End
+
+
+Return
+
+REVOKE_Package:
+
+Call Auto_Parse
+
+drop sl.
+sl.0    = 0
+
+All     = " "
+Package = Strip(collid) || '.' || Strip(Name)
+bind    = substr(BINDAUTH, 1, 1)
+execute = substr(COPYAUTH, 1, 1)
+copy    = Substr(EXECUTEAUTH, 1, 1)
+
+area.0 = 10
+area.1  = white"                                             "
+area.2  = white"REVOKE "keyw"All     "in1 || All     || endin
+area.3  = white"       "keyw"Bind    "in1 || BIND    || endin
+area.4  = white"       "keyw"Execute "in1 || Execute || endin
+area.5  = white"       "keyw"Copy    "IN1 || copy    || endin
+area.6  = white"                                             "
+area.7  = white"       "keyw"Package "IN1 || Package || endin
+area.8  = white"                                        "
+area.9  = white"       "keyw"From    "IN1 || Grantee || endin
+area.10 = white"       "keyw"BY      "IN1 || Grantor || endin
+area.11 = endin
+
+Call Anzeige_Dyn_Panel
+
+keyw    = "REVOKE "
+komma   = " "
+ende    = "N"
+If All_Val    <> ALL     Then do
+   OK = NextSl(keyw komma "ALL  ")
+   komma = "," ; keyw    = "       " ;
+ End
+ Else do
+   If Bind_Val    <> Bind    Then do
+      OK = NextSl(keyw komma "Bind ")
+      komma = "," ; keyw    = "       " ;
+    End
+   If Execute_Val <> Execute Then do
+      OK = NextSl(keyw komma "Execute ")
+      komma = "," ; keyw    = "       " ;
+    End
+   If Copy_Val    <> Copy    Then do
+      OK = NextSl(keyw komma "Copy ")
+      komma = "," ; keyw    = "       " ;
+    End
+ End
+
+OK = NextSl("ON PACKAGE " Package_Val )
+OK = NextSl("From    " From_Val    )
+If by_val <> "" THEN DO
+   OK = NextSl("BY      " BY_Val    )
+ End
+OK = NextSl(";")
+
+Return
+
+REVOKE_Plan:
+Call Auto_Parse
+
+BIND    = substr(BINDAUTH    , 1, 1)
+Execute = Substr(EXECUTEAUTH , 1, 1)
+drop sl.
+sl.0    = 0
+
+area.0 =  9
+area.1  = white"                                             "
+area.2  = white"REVOKE "keyw"Bind    "IN1 || Bind    || endin
+area.3  = white"       "keyw"Execute "IN1 || Execute || endin
+area.4  = white"                                             "
+area.5  = white"       "keyw"Plan    "IN1 || NAME    || endin
+area.6  = white"       "keyw"From    "IN1 || Grantee || endin
+area.7  = white"       "keyw"BY      "IN1 || Grantor || endin
+area.8  = white" "
+area.9  = white" "
+
+Call Anzeige_Dyn_Panel
+
+keyw    = "REVOKE "
+komma   = " "
+ende    = "N"
+GOPT    = "N"
+If Bind_Val <> Bind  Then do
+   OK = NextSl(keyw komma "Bind ")
+   komma = "," ; keyw    = "       " ;
+ End
+If Execute_Val <> Execute Then do
+   OK = NextSl(keyw komma "Execute ")
+   komma = "," ; keyw    = "       " ;
+ End
+
+OK = NextSl("ON Plan  " Plan_Val )
+OK = NextSl("From     " From_Val      )
+If by_val <> "" Then do
+   OK = NextSl("By       " By_Val        )
+ End
+OK = NextSl(";")
+
+Return
+
+REVOKE_Routine:
+Call Auto_Parse
+
+CR      = DB2_CREATOR1
+NM      = DB2_NAME1
+select
+  When ROUTINETYPE = 'F' Then OBJTYPE = 'SPECIFIC FUNCTION'
+  When ROUTINETYPE = 'P' Then OBJTYPE = 'PROCEDURE'
+  Otherwise                   OBJTYPE = 'PROCEDURE'
+ end
+
+OBJNAME = Strip(schema) || "." || Strip(SPECIFICNAME)
+execute = Substr(EXECUTEAUTH, 1, 1)
+
+drop sl.
+sl.0    = 0
+
+area.0 = 7
+area.1  = white"                                             "
+area.2  = white"REVOKE "OBJTYPE OBJNAME
+area.3  = white"       "keyw"Execute "IN1 || EXECUTE  || endin
+area.4  = white"       "keyw"From    "IN1 || Grantee  || endin
+area.5  = white"       "keyw"BY      "in1 || Grantor  || endin
+area.6  = White" "
+area.7  = White" "
+
+Call Anzeige_Dyn_Panel
+
+If Execute_Val  <> Execute Then do
+   OK = NextSl("REVOKE EXECUTE ON "OBJTYPE )
+   OK = NextSl("     " OBJNAME             )
+   OK = NextSl("From " From_Val            )
+   OK = NextSl("BY   " BY_Val           )
+   OK = NextSl(";")
+ End
+
+Return
+
+REVOKE_DB:
+Call Auto_Parse
+
+drop sl.
+sl.0    = 0
+
+DBADMAUTH        = Substr(DBADMAUTH      , 1, 1)
+CREATETABAUTH    = Substr(CREATETABAUTH  , 1, 1)
+DROPAUTH         = Substr(DROPAUTH       , 1, 1)
+STARTDBAUTH      = Substr(STARTDBAUTH    , 1, 1)
+DBCTRLAUTH       = Substr(DBCTRLAUTH     , 1, 1)
+CREATETSAUTH     = Substr(CREATETSAUTH   , 1, 1)
+IMAGCOPYAUTH     = Substr(IMAGCOPYAUTH   , 1, 1)
+REORGAUTH        = Substr(REORGAUTH      , 1, 1)
+RECOVERDBAUTH    = Substr(RECOVERDBAUTH  , 1, 1)
+STATSAUTH        = Substr(STATSAUTH      , 1, 1)
+LOADAUTH         = Substr(LOADAUTH       , 1, 1)
+REPAIRAUTH       = Substr(REPAIRAUTH     , 1, 1)
+DBMAINTAUTH      = Substr(DBMAINTAUTH    , 1, 1)
+DISPLAYDBAUTH    = Substr(DISPLAYDBAUTH  , 1, 1)
+STOPAUTH         = Substr(STOPAUTH       , 1, 1)
+
+area.0 = 13
+area.1  = white"                                             "
+area.2  = white"REVOKE "keyw"ALL       "IN1" "endin
+area.3  = white"       "keyw"DBADM     "IN1|| DBADMAUTH || endin ,
+                     " "keyw"CREATETAB "IN1|| CREATETABAUTH || endin ,
+                     " "keyw"DROP      "IN1|| DROPAUTH || endin ,
+                     " "keyw"STARTDB   "IN1|| STARTDBAUTH || endin
+area.4  = white"       "keyw"DBCTRL    "IN1|| DBCTRLAUTH || endin ,
+                     " "keyw"CREATETS  "IN1|| CREATETSAUTH || endin ,
+                     " "keyw"IMAGCOPY  "IN1|| IMAGCOPYAUTH || endin ,
+                     " "keyw"REORG     "IN1|| REORGAUTH || endin
+area.5  = white"       "keyw"RECOVERDB "IN1|| RECOVERDBAUTH || endin ,
+                     " "keyw"STATS     "IN1|| STATSAUTH || endin ,
+                     " "keyw"LOAD      "IN1|| LOADAUTH || endin ,
+                     " "keyw"REPAIR    "IN1|| REPAIRAUTH || endin
+area.6  = white"       "keyw"DBMAINT   "IN1|| DBMAINTAUTH || endin ,
+                     " "keyw"DISPLAYDB "IN1|| DISPLAYDBAUTH || endin ,
+                     " "keyw"STOPDB    "IN1|| STOPAUTH || endin
+area.7  = white"                                             "
+area.8  = white"                                             "endin
+area.9  = white""keyw"ON     "IN1 || Strip(NAME)   endin
+area.10 = endin
+area.11 = white""keyw"FROM   "IN1 || GRANTEE || endin
+area.12 = white""keyw"BY     "IN1 || GRANTOR || endin
+area.13 = endin
+
+Call Anzeige_Dyn_Panel
+
+keyw    = "REVOKE "
+komma   = " "
+ende    = "N"
+GOPT    = "N"
+If ALL_VAL   <> "" Then do
+   OK = NextSl(Keyw "    DBADM        ")
+   OK = NextSl("          , CREATETAB    ")
+   OK = NextSl("          , DROP         ")
+   OK = NextSl("          , STARTDB      ")
+   OK = NextSl("          , DBCTRL       ")
+   OK = NextSl("          , CREATETS     ")
+   OK = NextSl("          , IMAGCOPY     ")
+   OK = NextSl("          , REORG        ")
+   OK = NextSl("          , RECOVERDB    ")
+   OK = NextSl("          , STATS        ")
+   OK = NextSl("          , LOAD         ")
+   OK = NextSl("          , REPAIR       ")
+   OK = NextSl("          , DBMAINT      ")
+   OK = NextSl("          , DISPLAYDB    ")
+   OK = NextSl("          , STOPDB       ")
+   komma = "," ; keyw    = "       " ;
+ End
+ else do
+   If DBADM_Val <> DBADMAUTH  Then do
+      OK = NextSl(keyw komma "DBADM      ")
+      komma = "," ; keyw    = "       " ;
+    End
+
+   If CREATETAB_Val <> CREATETABAUTH Then do
+      If CREATETAB_Val = "G" Then GOPT = "Y"
+      OK = NextSl(keyw komma "CREATETAB  ")
+      komma = "," ; keyw    = "       " ;
+    End
+
+   If DROP_Val <> DROPAUTH Then do
+      OK = NextSl(keyw komma "DROP       ")
+      komma = "," ; keyw    = "       " ;
+    End
+
+   If STARTDB_Val <> STARTDBAUTH Then do
+      OK = NextSl(keyw komma "STARTDB    ")
+      komma = "," ; keyw    = "       " ;
+    End
+
+   If DBCTRL_Val <> DBCTRLAUTH Then do
+      OK = NextSl(keyw komma "DBCTRL     ")
+      komma = "," ; keyw    = "       " ;
+    End
+
+   If CREATETS_Val <> CREATETSAUTH  Then do
+      OK = NextSl(keyw komma "CREATETS   ")
+      komma = "," ; keyw    = "       " ;
+    End
+
+   If IMAGCOPY_Val <> IMAGCOPYAUTH  Then do
+      OK = NextSl(keyw komma "IMAGCOPY   ")
+      komma = "," ; keyw    = "       " ;
+    End
+
+   If REORG_Val <> REORGAUTH Then do
+      OK = NextSl(keyw komma "REORG      ")
+      komma = "," ; keyw    = "       " ;
+    End
+
+   If RECOVERDB_Val <> RECOVERDBAUTH Then do
+      OK = NextSl(keyw komma "RECOVERDB  ")
+      komma = "," ; keyw    = "       " ;
+    End
+
+   If STATS_Val <> STATSAUTH Then do
+      OK = NextSl(keyw komma "STATS      ")
+      komma = "," ; keyw    = "       " ;
+    End
+
+   If LOAD_Val <> LOADAUTH Then do
+      OK = NextSl(keyw komma "LOAD       ")
+      komma = "," ; keyw    = "       " ;
+    End
+
+   If REPAIR_Val <> REPAIRAUTH Then do
+      OK = NextSl(keyw komma "REPAIR     ")
+      komma = "," ; keyw    = "       " ;
+    End
+
+   If DBMAINT_Val <> DBMAINTAUTH Then do
+      OK = NextSl(keyw komma "DBMAINT    ")
+      komma = "," ; keyw    = "       " ;
+    End
+
+   If DISPLAYDB_Val <> DISPLAYDBAUTH Then do
+      OK = NextSl(keyw komma "DISPLAYDB  ")
+      komma = "," ; keyw    = "       " ;
+    End
+
+   If STOPDB_Val <> STOPAUTH Then do
+      OK = NextSl(keyw komma "STOPDB     ")
+      komma = "," ; keyw    = "       " ;
+    End
+ End
+
+
+OK = NextSl("ON DATABASE " On_Val )
+OK = NextSl("FROM     " FROM_Val      )
+If BY_val <> "" Then Do
+   OK = NextSl("BY       " BY_Val )
+ End
+OK = NextSl(";")
+
+Return
+
+REVOKE_SYS:
+Call Auto_Parse
+
+
+drop sl.
+sl.0    = 0
+
+ACCESSCTRL   = SUBSTR(ACCESSCTRLAUTH   , 1, 1)
+BINDADD      = SUBSTR(BINDADDAUTH      , 1, 1)
+BINDAGENT    = SUBSTR(BINDAGENTAUTH    , 1, 1)
+BSDS         = SUBSTR(BSDSAUTH         , 1, 1)
+CREATEALIAS  = SUBSTR(CREATEALIASAUTH  , 1, 1)
+CREATEDBA    = SUBSTR(CREATEDBAAUTH    , 1, 1)
+CREATEDBC    = SUBSTR(CREATEDBCAUTH    , 1, 1)
+CREATESG     = SUBSTR(CREATESGAUTH     , 1, 1)
+CREATETMTAB  = SUBSTR(CREATETMTABAUTH  , 1, 1)
+DATAACCESS   = SUBSTR(DATAACCESSAUTH   , 1, 1)
+DBADM        = SUBSTR(SDBADMAUTH       , 1, 1)
+DISPLAY      = SUBSTR(DISPLAYAUTH      , 1, 1)
+EXPLAIN      = SUBSTR(EXPLAINAUTH      , 1, 1)
+MONITOR1     = SUBSTR(MON1AUTH         , 1, 1)
+MONITOR2     = SUBSTR(MON2AUTH         , 1, 1)
+DEBUGSESSION = SUBSTR(DEBUGSESSIONAUTH , 1, 1)
+RECOVER      = SUBSTR(RECOVERAUTH      , 1, 1)
+SQLADM       = SUBSTR(SQLADMAUTH       , 1, 1)
+STOPALL      = SUBSTR(STOPALLAUTH      , 1, 1)
+STOSPACE     = SUBSTR(STOSPACEAUTH     , 1, 1)
+SYSADM       = SUBSTR(SYSADMAUTH       , 1, 1)
+SYSCTRL      = SUBSTR(SYSCTRLAUTH      , 1, 1)
+SYSOPR       = SUBSTR(SYSOPRAUTH       , 1, 1)
+TRACE        = SUBSTR(TRACEAUTH        , 1, 1)
+CREATE_SECURE_OBJECT  = SUBSTR(CREATESECUREAUTH , 1, 1)
+ARCHIVE_ON_SYSTEM     = SUBSTR(ARCHIVEAUTH      , 1, 1)
+CREATESECUREAUTH      = SUBSTR(CREATESECUREAUTH , 1, 1)
+ARCHIVEAUTH           = SUBSTR(ARCHIVEAUTH      , 1, 1)
+
+area.0 = 13
+area.1  = white"                                             "
+area.2  = white"REVOKE "keyw"ACCESSCTRL  "IN1|| ACCESSCTRL  || endin ,
+                     " "keyw"BINDADD     "IN1|| BINDADD     || endin ,
+                     " "keyw"BINDAGENT   "IN1|| BINDAGENT   || endin ,
+                     " "keyw"BSDS        "IN1|| BSDS        || endin
+area.3  = white"       "keyw"CREATEALIAS "IN1|| CREATEALIAS || endin ,
+                     " "keyw"CREATEDBA   "IN1|| CREATEDBA   || endin ,
+                     " "keyw"CREATEDBC   "IN1|| CREATEDBC   || endin ,
+                     " "keyw"CREATESG    "IN1|| CREATESG    || endin
+area.4  = white"       "keyw"CREATETMTAB "IN1|| CREATETMTAB || endin ,
+                     " "keyw"DATAACCESS  "IN1|| DATAACCESS  || endin ,
+                     " "keyw"DBADM       "IN1|| DBADM       || endin ,
+                     " "keyw"DISPLAY     "IN1|| DISPLAY     || endin
+area.5  = white"       "keyw"EXPLAIN     "IN1|| EXPLAIN     || endin ,
+                     " "keyw"MONITOR1    "IN1|| MONITOR1    || endin ,
+                     " "keyw"MONITOR2    "IN1|| MONITOR2    || endin ,
+                     " "keyw"DEBUGSESSION"IN1|| DEBUGSESSION|| endin
+area.6  = white"       "keyw"RECOVER     "IN1|| RECOVER     || endin ,
+                     " "keyw"SQLADM      "IN1|| SQLADM      || endin ,
+                     " "keyw"STOPALL     "IN1|| STOPALL     || endin ,
+                     " "keyw"STOSPACE    "IN1|| STOSPACE    || endin
+area.7  = white"       "keyw"SYSADM      "IN1|| SYSADM      || endin ,
+                     " "keyw"SYSCTRL     "IN1|| SYSCTRL     || endin ,
+                     " "keyw"SYSOPR      "IN1|| SYSOPR      || endin ,
+                     " "keyw"TRACE       "IN1|| TRACE       || endin
+area.8  = white"       "keyw"CREATE_SECURE_OBJECT "IN1 || ,
+                       CREATESECUREAUTH ||                 endin ,
+                     "        " ,
+                     " "keyw"ARCHIVE_ON_SYSTEM"  IN1 || ,
+                       ARCHIVEAUTH      ||                 endin
+area.9  = white"                                             "
+area.10 = white"                                             "
+area.11 = white"       "keyw"FROM   "IN1 || Strip(Grantee) endin
+area.12 = white"       "keyw"BY     "IN1 || Strip(grantor) endin
+area.13 = white""
+
+Call Anzeige_Dyn_Panel
+
+keyw    = "REVOKE "
+komma   = " "
+ende    = "N"
+GOPT    = "N"
+If ACCESSCTRL_Val <> ACCESSCTRL Then do
+   OK = NextSl(keyw komma "ACCESSCTRL ")
+    komma = "," ; keyw    = "       " ;
+  End
+ If BINDADD_Val   <> BINDADD Then do
+    OK = NextSl(keyw komma "BINDADD ")
+    komma = "," ; keyw    = "       " ;
+  End
+ If BINDAGENT_Val <> BINDAGENT Then do
+    OK = NextSl(keyw komma "BINDAGENT ")
+    komma = "," ; keyw    = "       " ;
+  End
+
+If BSDS_Val <> BSDS Then do
+    OK = NextSl(keyw komma "BSDS ")
+    komma = "," ; keyw    = "       " ;
+  End
+If CREATEALIAS_Val <> CREATEALIAS Then do
+   OK = NextSl(keyw komma "CREATEALIAS ")
+   komma = "," ; keyw    = "       " ;
+ End
+if CREATEDBA_Val <> CREATEDBA Then do
+   OK = NextSl(keyw komma "CREATEDBA ")
+   komma = "," ; keyw    = "       " ;
+ End
+if CREATEDBC_Val <> CREATEDBC Then do
+   OK = NextSl(keyw komma "CREATEDBC ")
+   komma = "," ; keyw    = "       " ;
+ End
+if CREATESG_Val <> CREATESG Then do
+   OK = NextSl(keyw komma "CREATESG ")
+   komma = "," ; keyw    = "       " ;
+End
+If CREATETMTAB_Val <> CREATETMTAB Then do
+   OK = NextSl(keyw komma "CREATETMTAB ")
+   komma = "," ; keyw    = "       " ;
+ End
+If DATAACCESS_Val <> DATAACCESS Then do
+   OK = NextSl(keyw komma "DATAACCESS ")
+   komma = "," ; keyw    = "       " ;
+ End
+If DBADM_Val <> DBADM  Then do
+   OK = NextSl(keyw komma "DBADM ")
+   komma = "," ; keyw    = "       " ;
+ End
+If DISPLAY_Val <> DISPLAY  Then do
+   OK = NextSl(keyw komma "DISPLAY ")
+   komma = "," ; keyw    = "       " ;
+ End
+If EXPLAIN_Val <> EXPLAIN Then do
+   OK = NextSl(keyw komma "EXPLAIN ")
+   komma = "," ; keyw    = "       " ;
+ End
+
+If MONITOR1_Val <> MONITOR1 Then do
+   OK = NextSl(keyw komma "MONITOR1 ")
+   komma = "," ; keyw    = "       " ;
+ End
+If MONITOR2_Val <> MONITOR2 Then do
+   OK = NextSl(keyw komma "MONITOR2 ")
+   komma = "," ; keyw    = "       " ;
+ End
+If DEBUGSESSION_Val <> DEBUGSESSION Then do
+   OK = NextSl(keyw komma "DEBUGSESSION ")
+   komma = "," ; keyw    = "       " ;
+ End
+If RECOVER_Val <> RECOVER Then do
+   OK = NextSl(keyw komma "RECOVER ")
+   komma = "," ; keyw    = "       " ;
+ End
+If SQLADM_Val <> SQLADM Then do
+   OK = NextSl(keyw komma "SQLADM ")
+   komma = "," ; keyw    = "       " ;
+ End
+If STOPALL_Val <> STOPALL Then do
+   OK = NextSl(keyw komma "STOPALL ")
+   komma = "," ; keyw    = "       " ;
+ End
+If STOSPACE_Val <> STOSPACE Then do
+   OK = NextSl(keyw komma "STOSPACE ")
+   komma = "," ; keyw    = "       " ;
+ End
+
+If SYSADM_Val <> SYSADM Then do
+   OK = NextSl(keyw komma "SYSADM ")
+   komma = "," ; keyw    = "       " ;
+ End
+If SYSCTRL_Val <> SYSCTRL Then do
+   OK = NextSl(keyw komma "SYSCTRL ")
+   komma = "," ; keyw    = "       " ;
+ End
+If SYSOPR_Val <> SYSOPR Then do
+   OK = NextSl(keyw komma "SYSOPR ")
+   komma = "," ; keyw    = "       " ;
+ End
+
+If TRACE_Val <> TRACE Then do
+   OK = NextSl(keyw komma "TRACE ")
+   komma = "," ; keyw    = "       " ;
+ End
+If CREATE_SECURE_OBJECT_Val <> CREATE_SECURE_OBJECT Then do
+   OK = NextSl(keyw komma "CREATE_SECURE_OBJECT ")
+   komma = "," ; keyw    = "       " ;
+ End
+If ARCHIVE_ON_SYSTEM_Val <> ARCHIVE_ON_SYSTEM Then do
+   OK = NextSl(keyw komma "ARCHIVE ON SYSTEM ")
+   komma = "," ; keyw    = "       " ;
+ End
+
+
+OK = NextSl("From     " FROM_Val      )
+If BY_val <> "" Then Do
+   OK = NextSl("BY       " BY_Val )
+ End
+OK = NextSl(";")
+
+Return
+
+REVOKE_SEQUENCE:
+Call Auto_Parse
+
+drop sl.
+sl.0 = 0
+
+alter   = Substr(ALTERAUTH, 1, 2)
+use     = Substr(USEAUTH, 1, 2)
+SEQNAME = Space(schema "." name, 0)
+
+area.0  =  6
+area.1  = white"                                             "
+area.2  = white"REVOKE "keyw"Usage "IN1 || use   || endin
+area.3  = white"       "keyw"Alter "IN1 || alter || endin
+area.4  = white"Of     "SEQNAME  || endin
+area.5  = white"       "keyw"FROM   "IN1 || Grantee || endin
+area.6  = white"       "keyw"BY     "IN1 || Grantor || Endin
+area.7  = white"       "
+
+Call Anzeige_Dyn_Panel
+
+keyw  = ""
+Alter = " "
+Komma = " "
+If Usage_Val <> use  Then do
+   Keyw = keyw || Komma "USAGE"
+   Komma = ","
+ End
+If Alter_Val <> alter  Then do
+   keyw  = keyw  || Komma "ALTER"
+   Komma = ","
+ End
+If Length(Alter) > 0 then do
+   OK = NextSl("REVOKE "keyw  )
+   OK = NextSl("ON SEQUENCE " SEQNAME)
+   OK = NextSl("FROM " FROM_Val      )
+   If by_val <> "" Then OK = NextSl("BY " BY_VAL )
+   OK = NextSl(";")
+ End
+
+Return
+
+
+Revoke_Schema:
+
+Call Auto_Parse
+
+CREATEINAUTH = Substr(CREATEINAUTH, 1, 1)
+ALTERINAUTH  = Substr(ALTERINAUTH , 1, 1)
+DROPINAUTH   = Substr(DROPINAUTH  , 1, 1)
+
+drop sl.
+sl.0 = 0
+
+area.0 = 8
+area.1  = white"Revoke"keyw"CreateIN  " || IN1 || CREATEINAUTH || endin
+area.2  = white"      "keyw"AlterIN   " || IN1 || ALTERINAUTH  || endin
+area.3  = white"      "keyw"DropIN    " || IN1 || DROPINAUTH   || endin
+area.4  = white"      "keyw"ON Schema " || in1 || SCHEMANAME   || endin
+area.5  = white"      "keyw"From      " || IN1 || Grantee      || endin
+area.6  = white"      "keyw"By        " || IN1 || Grantor      || endin
+area.7  = white"                                             "
+area.8  =      "                                             "
+
+Call Anzeige_Dyn_Panel
+
+Opt   = ""
+komma = ""
+VAL_GR_OPT = "Y J G"
+
+If CreateIN_Val <> CreateINAuth  Then Do
+   Opt   = opt || komma || " CREATEIN"
+   komma = ","
+ End
+
+If ALTERIN_Val  <> ALTERINAuth   Then Do
+   Opt   = opt || komma || " ALTERIN"
+   komma = ","
+ End
+
+If DROPIN_Val   <> DROPINAuth    Then Do
+   Opt   = opt || komma || " DROPIN"
+   komma = ","
+ End
+
+If Opt <> "" Then do
+   OK = NextSl("Revoke " Strip(opt)      )
+   OK = NextSl("   ON SCHEMA "ON_Val )
+   OK = NextSl("   From "From_Val        )
+   If by_val <> "" Then OK = NextSl("BY "BY_Val       )
+   OK = NextSl(";")
+ End
+
+Return
+
+
+TABLE_DCLGEN:
+
+CR      = DB2_CREATOR1
+NM      = DB2_NAME1
+drop sl.
+sl.0    = 0
+
+Lang    = "COBOL"
+area.0 = 11
+area.1  = white" DCLGEN :                           "
+area.2  = white"                                    "
+area.3  = white"                                             "
+area.4  = white"      "keyw"Language "IN1|| LANG || endin ,
+          white"    COBOL, PLI, C, CPP              "
+area.5  =      "                                             "
+area.6  =      "                                             "
+area.7  = endin""
+area.8  = endin""
+area.9  = endin""
+area.10 = endin""
+area.11 = endin""
+
+Call Anzeige_Dyn_Panel
+
+select
+  When Language_Val = "COBOL"  Then Lang = "COBOL"
+  When Language_Val = "PLI"    Then Lang = "PLI"
+  When Language_Val = "C"      Then Lang = "C"
+  When Language_Val = "CPP"    Then Lang = "CPP"
+  Otherwise                         Lang = "COBOL"
+ End
+
+DB2CMD = "DCLGEN TABLE("CR"."NM") " ,
+         "LIBRARY ('"ISPFILE"(DCLGEN01)' )" ,
+         "ACTION (REPLACE)" ,
+         "LANGUAGE("LANG")" ,
+         ""
+
+
+X   = MSG('ON')
+MAKEBUF
+BUFNO = RC
+QUEUE DB2CMD
+QUEUE "  END"
+X = OUTTRAP("DSNCMD.","*","NOCONCAT")
+ADDRESS TSO "DSN SYSTEM("SSID")"
+X = OUTTRAP("OFF")
+
+RETCODE = RC
+DROPBUF BUFNO
+X   = MSG('OFF')
+
+ADDRESS TSO "FREE FILE(DCLG) NOHOLD"
+ADDRESS TSO "ALLOC F(DCLG) DATASET('"ISPFILE"(DCLGEN01)') SHR"
+ADDRESS TSO "EXECIO * DISKR DCLG (STEM DCLGEN. FINIS"
+ADDRESS TSO "EXECIO 0 DISKR DCLG ( FINIS"
+ADDRESS TSO "FREE FILE(DCLG) NOHOLD"
+Do DSNI = 1 to DCLGEN.0
+   OK = NextSl(DCLGEN.DSNI)
+ End
+
+Return
+
+Anzeige_Dyn_Panel:
+
+ADDRESS ISPEXEC  "VGET (ZSCREENW,ZSCREEND)"
+dyndata = ""
+Do ai = 1 to area.0
+   dyndata = dyndata || Left(area.ai, ZSCREENW, ' ')
+ end
+
+If InitArea  <> "N" THEN InitArea  = "Y"
+If EnterBack <> "Y" THEN EnterBack = "N"
+
+Call ZOSC1906 DYNDATA ,,
+              EnterBack ,,
+              InitArea
+
+Do QUEUED()
+   Parse pull Text
+   Interpret Text
+ End
+
+PF = RESULT
+IF PF = "ENTER" THEN RESP = PF
+IF PF = "PF04" Then exit 4
+
+Return
+
+Anzeige_Dyn_Panel_old:
+
+Zeile = 0
+DROP ausgabe.
+ausgabe.0 = 0
+MaxLines = area.0
+curline = 1                                /* set current line #     */
+dyndata  = ""
+ADDRESS ISPEXEC  "VGET (ZSCREENW,ZSCREEND)"
+Do ai = 1 to area.0
+   dyndata = dyndata || Left(area.ai, ZSCREENW, ' ')
+ end
+dyndata = dyndata || endin
+dynarea = substr(dyndata,1+(curline-1)*ZSCREENW) /*set dyn var  */
+dynarea = dyndata
+
+MaxScreenLines = ZSCREEND-5
+dyndata_len = Length(dyndata)
+trenner = in1
+START   = Pos(keyw, dyndata, 1)
+If START  < 1 Then START = 1
+DYNPOS  = START + 1
+Do ki = 1 to keytab.0
+   Found    = Pos(keytab.ki, dyndata, START )
+   If Found > 0  Then Do
+      SELECT
+        When  DYNPOS =  START + 1   Then dynpos = Found + 1
+        When  Found  <  DYNPOS      Then dynpos = Found + 1
+        Otherwise NOP
+       END
+    End
+ End
+znr     = 1
+
+If EnterBack = "Y" Then PFTASTEN = "ENTER=GO PF03=RETURN PF04=Cancel"
+else                    PFTASTEN = "      PF03=GO    PF04=Cancel "
+
+Do Until disprc > 0
+
+  start   = 1+(curline-1)*ZSCREENW
+  dynarea = substr(dyndata, Start)
+  size = length(dynarea)                   /* Set a scalar variable  */
+  ADDRESS ISPEXEC "DISPLAY PANEL(PDYNPNL1)"
+  MaxScreenLines = DYNDPTH
+  DynArea_len = MaxScreenLines*ZSCREENW
+  dyndata1= Substr(dyndata, 1,  1+(curline-1)*ZSCREENW-1)
+  start   = Length(dyndata1) + Length(dynarea) + 1
+  Dyndata = Dyndata1 || dynarea || Substr(Dyndata, start)
+  Eingabe = dynarea
+
+  disprc = rc                              /* save return code       */
+  ADDRESS ISPEXEC "VGET (ZVERB,ZSCROLLA,ZSCROLLN, ZSCROLLD) "
+  ADDRESS ISPEXEC "VGET (ZXSMAX, ZXSMIN) "
+  dynrc = rc
+  SELECT                                   /* Process scrolling      */
+    When(zverb  = 'UP')   Then Do          /* Scroll up              */
+     If zscrolla = 'MAX' Then Do           /*  if scroll was max     */
+        curline = 1                       /*    scroll to top       */
+      End
+     Else Do                               /*  else a number is known*/
+      curline = curline - MaxScreenLines        /* (max is bottom)   */
+      if curline < 1 then Curline = 1
+      End
+     End
+    When(zverb  = 'DOWN') Then Do          /* Scroll down            */
+     If zscrolla = 'MAX' Then Do           /*  if scroll was max     */
+      curline = maxlines                   /*    scroll to bottom    */
+     end
+     Else do                               /*  else a number is known*/
+      curline = curline + MaxScreenLines        /* (max is bottom)   */
+      If curline > maxlines Then Curline = maxlines
+      if DynArea_len >= dyndata_len Then Do  /* NUR EINE SEITE */
+         curline = 1
+       End
+      end
+     end
+    Otherwise;                      /* could use left & right too    */
+  End
+  if dynrc > 8 then Do
+     say "Display RC="RC
+     say "ZEDSMSG="ZEDSMSG
+     say "ZERRLM="ZERRLM
+     say "ZERRMSG="ZERRMSG
+     say "ZERRSM="ZERRSM
+     say rc object1
+   End
+
+  DO While Length(eingabe) > 0
+     Zeile = zeile + 1
+     trenner = in1
+     FoundL = 0
+     Do ki = 1 to keytab.0
+        Found    = Pos(keytab.ki, eingabe, 1)
+        If Found = 0 Then Iterate
+        Select
+          When FoundL = 0 Then Do
+               Trenner = keytab.KI
+               FoundL  = Found
+           End
+          When FoundL > 0 & Found < FoundL Then Do
+               Trenner = keytab.KI
+               FoundL  = Found
+           End
+          Otherwise NOP
+         End
+      End
+
+     /*    Keyword Finden   */
+     epos     = Pos(keyw, eingabe, 1)
+     xpos     = Pos(Trenner, eingabe, epos+1)
+     elen     = xpos - epos -1
+     If    elen < 0 Then Leave
+     Keyword  =  Substr(eingabe, epos+1, elen  )
+     Keyword  =  Word(Keyword, 1)
+
+     /*    EINGABE Finden   */
+     epos    = Pos(Trenner, eingabe, 1)
+     if epos < 1 then leave
+     xpos     = Pos(endin, eingabe, epos+1)
+     elen     = xpos - epos -1
+     if elen < 1 then leave
+     evalue   = Substr(eingabe, epos+1, elen  )
+     eingabe  = Substr(eingabe, xpos+ 1)
+
+     Interpret Strip(Keyword) || "_VAL" "= evalue"
+   End
+   If PF   = 'PF03'               THEN LEAVE
+   If PF   = 'PF04'               THEN EXIT 4
+   If RESP = "ENTER" & EnterBack = "Y" Then return
+End                                        /* End of display loop    */
+
+Return
+
+
+Utility_Execute:
+
+OK    =  LISTDSI(ISPFILE "FILE")
+If SYSDSNAME = "" Then do
+   ADDRESS "TSO" "ALLOC F(ISPFILE) DA('"ISPFILE"') SHR"
+ End
+CLMEM = Strip(ISPFILE) || "(" || MEM || ")"
+ADDRESS ISPEXEC 'FTOPEN'
+If rc > 4 Then Do
+  Say 'FTOPEN   RC='RC
+  Say 'ZERRSM = 'ZERRSM
+  Say 'ZERRLM = 'ZERRLM
+ End
+ADDRESS ISPEXEC 'FTINCL 'SKEL
+If rc > 4 Then Do
+  Say 'FTINCL   RC='RC
+  Say 'ZERRSM = 'ZERRSM
+  Say 'ZERRLM = 'ZERRLM
+ End
+
+ADDRESS ISPEXEC "FTCLOSE NAME(" || MEM || ") LIBRARY(ISPFILE)"
+ADDRESS ISPEXEC "EDIT DATASET('"CLMEM"') PANEL(ISREFR01)"
+
+return
+
+
+Reorg_Tablespace:
+
+ADDRESS ISPEXEC "CONTROL ERRORS RETURN"
+OBJECT     = Object1
+TYPE       = DB2_CREATOR2
+Select
+       When  auswkz = 'TB'   & TYPE = 'P' Then TYPE = 'XML'
+       When  auswkz = 'TS'   & TYPE = 'P' Then TYPE = 'XML'
+       When  auswkz = 'PDDL' & TYPE = 'P' Then TYPE = 'XML'
+       When  auswkz = 'TB'   & TYPE = 'X' Then TYPE = 'LOB'
+       When  auswkz = 'TS'   & TYPE = 'O' Then TYPE = 'LOB'
+       When  auswkz = 'PDDL' & TYPE = 'O' Then TYPE = 'LOB'
+       OTHERWISE  TYPE = ""
+ END
+
+ONLINE     = "Y"
+SHRLEVEL   = "C"
+STATS      = "Y"
+ICOPY      = "Y"
+MTAB       = "N"
+MDB        = "Y"
+DROPPART   = "N"
+IC2Disk    = "N"
+/*MAPTAB     = "SYS.MAP_TAB" */
+Maptab     = Substr(Maptab, 1, 40)
+MapDB      = Substr(MapDB,  1,  8)
+SDEVT      = WORK
+FORCE      = "N"
+ROAUX = "NO "
+AUX   = "NO "
+
+drop sl.
+sl.0    = 0
+
+area.0  = 20
+area.1  = white"                   Reorg Tablespace          "
+area.2  = white"                                             "
+area.3  = white""keyw"Object     "IN1 || Object   ||  endin
+area.4  = white"                                             "
+area.5  = white""keyw"ONLINE     "IN1 || ONLINE   || endin
+area.6  = white""keyw"SHRLEVEL   "IN1 || SHRLEVEL || endin ,
+          white"C=Change R=Reference N=NONE"
+area.7  = white""keyw"Stats      "IN1 || STATS    || endin
+area.8  = white""keyw"ICopy      "IN1 || ICopy    || endin
+area.9  = white""keyw"IC2Disk    "IN1 || IC2Disk  || endin ,
+          white"Image Copy to Disk or Tape  "
+area.10 = white""keyw"Use_MapDB  "IN1 || MDB      || endin ,
+          white"  "keyw"MapDB      "IN1 || MapDB    || endin ,
+          white"AB DB2 V11           "
+area.11 = white""keyw"Use_MappTab"IN1 || MTAB     || endin ,
+          white"  "keyw"Maptab     "IN1 || Maptab   || endin
+area.12 = white""keyw"Sortdevt   "IN1 || SDEVT    || endin
+area.13 = endin
+area.14 = endin""keyw"FORCE      "IN1 || FORCE    || endin  ,
+               "N=NONE R=READERS A=ALL "
+area.15 = endin
+area.16 = white""keyw"DROP_PART  "IN1 || DROPPART || endin
+area.17 = white""keyw"AUX_YES_NO "IN1 || AUX      || endin ,
+          white"  YES OR NO "
+area.18 = endin
+area.19 = endin
+area.20 = endin
+
+   Call Anzeige_Dyn_Panel
+
+   Object      = Object_Val
+   ONLINE      = Online_Val
+   SHRLEVEL    = SHRLEVEL_Val
+   Stats       = Stats_Val
+   ICopy       = ICopy_Val
+   IC2Disk     = IC2Disk_Val
+   Maptab      = Maptab_Val
+   MapDB       = MapDB_Val
+   SDEVT       = Sortdevt
+   USEMDB      = Use_MapDB_Val
+   USEMDB      = Use_MapDB_Val
+   If Online   = "N" Then SHRLEVEL = "N"
+   DROPPA      = DROP_PART_Val
+   ROAUX       = AUX_YES_NO_val
+
+   Select
+     When Substr(ROAUX, 1, 1) = "N" Then ROAUX = "NO  "
+     When Substr(ROAUX, 1, 1) = "Y" Then ROAUX = "YES "
+     Otherwise                  ROAUX = "NO"
+    End
+
+   Select
+     When Force_VAL  = "R" Then Force = "READERS"
+     When Force_VAL  = "A" Then Force = "ALL"
+     Otherwise                  Force = "N"
+    End
+
+   Parse value object  with DB '.' TS
+
+   select
+     When SHRLEVEL   = 'C' Then SHRL = "CHANGE"
+     When SHRLEVEL   = 'R' Then SHRL = "REFERENCE"
+     When SHRLEVEL   = 'N' Then Do
+          SHRL     = "NONE"
+          ONLINE   = "N"
+      End
+     Otherwise                  SHRL = "CHANGE"
+    End
+
+   IF Substr(DROPPA, 1, 1) = "Y" Then DROPPA = "Y"
+    Else                              DROPPA = "N"
+
+   MEM   = "REOTS"
+
+   select
+     when USEDOT = "Y" Then SKEL  = "SKREOTS2"
+     Otherwise              SKEL  = "SKREOTS1"
+    END
+
+   Call Utility_Execute
+
+
+Return
+
+Recover_Database:
+ADDRESS ISPEXEC "CONTROL ERRORS RETURN"
+
+What    = 'RBA'
+
+Parse value Object1 With DB '.' TS .
+if auswkz = "LGRX" Then do
+   Select
+      When eingabe2  = "RBA"      Then Object2 = DB2_Creator2
+      When eingabe2  = "SRBA"     Then Object2 = DB2_Creator2
+      When eingabe2  = "LGRSRBA"  Then Object2 = DB2_Creator2
+      When eingabe2  = "SPBA"     Then Object2 = DB2_Name2
+      When eingabe2  = "ERBA"     Then Object2 = DB2_Name2
+      When eingabe2  = "LGRSPBA"  Then Object2 = DB2_Name2
+      When eingabe2  = "LRSN"     Then Object2 = DB2_Creator3
+      When eingabe2  = "SLRSN"    Then Object2 = DB2_Creator3
+      When eingabe2  = "LGRSLRSN" Then Object2 = DB2_Creator3
+      When eingabe2  = "ELRSN"    Then Object2 = DB2_Name3
+      When eingabe2  = "LGRELRSN" Then Object2 = DB2_Name3
+      otherwise                       Object2 = DB2_Creator2
+    End
+    Object3 = ""
+ End
+
+Object   = Object1
+If Object3 = Object1 Then Do
+   Object3 = ""
+ End
+If Length(Object2) > 0 Then Do
+   Object2 = Object2
+   What    = 'RBA'
+ End
+
+What    = Left(What, 4, ' ' )
+object1 = Left(Object1, 30, ' ' )
+object2 = Left(Object2, 22, ' ' )
+object3 = Left(Object3, 50, ' ' )
+
+area.0  = 17
+area.1  = white"Recover Tablespace: "
+area.2  = white" "
+area.3  = white" "
+area.4  = white" "keyw"Option        => "in1 ||WHAT     ||endin,
+               " RBA  to RBA       "
+area.5  = white"                           LP   to Logpoint "
+area.6  = white"  "
+area.7  = white"                           REP     Report Recovery "
+area.8  = white"                           RSET    Report Tablespaceset"
+area.9  = white"  "
+area.10 = white"  "
+area.11 = white"  "
+area.12 = white" "keyw"Database         =>"in1 ||DB       ||endin
+area.13 = white" "keyw"RBA              =>"in1 ||Object2  ||endin
+area.14 = white"  "
+area.15 = white"  "
+area.16 = white"  "
+area.17 = white"  "
+
+EnterBack = "Y"
+DO FOREVER
+   Call Anzeige_Dyn_Panel
+
+   What    = Strip(Option_val)
+   object1 = Strip(Database_val)
+   object2 = Strip(RBA_Val)
+   object3 = ""
+   If RC > 8 Then do
+      say "ZEDSMSG="ZEDSMSG
+      say "ZERRLM="ZERRLM
+      say "ZERRMSG="ZERRMSG
+      say "ZERRSM="ZERRSM
+      say rc object1
+      return
+    End
+   COMMAND = ZCMD
+
+   /* PF Tasten Pruefen  */
+   Select
+      When SUBSTR(COMMAND,1,3) = "CAN"  THEN Return
+      When PF                  = 'PF03' THEN Return
+      When PF                  = 'PF04' THEN Return
+      Otherwise NOP
+     End
+
+   Parse value object1 with DB '.' TS
+   Parse value object4 with OTYPE .
+   IF OTYPE = "" THEN OTYPE = "TS"
+
+   MEM   = "RECOVTS"
+
+   select
+      When What = "REP" Then do
+           SKEL  = "SKREPTS1"
+       End
+      When What = "RSET" Then do
+           SKEL  = "SKREPTS2"
+       End
+       Otherwise Do
+           SKEL  = "SKRECOV3"
+       End
+    End
+
+   Call Utility_Execute
+
+ end
+
+
+Return
+
+
+Recover_Tablespace:
+ADDRESS ISPEXEC "CONTROL ERRORS RETURN"
+
+What    = 'FC'
+
+Parse value Object1 With DB '.' TS .
+if auswkz = "LGRX" Then do
+   Select
+      When eingabe2  = "RBA"      Then Object2 = DB2_Creator2
+      When eingabe2  = "SRBA"     Then Object2 = DB2_Creator2
+      When eingabe2  = "LGRSRBA"  Then Object2 = DB2_Creator2
+      When eingabe2  = "SPBA"     Then Object2 = DB2_Name2
+      When eingabe2  = "ERBA"     Then Object2 = DB2_Name2
+      When eingabe2  = "LGRSPBA"  Then Object2 = DB2_Name2
+      When eingabe2  = "LRSN"     Then Object2 = DB2_Creator3
+      When eingabe2  = "SLRSN"    Then Object2 = DB2_Creator3
+      When eingabe2  = "LGRSLRSN" Then Object2 = DB2_Creator3
+      When eingabe2  = "ELRSN"    Then Object2 = DB2_Name3
+      When eingabe2  = "LGRELRSN" Then Object2 = DB2_Name3
+      otherwise                       Object2 = DB2_Creator2
+    End
+    Object3 = ""
+ End
+Object   = Object1
+If Object3 = Object1 Then Do
+   Object3 = ""
+ End
+If Length(Object2) > 0 Then Do
+   What    = 'RBA'
+ End
+
+If Length(Object3) > 0 Then What = 'IC'
+What    = Left(What, 4, ' ' )
+object1 = Left(Object1, 30, ' ' )
+object2 = Left(Object2, 22, ' ' )
+object3 = Left(Object3, 50, ' ' )
+
+area.0  = 25
+area.1  = white"Recover Tablespace: "
+area.2  = white" "
+area.3  = white" "
+area.4  = white" "keyw"Option        => "in1 ||WHAT     ||endin,
+               " LC   to Last Copy "
+area.5  = white"                           FC   to Last Full Copy "
+area.6  = white"                           RBA  to RBA "
+area.7  = white"                           RBAB to RBA mit BACKOUT=YES"
+area.8  = white"                           LS   to Localsite " || ,
+                                          "CurrentCopyOnly       "
+area.9  = white"                           IC   to Copy "
+area.10 = white"                           LP   to Logpoint "
+area.11 = white"                           RB      RestoreBefore "
+area.12 = white"                           LGR     Search SYSLGRNX "
+area.13 = white"  "
+area.14 = white"  "
+area.15 = white"                           REP     Report Recovery "
+area.16 = white"                           RSET    Report Tablespaceset"
+area.17 = white"  "
+area.18 = white"  "
+area.19 = white"  "
+area.20 = white" "keyw"Object           =>"in1 ||Object1  ||endin
+area.21 = white" "keyw"RBA              =>"in1 ||Object2  ||endin
+area.22 = white" "keyw"Copy DSN         =>"in1 ||Object3  ||endin
+area.23 = white"  "
+area.24 = white"  "
+area.25 = white"  "
+
+EnterBack = "Y"
+DO FOREVER
+   Call Anzeige_Dyn_Panel
+
+   What    = Strip(Option_val)
+   object1 = Strip(Object_val)
+   object2 = Strip(RBA_Val)
+   object3 = Strip(Copy_val)
+   If RC > 8 Then do
+      say "ZEDSMSG="ZEDSMSG
+      say "ZERRLM="ZERRLM
+      say "ZERRMSG="ZERRMSG
+      say "ZERRSM="ZERRSM
+      say rc object1
+      return
+    End
+   COMMAND = ZCMD
+
+   /* PF Tasten Pruefen  */
+   Select
+      When SUBSTR(COMMAND,1,3) = "CAN"  THEN Return
+      When PF                  = 'PF03' THEN Return
+      When PF                  = 'PF04' THEN Return
+      Otherwise NOP
+     End
+
+   Parse value object1 with DB '.' TS
+   Parse value object4 with OTYPE .
+   IF OTYPE = "" THEN OTYPE = "TS"
+
+   MEM   = "RECOVTS"
+
+   select
+      When What = "REP" Then do
+           SKEL  = "SKREPTS1"
+       End
+      When What = "RSET" Then do
+           SKEL  = "SKREPTS2"
+       End
+       Otherwise Do
+           SKEL  = "SKRECOV1"
+       End
+    End
+
+   Call Utility_Execute
+
+ end
+
+
+Return
+
+Recover_Tablespace_All:
+ADDRESS ISPEXEC "CONTROL ERRORS RETURN"
+
+
+MEM   = "RECOVTS"
+SKEL  = "SKRECOV2"
+Parse value object4 with OTYPE .
+IF OTYPE = "" THEN OTYPE = "TS"
+
+Call Utility_Execute
+
+Return
+
+JOB_DIAGNOSE:
+
+ADDRESS ISPEXEC "CONTROL ERRORS RETURN"
+
+type       = Left(' ', 50, ' ' )
+Alldumps   = Left(' ',  1, ' ' )
+AlldumpA   = Left(' ', 20, ' ' )
+NODumps    = Left(' ',  1, ' ' )
+NODumpA    = Left(' ', 20, ' ' )
+SYSUTIL    = Left(' ',  1, ' ' )
+MEPL       = Left(' ',  1, ' ' )
+AVAILAB    = Left(' ',  1, ' ' )
+OBD        = Left(' ',  1, ' ' )
+OBDTS      = Left(' ',  8, ' ' )
+OBDDB      = Left(' ',  8, ' ' )
+OBDAUSW    = Left(' ',  1, ' ' )
+OBDCLON    = Left(' ',  1, ' ' )
+DBET       = Left(' ',  1, ' ' )
+DBETDB     = Left(' ',  8, ' ' )
+DBETTS     = Left(' ',  8, ' ' )
+DBETIX     = Left(' ', 50, ' ' )
+DBETCLON   = Left(' ',  1, ' ' )
+
+area.0  = 25
+area.1  = white"DIAGNOSE : "
+area.2  = white" "
+area.3  = white" "
+area.4  = white" "keyw"Type          => "in1 ||type     ||endin
+area.5  = white" "keyw"Alldumps      => "in1 ||Alldumps ||endin ,
+          white"        Y/N " ,
+          keyw"AbendcodeA => "in1 ||AlldumpA ||endin
+area.6  = white" "keyw"Nodumps       => "in1 ||Nodumps  ||endin ,
+          white"        Y/N " ,
+          keyw"AbendcodeN => "in1 ||NoDumpA ||endin
+area.7  = white"  "
+area.8  = white"   Diagnose : "
+area.9  = white" "
+area.10 = white"    "keyw"SYSUTIL       => "in1 ||SYSUTIL  ||endin ,
+          white"     Y/N "
+area.11 = white"    "keyw"MEPL          => "in1 ||MEPL     ||endin ,
+          white"     Y/N "
+area.12 = white"    "keyw"AVAILABLE     => "in1 ||AVAILAB||endin ,
+          white"     Y/N "
+area.13 = white"    "keyw"DBET          => "in1 ||DBET     ||endin ,
+          white"     Y/N "
+area.14 = white"        "keyw"DBET_DBNAME   => "in1 ||DBETDB ||endin
+area.15 = white"        "keyw"DBET_TSNAME   => "in1 ||DBETTS ||endin
+area.16 = white"        "keyw"DBET_Index    => "in1 ||DBETIX ||endin
+area.17 = white"        "keyw"DBET_Clone    => "in1 ||DBETCLON||endin ,
+          white" Y/N "
+area.18 = white"    "keyw"OBD           => "in1 ||OBD      ||endin ,
+          white"     Y/N "
+area.19 = white"        "keyw"ODB_DBNAME    => "in1 ||OBDDB ||endin
+area.20 = white"        "keyw"ODB_TSNAME    => "in1 ||OBDTS ||endin
+area.21 = white"        "keyw"ODB_Auswahl   => "in1 ||OBDAUSW||endin ,
+          white" A=ALL/T=TABLES/I=INDEXES "
+area.22 = white"        "keyw"ODB_Clone     => "in1 ||OBDCLON||endin  ,
+          white" Y/N "
+area.23 = white"  "
+area.24 = white"  "
+area.25 = white" "
+
+EnterBack = "Y"
+DO FOREVER
+   Call Anzeige_Dyn_Panel
+
+   type           = Strip(type_Val          )
+   AUSWTYP = "N"
+   If Length(Type) > 0 Then AUSWTYP = "Y"
+
+   Alldumps       = Strip(Alldumps_Val      )
+   AlldumpA       = Strip(AbendcodeA_Val    )
+   NODumps        = Strip(NODumps_Val       )
+   NODumpA        = Strip(AbendcodeN_Val    )
+   SYSUTIL        = Strip(SYSUTIL_Val       )
+   MEPL           = Strip(MEPL_Val          )
+   AVAILAB        = Strip(AVAILABLE_val     )
+   OBD            = Strip(OBD_Val           )
+   OBDDB          = Strip(ODB_DBNAME_VAL    )
+   OBDTS          = Strip(ODB_TSNAME_VAL    )
+   OBDAUSW        = Strip(ODB_Auswahl_Val   )
+   OBDCLON        = Strip(ODB_Clone_Val     )
+   OBDOBJ         = ""
+   If length(OBDDB) > 0  ,
+    | length(OBDTS) > 0  Then do
+      OBDOBJ  = Space(OBDDB "." OBDTS, 0 )
+      Select
+        when  OBDAUSW  = "T"   Then OBDAUSW = "TABLES"
+        when  OBDAUSW  = "I"   Then OBDAUSW = "INDEXES"
+        when  OBDAUSW  = "A"   Then OBDAUSW = "ALL"
+        Otherwise                   OBDAUSW = ""
+        End
+    End
+   DBET           = Strip(DBET_Val          )
+   DBETDB         = Strip(DBET_DBNAME_Val   )
+   DBETTS         = Strip(DBET_TSNAME_Val   )
+   DBETIX         = Strip(DBET_Index_Val     )
+   DBETCLON       = Strip(DBET_Clone_Val     )
+   DBETO          = ""
+   Select
+    When length(DBETDB) > 0  & length(DBETTS) > 0 Then Do
+         DBETO   = "TS"
+         DBETOBJ = Space(DBETDB "." DBETTS, 0)
+     End
+    When length(DBETDB) > 0                   > 0 Then Do
+         DBETO   = "DB"
+         DBETOBJ = Space(DBETDB           , 0)
+     End
+    When length(DBETTS)                       > 0 Then Do
+         DBETO   = "TS"
+         DBETOBJ = Space(DBETTS           , 0)
+     End
+    When length(DBETIX)                       > 0 Then Do
+         DBETO   = "IX"
+         DBETOBJ = Space(DBETIX           , 0)
+     End
+     Otherwise                   DBETOBJ = ""
+    End
+
+   If RC > 8 Then do
+      say "ZEDSMSG="ZEDSMSG
+      say "ZERRLM="ZERRLM
+      say "ZERRMSG="ZERRMSG
+      say "ZERRSM="ZERRSM
+      say rc object1
+      return
+    End
+   COMMAND = ZCMD
+
+   /* PF Tasten Pruefen  */
+   Select
+      When SUBSTR(COMMAND,1,3) = "CAN"  THEN Return
+      When PF                  = 'PF03' THEN Return
+      When PF                  = 'PF04' THEN Return
+      Otherwise NOP
+     End
+
+   Parse value object1 with DB '.' TS
+
+   MEM   = "DIAGNOS"
+   SKEL  = "SKDIAG"
+
+   Call Utility_Execute
+
+ end
+
+
+DROP_IP:
+
+Parse Value object1 With IPADDR ".." Port
+
+If Length(Strip(IPADDR)) < 1 Then Return
+
+
+ConnID     = ""
+Drop  NETSTA.
+
+X   = MSG('ON')
+B = OUTTRAP("NETSTA.","*","NOCONCAT")
+ADDRESS TSO "NETSTAT "
+B = OUTTRAP("OFF" )
+X   = MSG('OFF')
+
+If datatype(NETSTA.0) <> "NUM" Then NETSTTA.0 = 0
+Do NSI = 1 to NETSTA.0
+   Parse value NETSTA.NSI With USERID ,
+                               ConnID ,
+                               LocalSocked ,
+                               ForeignSocket ,
+                               State ,
+                               ""
+
+   If ForeignSocket  = IPADDR || ".." || PORT Then Leave
+   Else ConnID       = ""
+
+ End
+
+IPADDR     = Left(IPADDR, 50, ' ' )
+PORT       = Left(PORT,   50, ' ' )
+ConnID     = Left(ConnID, 50, ' ' )
+
+ADDRESS ISPEXEC "CONTROL ERRORS RETURN"
+
+area.0  = 11
+area.1  = white"DROP IP  : "
+area.2  = white" "
+area.3  = white" "
+area.4  = white" "keyw"IPADDR        => "in1 ||IPADDR   || endin
+area.5  = white" "keyw"PORT          => "in1 ||PORT     || endin
+area.6  = white" "
+area.7  = white" "keyw"ConnID        => "in1 ||ConnID   || endin
+area.8  = white" "
+area.9  = white"  "
+area.10 = white"  "
+area.11 = white" "
+
+EnterBack = "Y"
+DO FOREVER
+   Call Anzeige_Dyn_Panel
+
+
+   If RC > 8 Then do
+      say "ZEDSMSG="ZEDSMSG
+      say "ZERRLM="ZERRLM
+      say "ZERRMSG="ZERRMSG
+      say "ZERRSM="ZERRSM
+      say rc object1
+      return
+    End
+   COMMAND = ZCMD
+
+   /* PF Tasten Pruefen  */
+   Select
+      When SUBSTR(COMMAND,1,3) = "CAN"  THEN Return
+      When PF                  = 'PF03' THEN Return
+      When PF                  = 'PF04' THEN Return
+      Otherwise NOP
+     End
+
+     If ConnID <> ConnID_Val Then ConnID = ConnID_Val
+     If ConnID = "" Then do
+        MSGLINE = "Drop nicht moeglich ConnID wurde nicht gefunden "
+      End
+      Else Do
+        ZCMD     = "TSO NETSTAT DROP "ConnID
+        Address "ISPEXEC"    "DISPLAY PANEL (ISRTSO) "
+        ZCMD     = ""
+      End
+
+ end
+
+
+Return
+
+Listcat_Tablespace:
+
+ADDRESS ISPEXEC "CONTROL ERRORS RETURN"
+
+VSAMDS     = Left(Object1, 44, ' ' )
+
+area.0  = 5
+area.1  = white"LISTCAT DATASET : "
+area.2  = white" "
+area.3  = white" "
+area.4  = white" "keyw"VSAM Dataset  => "in1 ||VSAMDS ||endin
+area.5  = white" "
+
+EnterBack = "Y"
+DO Forever
+   area.4  = white" "keyw"VSAM Dataset  => "in1 ||VSAMDS ||endin
+   Call Anzeige_Dyn_Panel
+   VSAMDS     = Left(Strip(VSAM_VAL) , 44, ' ' )
+   VSAM       = STRIP(VSAMDS)
+   If RC > 8 Then do
+      say "ZEDSMSG="ZEDSMSG
+      say "ZERRLM="ZERRLM
+      say "ZERRMSG="ZERRMSG
+      say "ZERRSM="ZERRSM
+      say rc object1
+      return
+    End
+   COMMAND = ZCMD
+
+   /* PF Tasten Pruefen  */
+   Select
+      When SUBSTR(COMMAND,1,3) = "CAN"  THEN Return
+      When PF                  = 'PF03' THEN Return
+      When PF                  = 'PF04' THEN Return
+      Otherwise NOP
+     End
+
+   DROP SL.
+   SL.0 = 0
+   B = OUTTRAP("SL.","*","NOCONCAT")
+   X          = MSG('ON')
+   ADDRESS TSO "LISTCAT ENT('"VSAM"') ALL"
+   X          = MSG('OFF')
+   If SL.0 > 0 Then ok = browse_temp_File(SL.)
+ End
+
+return
+
+GEN_DDL:
+
+ADDRESS ISPEXEC "CONTROL ERRORS RETURN"
+
+Select
+   when auswkz = 'SC' Then NOP
+   when auswkz = 'DB' Then NOP
+   Otherwise return 8
+ End
+
+OBJ = DB2_NAME1
+GDB    = "Y"
+GTS    = "Y"
+GTB    = "Y"
+GIX    = "Y"
+GCM    = "Y"
+GAUX   = "Y"
+GPK    = "Y"
+GFK    = "Y"
+GVW    = "Y"
+GTG    = "Y"
+GSP    = "Y"
+GSY    = "Y"
+GPERM  = "Y"
+GSEQ   = "Y"
+GAL    = "Y"
+GVAR   = "Y"
+GDT    = "Y"
+GGRT   = "N"
+GGRV   = "N"
+GGRS   = "N"
+GGRR   = "N"
+
+area.0  = 25
+area.1  = white"GEN DDL FOR " OBJ " ON " SSID
+area.2  = white" "
+area.3  = white" "
+area.4  = white" "keyw"Database      => "in1 ||GDB    ||endin
+area.5  = white" "keyw"Tablespace    => "in1 ||GTS    ||endin
+area.6  = white" "keyw"Table         => "in1 ||GTB    ||endin
+area.7  = white" "keyw"Index         => "in1 ||GIX    ||endin
+area.8  = white" "keyw"Comment       => "in1 ||GCM    ||endin
+area.9  = white" "keyw"Auxtable      => "in1 ||GAUX   ||endin
+area.10 = white" "keyw"PrimaryKey    => "in1 ||GPK    ||endin
+area.11 = white" "keyw"ForeignKey    => "in1 ||GFK    ||endin
+area.12 = white" "keyw"View          => "in1 ||GVW    ||endin
+area.13 = white" "keyw"Trigger       => "in1 ||GTG    ||endin
+area.14 = white" "keyw"SProc         => "in1 ||GSP    ||endin
+area.15 = white" "keyw"Synonym       => "in1 ||GSY    ||endin
+area.16 = white" "keyw"Permission    => "in1 ||GPERM  ||endin
+area.17 = white" "keyw"Sequence      => "in1 ||GSEQ   ||endin
+area.18 = white" "keyw"Alias         => "in1 ||GAL    ||endin
+area.19 = white" "keyw"Variable      => "in1 ||GVAR   ||endin
+area.20 = white" "keyw"Datatype      => "in1 ||GDT    ||endin
+area.21 = white" "keyw"GRANTTABLE    => "in1 ||GGRT   ||endin
+area.22 = white" "keyw"GRANTVIEW     => "in1 ||GGRV   ||endin
+area.23 = white" "keyw"GRANTSQ       => "in1 ||GGRS   ||endin
+area.24 = white" "keyw"GRANTRT       => "in1 ||GGRR   ||endin
+area.25 = white" "
+
+EnterBack = "Y"
+DO Forever
+   Call Anzeige_Dyn_Panel
+   If RC > 8 Then do
+      say "ZEDSMSG="ZEDSMSG
+      say "ZERRLM="ZERRLM
+      say "ZERRMSG="ZERRMSG
+      say "ZERRSM="ZERRSM
+      say rc object1
+      return
+    End
+   COMMAND = ZCMD
+
+   /* PF Tasten Pruefen  */
+   Select
+      When SUBSTR(COMMAND,1,3) = "CAN"   THEN Return
+      When PF                  = 'PF03'  THEN Return
+      Otherwise NOP
+     End
+
+      GDB   =  Database_val
+      GTS   =  Tablespace_val
+      GTB   =  Table_val
+      GIX   =  Index_val
+      GCM   =  Comment_val
+      GAUX  =  Auxtable_val
+      GPK   =  PrimaryKey_val
+      GFK   =  ForeignKey_val
+      GVW   =  View_val
+      GTG   =  Trigger_val
+      GSP   =  SProc_val
+      GSY   =  Synonym_val
+      GPERM =  Permission_val
+      GSEQ  =  Sequence_val
+      GAL   =  Alias_val
+      GVAR  =  Variable_val
+      GDT   =  Datatype_val
+      GGRT  =  GRANTTABLE_val
+      GGRV  =  GRANTVIEW_val
+      GGRS  =  GRANTSQ_val
+      GGRR  =  GRANTRT_val
+
+      If  GDB    = "Y" | GDB    = "N" THEN NOP
+      ELSE GDB    = "Y"
+      If  GTS    = "Y" | GTS    = "N" THEN NOP
+      ELSE GTS    = "Y"
+      If  GTB    = "Y" | GTB    = "N" THEN NOP
+      ELSE GTB    = "Y"
+      If  GIX    = "Y" | GIX    = "N" THEN NOP
+      ELSE GIX    = "Y"
+      If  GCM    = "Y" | GCM    = "N" THEN NOP
+      ELSE GCM    = "Y"
+      If  GAUX   = "Y" | GAUX   = "N" THEN NOP
+      ELSE GAUX   = "Y"
+      If  GPK    = "Y" | GPK    = "N" THEN NOP
+      ELSE GPK    = "Y"
+      If  GFK    = "Y" | GFK    = "N" THEN NOP
+      ELSE GFK    = "Y"
+      If  GVW    = "Y" | GVW    = "N" THEN NOP
+      ELSE GVW    = "Y"
+      If  GTG    = "Y" | GTG    = "N" THEN NOP
+      ELSE GTG    = "Y"
+      If  GSP    = "Y" | GSP    = "N" THEN NOP
+      ELSE GSP    = "Y"
+      If  GSY    = "Y" | GSY    = "N" THEN NOP
+      ELSE GSY    = "Y"
+      If  GPERM  = "Y" | GPERM  = "N" THEN NOP
+      ELSE GPERM  = "Y"
+      If  GSEQ   = "Y" | GSEQ   = "N" THEN NOP
+      ELSE GSEQ   = "Y"
+      If  GAL    = "Y" | GAL    = "N" THEN NOP
+      ELSE GAL    = "Y"
+      If  GVAR   = "Y" | GVAR   = "N" THEN NOP
+      ELSE GVAR   = "Y"
+      If  GDT    = "Y" | GDT    = "N" THEN NOP
+      ELSE GDT    = "Y"
+      If  GGRT   = "Y" | GGRT   = "N" THEN NOP
+      ELSE GGRT   = "N"
+      If  GGRV   = "Y" | GGRV   = "N" THEN NOP
+      ELSE GGRV   = "N"
+      If  GGRS   = "Y" | GGRS   = "N" THEN NOP
+      ELSE GGRS   = "N"
+      If  GGRR   = "Y" | GGRR   = "N" THEN NOP
+      ELSE GGRR   = "N"
+
+      If   PF  = "ENTER" Then Leave
+ End
+
+MEM   = "GENDDL"
+SKEL  = "SKGENDDL"
+
+Call Utility_Execute
+
+
+return
+
+List_Display:
+
+Select
+  when eingabe = 'TERM' & auswkz = 'UT' Then do
+       Command = "-Term Util("object1")"
+   END
+  when eingabe = 'TERM' & auswkz = 'UTIL' Then do
+       Command = "-Term Util("object1")"
+   END
+  when eingabe = 'CAN' & auswkz = 'THD' Then do
+       Command = "-Cancel Thread("DB2_CREATOR1") "  || ,
+                 ""
+   END
+  when eingabe = 'DIS' & auswkz = 'THD' Then do
+       Command = "-DISPLAY Thread("DB2_CREATOR1") "  || ,
+                 "DETAIL "
+   END
+  when eingabe = 'DIS' & auswkz = 'IMU' Then do
+       Command = "-DISPLAY STATS(IMU) "  || ,
+                 "LIMIT(*)   "
+   END
+  when eingabe = 'RECOVER' & auswkz = 'THD' Then do
+       IF DB2_NAME5 = 'POSTPONED' Then Do
+          Command = "-RECOVER POSTPONED CANCEL  "       || ,
+                    ""
+        End
+       IF DB2_NAME5 = 'INDOUBT' Then Do
+          Command = "-RECOVER INDOUBT("DB2_CREATOR1") "      || ,
+                    " ACTION(COMMIT / ABORT)          "      || ,
+                    " ID("DB2_NAME2") "                      || ,
+                    " LUWID("DB2_Creator1 " / " DB2_NAME1 ") ",
+                    ""
+        End
+
+   END
+  when eingabe = 'RESET' & auswkz = 'THD' Then do
+       IF DB2_NAME5 = 'INDOUBT' Then Do
+          Command = "-RESET INDOUBT LUNAME("DB2_NAME3   ") FORCE " || ,
+                    " LOCATION("DB2_CREATOR3 ")    " || ,
+                    " IPADDR("OBJECT4" ) FORCE " || ,
+                    " LUWID("DB2_CREATOR1 " / " DB2_NAME1")",
+                    ""
+        END
+
+   END
+  when eingabe = 'START' & auswkz = 'DB' Then do
+       Command = "-START DATABASE("DB2_CREATOR1") "  || ,
+                 ""
+   END
+  when eingabe = 'STOP' & auswkz = 'DB' Then do
+       Command = "-STOP DATABASE("DB2_CREATOR1") "  || ,
+                 ""
+   END
+  when eingabe = 'START' & auswkz = 'TS' Then do
+       Command = "-START DATABASE("DB2_CREATOR1") "  || ,
+                 " SPACENAM("DB2_NAME1")"              || ,
+                 ""
+   END
+  when eingabe = 'START' & auswkz = 'TB' Then do
+       Command = "-START DATABASE("DB2_CREATOR1") "  || ,
+                 " SPACENAM("DB2_NAME1")"              || ,
+                 ""
+   END
+  when eingabe = 'STOP' & auswkz = 'TS' Then do
+       Command = "-STOP DATABASE("DB2_CREATOR1") "  || ,
+                 " SPACENAM("DB2_NAME1")"              || ,
+                 ""
+   END
+  when eingabe = 'STOP' & auswkz = 'TB' Then do
+       Command = "-STOP DATABASE("DB2_CREATOR1") "  || ,
+                 " SPACENAM("DB2_NAME1")"              || ,
+                 ""
+   END
+  when eingabe = 'START' & auswkz = 'IX' Then do
+       Command = "-START DATABASE("DB2_CREATOR1") "  || ,
+                 " SPACENAM("DB2_NAME1")"              || ,
+                 ""
+   END
+  when eingabe = 'STOP' & auswkz = 'IX' Then do
+       Command = "-STOP DATABASE("DB2_CREATOR1") "  || ,
+                 " SPACENAM("DB2_NAME1")"              || ,
+                 ""
+   END
+  when eingabe = 'DIS' & auswkz  = 'RT' & Object3 = 'F' THEN do
+       Command = "-DISPLAY FUNCTION SPECIFIC("      ,
+                 DB2_CREATOR2 || "." || DB2_CREATOR1 || ")" ,
+                 ""
+   END
+  when eingabe = 'DIS' & auswkz  = 'RT' & Object3 = 'P' THEN do
+       Command = "-DISPLAY PROCEDURE ("     ,
+                  DB2_CREATOR2 || "." || DB2_CREATOR1 || ")" ,
+                 ""
+   END
+  when eingabe = 'START' & auswkz  = 'RT' & Object3 = 'F' THEN do
+       Command = "-START FUNCTION SPECIFIC("      ,
+                 DB2_CREATOR2 || "." || DB2_CREATOR1 || ")" ,
+                 ""
+   END
+  when eingabe = 'START' & auswkz  = 'RT' & Object3 = 'P' THEN do
+       Command = "-START PROCEDURE ("     ,
+                  DB2_CREATOR2 || "." || DB2_CREATOR1 || ")" ,
+                 ""
+   END
+  when eingabe = 'STOP' & auswkz  = 'RT' & Object3 = 'F' THEN do
+       Command = "-STOP FUNCTION SPECIFIC("      ,
+                 DB2_CREATOR2 || "." || DB2_CREATOR1 || ")" ,
+                 ""
+   END
+  when eingabe = 'STOP' & auswkz  = 'RT' & Object3 = 'P' THEN do
+       Command = "-STOP PROCEDURE ("     ,
+                  DB2_CREATOR2 || "." || DB2_CREATOR1 || ")" ,
+                 ""
+   END
+  when auswkz  = 'DB'                 THEN do
+       Command = "-DISPLAY DATABASE("DB2_CREATOR1") "  || ,
+                 ""
+       command = command " LIMIT(*) " || ,
+                 ""
+   END
+  when auswkz  = 'TS' & eingabe2 = "UTIL" THEN do
+       Command = "-DISPLAY UTILITY(*) "
+   END
+  when auswkz  = 'PDDL' & eingabe2 = "UTIL" THEN do
+       Command = "-DISPLAY UTILITY(*) "
+   END
+  when eingabe = 'DIS'   & auswkz = 'PDDL' & eingabe2 = "USE" Then do
+       Command = "-DISPLAY DATABASE("DB2_CREATOR1") "  || ,
+                 " SPACENAM("DB2_NAME1") CLAIMERS LIMIT(*)" || ,
+                 ""
+   END
+  when auswkz  = 'TS' & eingabe2 = "BP" THEN do
+       Command = "-DISPLAY BUFFERPOOL("DB2_CREATOR3") "  || ,
+                 "DBNAME("DB2_CREATOR1") "  || ,
+                 " SPACENAM("DB2_NAME1")"     || ,
+                 ""
+   END
+  when auswkz  = 'TB' & eingabe2 = UTIL THEN do
+       Command = "-DISPLAY UTILITY(*) "
+   END
+  when eingabe = 'DIS'   & auswkz = 'BP' Then do
+       Command = "-DISPLAY BUFFERPOOL("DB2_CREATOR1") " ,
+                 "DETAIL(*) LIST(active) ",
+                 ""
+   END
+  when eingabe = 'DIS'   & auswkz = 'TS' & eingabe2 = "USE" Then do
+       Command = "-DISPLAY DATABASE("DB2_CREATOR1") "  || ,
+                 " SPACENAM("DB2_NAME1") CLAIMERS LIMIT(*)" || ,
+                 ""
+   END
+  when eingabe = 'DIS'   & auswkz = 'TB' & eingabe2 = "USE" Then do
+       Command = "-DISPLAY DATABASE("DB2_CREATOR1") "  || ,
+                 " SPACENAM("DB2_NAME1") USE LIMIT(*)" || ,
+                 ""
+   END
+  when eingabe = 'DIS'   & auswkz = 'PDDL' & eingabe2 = "LOCKS" Then do
+       Command = "-DISPLAY DATABASE("DB2_CREATOR1") "  || ,
+                 " SPACENAM("DB2_NAME1") LOCKS LIMIT(*)" || ,
+                 ""
+   END
+  when eingabe = 'DIS'   & auswkz = 'TS' & eingabe2 = "LOCKS" Then do
+       Command = "-DISPLAY DATABASE("DB2_CREATOR1") "  || ,
+                 " SPACENAM("DB2_NAME1") LOCKS LIMIT(*)" || ,
+                 ""
+   END
+  when eingabe = 'DIS'   & auswkz = 'TB' & eingabe2 = "LOCKS" Then do
+       Command = "-DISPLAY DATABASE("DB2_CREATOR1") "  || ,
+                 " SPACENAM("DB2_NAME1") LOCKS LIMIT(*)" || ,
+                 ""
+   END
+  when eingabe = 'DIS'   & auswkz = 'UT'                    Then do
+       Command = "-DISPLAY UTIL("Object1")"  ,
+                 ""
+   END
+  when eingabe = 'DIS'   & auswkz = 'UTIL'                  Then do
+       Command = "-DISPLAY UTIL("Object1")"  ,
+                 ""
+   END
+  Otherwise Do
+       Command = "-DISPLAY DATABASE("DB2_CREATOR1") "  || ,
+                 " SPACENAM("DB2_NAME1")"              || ,
+                 ""
+       if Length(object2) > 0 & OBJECT2 <> '0' Then do
+          command = command " PART("object2")"
+        End
+       command = command " LIMIT(*) " || ,
+                 ""
+   END
+  End
+
+tabnr       = tabnr + 1
+LUWTABLE    = "LUWTB"tabnr
+CURSOR      = 'CURSOR( )'
+CSRROW      = 'CSRROW(1)'
+RETCODE     = RC
+MESSAGE     = 'MSG( )'
+ZTDSELS     = 0
+ZTDTOP      = 0
+LNR         = 1
+LOBJ        = ""
+
+ADDRESS ISPEXEC  'TBCLOSE 'LUWTABLE
+ADDRESS ISPEXEC  'TBERASE 'LUWTABLE
+ADDRESS ISPEXEC  'TBOPEN  'LUWTABLE
+IF RC /= 0 THEN Do
+   ADDRESS ISPEXEC 'TBCREATE 'LUWTABLE,
+                   'KEYS(ROWNR) NAMES(LCMD, LZEILE)'
+   If rc <> 0 Then say "TBCREATE RC="RC
+ End
+
+DO FOREVER
+   address ispexec  'TBOPEN 'LUWTABLE
+   CURSOR = 'CURSOR(LZeile)'
+   CSRROW = 'CSRROW(1)'
+   address ISPEXEC 'TBTOP  'LUWTABLE
+   address ISPEXEC 'TBSKIP 'LUWTABLE' NUMBER('ZTDTOP')'
+   address ispexec 'TBDISPL 'LUWTABLE' PANEL(PZODIS01)',
+                   MESSAGE CURSOR 'CSRROW('LNR')' ,
+                   'AUTOSEL(NO) POSITION(CRP)'
+   /* PF Tasten Pruefen  */
+   Select
+      WHEN SUBSTR(ZCMD,1,3) = "CAN"     THEN DO
+           address ispexec 'TBCLOSE 'LUWTABLE
+           Leave
+       end
+      WHEN WORD(ZCMD,1) = "TRACE" then do
+           IF WORD(ZCMD, 2) = "ON"     Then trace('R')
+           IF WORD(ZCMD, 2) = "OFF" Then trace('O')
+           UDBTRACE = word(ZCMD, 2)
+           ADDRESS ISPEXEC 'VPUT (UDBTRACE) PROFILE'
+           ZCMD = ''
+           Iterate
+       end
+      When PF                  = 'PF03' THEN DO
+           address ispexec 'TBCLOSE 'LUWTABLE
+           Leave
+       end
+      When PF                  = 'PF04' THEN DO
+           address ispexec 'TBCLOSE 'LUWTABLE
+           Leave
+       end
+      When RC > 4 THEN DO
+          SAY "Error on display panel PZODIS01 RC="RC
+          LEAVE
+       END
+      Otherwise NOP
+     End
+
+   ADDRESS ISPEXEC  'TBCLOSE 'LUWTABLE
+   ADDRESS ISPEXEC  'TBERASE 'LUWTABLE
+   ADDRESS ISPEXEC  'TBOPEN  'LUWTABLE
+   IF RC /= 0 THEN Do
+      ADDRESS ISPEXEC 'TBCREATE 'LUWTABLE,
+                      'KEYS(ROWNR) NAMES(LCMD, LZEILE)'
+      If rc <> 0 Then say "TBCREATE RC="RC
+    End
+   ADDRESS ISPEXEC  'TBOPEN  'LUWTABLE
+
+   DB2CMD = Strip(command)
+
+   X   = MSG('ON')
+   MAKEBUF
+   BUFNO = RC
+   QUEUE DB2CMD
+   QUEUE "  END"
+   X = OUTTRAP("DSNCMD.","*","NOCONCAT")
+   ADDRESS TSO "DSN SYSTEM("SSID")"
+   X = OUTTRAP("OFF")
+
+   RETCODE = RC
+   DROPBUF BUFNO
+   X   = MSG('OFF')
+
+   Do DSNI = 1 to DSNCMD.0
+      ROWNR  = DSNI
+      LZEILE = DSNCMD.DSNI
+      ADDRESS ISPEXEC 'TBADD 'LUWTABLE
+    End
+ End
+ADDRESS ISPEXEC  'TBCLOSE   'LUWTABLE
+
+return
+
+Drop_Auswahl:
+
+drop sl.
+sl.0 = 0
+select
+  when auswkz = "SG"   THEN DO
+       OK = NextSl("DROP STOGROUP  "DB2_Creator1 ";" )
+   End
+  when auswkz = "DB"   THEN DO
+       OK = NextSl("DROP DATABASE  "DB2_Creator1 ";" )
+   End
+  when auswkz = "TS"   THEN DO
+       OK = NextSl("DROP TABLESPACE "Object1 ";" )
+   End
+  when auswkz = "TB"  & object3 = "C" Then Do
+       OK = NextSl("Alter TABLE "Object2 " DROP CLONE ;" )
+   End
+  when auswkz = "TB"  & object3 = "V" Then Do
+       OK = NextSl("DROP VIEW  "Object1 ";" )
+   End
+  when auswkz = "TB"  & object3 = "A" Then Do
+       OK = NextSl("DROP ALIAS "Object1 ";" )
+   End
+  when auswkz = "TB"   THEN DO
+       OK = NextSl("DROP TABLE "Object1 ";" )
+   End
+  when auswkz = "MQT"   THEN DO
+       OK = NextSl("DROP TABLE "Object1 ";" )
+   End
+  when auswkz = "VW"   THEN DO
+       OK = NextSl("DROP VIEW  "Object1 ";" )
+   End
+  when auswkz = "IX"   THEN DO
+       If DB2_CREATOR3 = "Y" Then do /* Hash Index */
+          OK = NextSl("ALTER TABLE  "Object2     )
+          OK = NextSl("      DROP ORGANIZATION " )
+        End
+       Else Do   /* Kein Hash Index */
+          OK = NextSl("DROP INDEX "Object1 ";" )
+        End
+   End
+  when auswkz = "TG"   THEN DO
+       OK = NextSl("DROP TRIGGER "Object1 ";" )
+   End
+  when auswkz = "RT"   & Object3 = 'F' THEN DO
+       OK = NextSl("DROP FUNCTION " Object2 " ;"  )
+   End
+  when auswkz = "RT"   & Object3 = 'P' THEN DO
+       OK = NextSl("DROP PROCEDURE " Object2 " ;"  )
+   End
+  when auswkz = "SE"   THEN DO
+       Select
+         When DB2_CREATOR2 = 'S' Then do
+              OK = NextSl("DROP SEQUENCE " Object1 " ;"  )
+          End
+         When DB2_CREATOR2 = 'X' Then do
+              OK = NextSl("DROP SEQUENCE " Object1 " ;"  )
+          End
+         When DB2_CREATOR2 = 'A' Then do
+              If DB2_CREATOR1 = 'SYSPUBLIC' Then Do
+                 OK = NextSl("DROP PUBLIC ALIAS "Strip(Object1) ,
+                             "FOR SEQUENCE ;")
+               End
+              Else do
+                 OK = NextSl("DROP Alias "Strip(Object1) ,
+                             "FOR SEQUENCE ;")
+               End
+          End
+         Otherwise OK = NextSl("-- DROP NICHT MOEGLICH FUER "Object1 )
+        End
+   End
+  when auswkz = "PG"   THEN DO
+       OK = NextSl("DROP PACKAGE  " Object1 " ;"  )
+   End
+  when auswkz = "AL"   THEN DO
+       OK = NextSl("DROP ALIAS    " Object1 " ;"  )
+   End
+  when auswkz = "RO"   THEN DO
+       OK = NextSl("DROP ROLE    " Object1 " ;"  )
+   End
+  when auswkz = "TCO"   THEN DO
+       OK = NextSl("DROP TRUSTED CONTEXT " Object1 " ;"  )
+   End
+  when auswkz = "PDDL" THEN DO
+       OK = NextSl("ALTER TABLESPACE " Object1       )
+       OK = NextSl("      DROP PENDING CHANGES   ;"  )
+   End
+  when auswkz = "FK" THEN DO
+       OK = NextSl("ALTER TABLE " Object1       )
+       OK = NextSl("      DROP FOREIGN KEY "DB2_NAME2"  ;"  )
+   End
+  when auswkz = "CK" THEN DO
+       OK = NextSl("ALTER TABLE " Object1       )
+       OK = NextSl("      DROP CONSTRAINT  "DB2_NAME2"  ;"  )
+   End
+  when auswkz = "PK" THEN DO
+       If DB2_Creator2 = 'U' Then do
+          OK = NextSl("ALTER TABLE " Object1       )
+          OK = NextSl("      DROP CONSTRAINT "DB2_NAME2 " ;"  )
+       End
+       Else Do
+          OK = NextSl("ALTER TABLE " Object1       )
+          OK = NextSl("      DROP PRIMARY KEY   ;"  )
+       End
+   End
+  when auswkz = "DT" THEN DO
+       OK = NextSl("DROP TYPE   " Object1 " ;"  )
+   End
+  when auswkz = "VAR" THEN DO
+       OK = NextSl("DROP VARIABLE" Object1 " ;"  )
+   End
+  when auswkz = "SY"   THEN DO
+       OK = Nextsl("SET CURRENT SQLID = '"DB2_Creator1"'  ; ")
+       OK = NextSl("DROP SYNONYM  " DB2_Name1 " ;"  )
+       OK = Nextsl("SET CURRENT SQLID = 'USER'  ; ")
+   End
+  when auswkz = "XO"   THEN DO
+       Schema = DB2_Creator1
+       Name   = DB2_Name1
+       OK = NextSl("CALL SYSPROC.XSR_REMOVE('"Schema"',")
+       OK = NextSl("'"NAME"'); ")
+   End
+   Otherwise OK = NextSl('-- "DROP " Nicht erlaubt '  )
+  end
+
+return
+
+
+NextSl:
+If Length(db2Vers) > 0 Then do
+   APPLCOMPAT = "V" || SUBSTR(DB2Vers, 4, 2) || ,
+                "R" || SUBSTR(DB2Vers, 6, 1) || ,
+                "M" || SUBSTR(DB2Vers, 7, 3) || ,
+                ""
+ End
+ If sl.0 = 0 Then do
+    SL.0 = 3
+    SL.1 = "--SQLTERM=;"
+    SL.2 = "--SPROCPARSER=,"
+    SL.3 = " "
+    If Length(CURSQLID) > 0 Then Do
+       sl.0   = SL.0 + 1; sli  = sl.0 ;
+       SL.sli = "SET CURRENT SQLID = '"CURSQLID"'  ;"
+     End
+    If Length(db2Vers) > 0 Then do
+       sl.0   = SL.0 + 1; SLI  = sl.0 ;
+       SL.sli = "-- SET CURRENT APPLICATION COMPATIBILITY = " ,
+                "'"APPLCOMPAT"';"
+     End
+    sl.0   = SL.0 + 1; SLI  = sl.0 ;
+    SL.SLI = " "
+  End
+
+ sl.0   = sl.0 + 1
+ sli    = sl.0
+ sl.sli = Arg(1)
+return 0
+
+Edit_Stmt:
+
+DSNAME = ZOSC1900("ZOSC1","DSNAME", "STMT", LNR)
+LRECL   = RECLEN
+LRECL   = STMTLEN
+
+IF LISTDSI(DSNAME) = 0 THEN do
+    ADDRESS "TSO" "ALLOC F(SELDD) DA("DSNAME") SHR"
+ end
+else do
+    ADDRESS "TSO" "ALLOC F(SELDD) DA("DSNAME") NEW CATALOG ,
+          SPACE("TRACKS","TRACKS") TRACKS REUSE,
+          LRECL("LRECL") UNIT(SYSDA)"
+ end
+
+
+ADDRESS "TSO" "EXECIO * DISKW SELDD ( STEM SL. FINIS"
+ADDRESS "TSO" "FREE FI(SELDD)"
+
+ok   = ZOSC1911(SSID,     ,
+                LOCATION,  ,
+                EINGABE,   ,
+                OBJ,       ,
+                DSNAME,    ,
+                LNR   )
+
+return
+
+Get_CFG_FILE:
+PARSE SOURCE SRC.1  , /* ENVIRONMENT  (TSO)            */
+             SRC.2  , /* AUFRUF ALS (COMMAND)          */
+             SRC.3  , /* Program NAME (LUW97000)       */
+             SRC.4  , /* SYS00186 (TEMP FILE)          */
+             SRC.5  , /* AUFRUF AUS LIB (X.X.CLISTUDB) */
+             SRC.6  , /* ?                             */
+             SRC.7  , /* TSO                           */
+             SRC.8  , /* ISPF                          */
+             SRC.9  , /* ?                             */
+/*  CFG FILE                            */
+
+mem     = "#SSIDINF"
+CFGFILE = Strip(sysdsname) || "(" || mem || ")"
+CFGFILE = proclib || "(" || mem || ")"
+ADDRESS TSO "FREE FILE(CFGF) NOHOLD"
+ADDRESS TSO "ALLOC F(CFGF) DATASET('"CFGFILE"') SHR"
+ADDRESS TSO "EXECIO * DISKR CFGF (STEM CONFIG. FINIS"
+ADDRESS TSO "EXECIO 0 DISKR CFGF ( FINIS"
+ADDRESS TSO "FREE FILE(CFGF) NOHOLD"
+
+Do I = 1 TO CONFIG.0
+   If Translate(Word(Config.i, 1))     = 'AG' ,
+    | TRANSLATE(Word(Config.i, 1))     = SSID Then do
+       CMDLINE =  Subword(CONFIG.i, 2)
+       INTERPRET  CMDLINE
+    End
+ End
+
+return 0
+
+browse_temp_File:
+
+/*  ALLOCATE AND OPEN TEMP DATASET      */
+ADDRESS ISPEXEC "VGET (ZTEMPF) SHARED"
+
+OUTDSN = ZOSC1900("ZOSC1","DSNAME", "LISTE", LNR)
+LRECL   = RECLEN
+IF LISTDSI(OUTDSN) = 0 THEN ADDRESS "TSO"   "DELETE "OUTDSN
+ADDRESS "TSO" "ALLOC F(TMP1) DA("OUTDSN") NEW CATALOG ,
+         SPACE("TRACKS","TRACKS") TRACKS REUSE,
+         LRECL("lrecl") UNIT(SYSDA)"
+ADDRESS "TSO" "EXECIO 0 DISKW "TMP1""
+ADDRESS TSO "EXECIO * DISKW TMP1  (STEM OUT. FINIS"
+ADDRESS TSO "EXECIO * DISKW TMP1 (STEM "Arg(1)" FINIS"
+ADDRESS ISPEXEC "BROWSE DATASET("OUTDSN") PANEL(ISREFR01)"
+ADDRESS TSO "FREE FILE(TMP1) NOHOLD"
+IF LISTDSI(OUTDSN) = 0 THEN ADDRESS "TSO"   "DELETE "OUTDSN
+
+ return 0
+
+
+Lesen_daten:
+
+LOC  = LOCATION
+FK   = AUSWKZ
+OB   = object
+OB2  = Object2
+OB3  = Object3
+OB4  = Object4
+OB5  = Object5
+TS   = Tablespace
+DB   = DATABASE
+SG   = STGROUP
+LOBJ = ListObject
+WL   = ""
+
+DDLTEXT = ""
+DDLTEXT = DDLTEXT ZOSC1AC3(SSID,   ,           /* SSID    */
+                           EDIT_SQL,,          /* Edit SQL */
+                           LOC,    ,           /* LOCATION */
+                           LNR,    ,           /* TABLENR */
+                           TABNR,  ,           /* TABLENR */
+                           FK,     ,           /* FUKTION */
+                           OB,     ,           /* OBJECT  */
+                           OB2,    ,           /* TABLE   */
+                           OB3,    ,           /* TABLE   */
+                           OB4,    ,           /* TABLE   */
+                           OB5,    ,           /* TABLE   */
+                           TS,     ,           /* TABLESPACE */
+                           DB,     ,           /* DATABASE   */
+                           SG,     ,           /* STORAGEGROUP */
+                           LOBJ,   ,           /* List Object*/
+                           ISPFILE,,           /* ISPFILE    */
+                           DB2vers,,           /* db2 version   */
+                           DB2CatL,,           /* db2 Catalog Level */
+                           WL      ,           /* Like Suchen oder = */
+                           )
+
+DDLTEXT = STRIP(DDLTEXT)
+
+IF LENGTH(DDLTEXT) = 0 THEN DO
+   RETURN 0
+ End
+
+DO FOREVER
+   PARSE VALUE DDLTEXT WITH LZEILE  '-NR' REST
+   IF SUBSTR(LZEILE, 1, 4) = "*UZ*" THEN DO
+      UZeile = substr(LZeile, 5)
+    end
+   IF REST = '' THEN LEAVE
+   DDLTEXT = REST
+ END
+
+
+return
+
+Build_Include_All:
+
+tabnr          = tabnr - 1
+USEDOT         = "Y"
+LUWTABLE       = "LUWTB"tabnr
+LUWTAB         = "LUWTB"tabnr
+COLTAB         = "COLTB"tabnr
+TSLISTE        = "TSLI"tabnr
+TBCOL          = "TBCOL"tabnr
+IF auswkz = 'IX' Then TSLISTE        = "IXLI"tabnr
+tabnr          = tabnr + 1
+address ispexec  'TBOPEN  'COLTAB
+ADDRESS ISPEXEC  'TBCLOSE 'TSLISTE
+ADDRESS ISPEXEC  'TBERASE 'TSLISTE
+ADDRESS ISPEXEC  'TBOPEN  'TSLISTE
+IF RC <> 0 THEN Do
+select
+  when auswkz = 'IX'  | auswkz = 'IP' Then Do
+     ADDRESS ISPEXEC 'TBCREATE 'TSLISTE' NAMES(Creator, Name, PART,' ,
+                                              'DBNAME, IXSPACE)'
+
+   End
+  when auswkz = 'IC'                  Then Do
+     ADDRESS ISPEXEC 'TBCREATE 'TSLISTE  ,
+            'NAMES(DBNAME,TSNAME,DSNUM,ICTYPE,DSNAME,STARTRBA,OTYPE)'
+   End
+  when auswkz = 'TB'  ,
+     | auswkz = 'STF'                 Then Do
+     ADDRESS ISPEXEC 'TBCREATE 'TSLISTE  ,
+            'NAMES(DBNAME,TSNAME,PART,TB,TYPE)'
+   End
+  Otherwise do
+     ADDRESS ISPEXEC 'TBCREATE 'TSLISTE ,
+            'NAMES(DBNAME, TSNAME, PART,TYPE)'
+   End
+ End
+   If rc <> 0 Then DO
+      say 'TBCREATE 'TSLISTE "RC="RC
+      say "ZEDSMSG="ZEDSMSG
+      say "ZERRLM="ZERRLM
+      say "ZERRMSG="ZERRMSG
+      say "ZERRSM="ZERRSM
+    End
+ End
+
+address ispexec 'TBOPEN  'COLTAB
+address ispexec 'TBTOP   'COLTAB
+address ispexec 'TBSKIP  'COLTAB
+anz         = 0
+
+TSDUP = ""
+Drop ColListe.
+ColListe.0 = 0
+Do while RC = 0
+   Part = 0
+   TYPE = ""
+   Call Auto_Parse
+
+   Select
+     When  auswkz = 'TS' Then do
+           TSNAME     = NAME
+           select
+             When eingabe = "RUNSTATS" & DBNAME = "DSNDB01" Then do
+                  address ispexec 'TBSKIP  'COLTAB
+                  Iterate
+              End
+             Otherwise NOP
+            end
+           ColListe.0 = ColListe.0 + 1; Li = ColListe.0;
+           ColListe.li = DBNAME TSNAME
+      End
+     When  auswkz = 'PDDL' Then do
+           select
+             When eingabe = "RUNSTATS" & DBNAME = "DSNDB01" Then do
+                  address ispexec 'TBSKIP  'COLTAB
+                  Iterate
+              End
+             Otherwise NOP
+            end
+           ColListe.0 = ColListe.0 + 1; Li = ColListe.0;
+           ColListe.li = DBNAME TSNAME
+      End
+     When  auswkz = 'TP' Then do
+           select
+             When eingabe = "RUNSTATS" & DBNAME = "DSNDB01" Then do
+                  address ispexec 'TBSKIP  'COLTAB
+                  Iterate
+              End
+             Otherwise NOP
+            end
+           part  = PARTITION
+           ColListe.0 = ColListe.0 + 1; Li = ColListe.0;
+           ColListe.li = DBNAME TSNAME
+      End
+     When  auswkz = 'TB' Then do
+           TBCREATOR  = Creator
+           TBNAME     = Name
+           select
+             When TYPE = 'V'  | TYPE = 'A'  Then Do
+                  address ispexec 'TBSKIP  'COLTAB
+                  Iterate
+              End
+             When eingabe = "RUNSTATS" & DBNAME = "DSNDB01" Then do
+                  address ispexec 'TBSKIP  'COLTAB
+                  Iterate
+              End
+             When eingabe = "RUNSTATS" & TYPE   = "G" Then do
+                  address ispexec 'TBSKIP  'COLTAB
+                  Iterate
+              End
+             Otherwise NOP
+            end
+           ColListe.0 = ColListe.0 + 1; Li = ColListe.0;
+           ColListe.li = TBCreator TBNAME TYPE DBNAME TSNAME
+      End
+     When  auswkz = 'IX' Then do
+           IXSPACE  = INDEXSPACE
+           select
+             When eingabe = "RUNSTATS" & DBNAME = "DSNDB01" Then do
+                  address ispexec 'TBSKIP  'COLTAB
+                  Iterate
+              End
+             Otherwise NOP
+            end
+           ColListe.0 = ColListe.0 + 1; Li = ColListe.0;
+           ColListe.li = Creator NAME
+      End
+     When  auswkz = 'IP' Then do
+           Part     = PARTITION
+           Creator  = IXCREATOR
+           Name     = IXNAME
+           select
+             When eingabe = "RUNSTATS" & DBNAME = "DSNDB01" Then do
+                  address ispexec 'TBSKIP  'COLTAB
+                  Iterate
+              End
+             Otherwise NOP
+            end
+           ColListe.0 = ColListe.0 + 1; Li = ColListe.0;
+           ColListe.li = Part Creator NAME
+      End
+     When  auswkz = 'IC' Then do
+           STARTRBA = START_RBA
+           ColListe.0 = ColListe.0 + 1; Li = ColListe.0;
+           ColListe.li = dbname tsname startrba
+      End
+     When  auswkz = 'STF' Then do
+           STFTYPE = TYPE
+           ColListe.0 = ColListe.0 + 1; Li = ColListe.0;
+           ColListe.li = TBCreator TBNAME  ,
+                         Word(STFTYPE, 1)  ,
+                         DBNAME TSNAME
+      End
+     When  auswkz = 'STP' Then do
+           ColListe.0 = ColListe.0 + 1; Li = ColListe.0;
+           ColListe.li = DBNAME TSNAME
+      End
+     When  auswkz = 'DISTS' Then do
+
+           TSNAME  = SPACENAM
+           SELECT
+              WHEN  eingabe  = "REORG" ,
+                 &  POS('REO', STATUS) > 0 Then NOP
+              WHEN  eingabe  = "COPY" ,
+                 &  POS('COPY', STATUS) > 0 Then NOP
+               Otherwise Do
+                    address ispexec 'TBSKIP  'COLTAB
+                   Iterate
+                End
+             End
+           ColListe.0 = ColListe.0 + 1; Li = ColListe.0;
+           ColListe.li = DBNAME TSNAME
+      End
+     Otherwise Do
+           parse value CZEILE with DBNAME '0a0d'x ,
+                                   TSNAME '0a0d'x ,
+                                   SGROUP '0a0d'x ,
+                                   BPOOL  '0a0d'x ,
+                                   TYPE   '0a0d'x ,
+                                   .
+       end
+/*
+           parse value CZEILE with DBNAME '0a0d'x TSNAME '0a0d'x .
+           ColListe.0 = ColListe.0 + 1; Li = ColListe.0;
+           ColListe.li = DBNAME TSNAME TYPE
+*/
+      End
+
+   Creator = Strip(Creator, 'T')
+   Name    = Strip(Name   , 'T')
+
+   Select
+     When auswkz = 'TB'   Then TB  = TBCreator || '.' || TBName
+     When auswkz = 'STF'  Then Do
+          TB  = TBCreator || '.' || TBName
+          IX  = IXCreator || '.' || IXName
+      End
+     Otherwise                 TB  = "" || '.' || ""
+   End
+
+   DBNAME  = Strip(DBNAME , 'T')
+   TSNAME  = Strip(TSNAME , 'T')
+
+   Select
+      When auswkz = 'IX' Then do
+           ADDRESS ISPEXEC 'TBADD   'TSLISTE
+        End
+      When eingabe = 'REPCAT' ,
+         & ( auswkz = 'TS' ,
+           | auswkz = 'TB')  Then Do
+           Select
+             When  auswkz = 'TB' & TYPE = 'P' Then TYPE = 'XML'
+             When  auswkz = 'TS' & TYPE = 'P' Then TYPE = 'XML'
+             When  auswkz = 'TB' & TYPE = 'X' Then TYPE = 'LOB'
+             When  auswkz = 'TS' & TYPE = 'O' Then TYPE = 'LOB'
+             otherwise TYPE = ""
+            End
+           /* Dopplete Tablespaces Ausfiltern */
+           If Pos(DBNAME"."TSNAME, TSDUP, 1) < 1 Then do
+              TSDUP = TSDUP DBNAME"."TSNAME
+              if type = "" Then ADDRESS ISPEXEC 'TBADD   'TSLISTE
+            End
+        End
+      When auswkz = 'TS'   ,
+         | auswkz = 'TB'   ,
+         | auswkz = 'STP'  ,
+         | auswkz = 'DISTS' Then Do
+           Select
+             When  auswkz = 'TB'     & TYPE = 'P'  Then TYPE = 'XML'
+             When  auswkz = 'STP'    & TYPE = 'P'  Then TYPE = 'XML'
+             When  auswkz = 'TS'     & TYPE = 'P'  Then TYPE = 'XML'
+             When  auswkz = 'DISTS'  & TYPE = 'XS' Then TYPE = 'XML'
+             When  auswkz = 'TB'     & TYPE = 'X'  Then TYPE = 'LOB'
+             When  auswkz = 'STP'    & TYPE = 'X'  Then TYPE = 'LOB'
+             When  auswkz = 'TS'     & TYPE = 'O'  Then TYPE = 'LOB'
+             When  auswkz = 'DISTS'  & TYPE = 'LS' Then TYPE = 'LOB'
+             otherwise TYPE = ""
+            End
+           Select
+            When TSTYPE = ""     & TYPE = 'XML' THEN TSTYPE = "LOB"
+            When TSTYPE = ""     & TYPE = 'LOB' THEN TSTYPE = "LOB"
+            When TSTYPE = ""     & TYPE = ''    THEN TSTYPE = "TS"
+            When TSTYPE = "LOB"  & TYPE = ''    THEN TSTYPE = "BOTH"
+            When TSTYPE = "TS"   & TYPE = 'LOB' THEN TSTYPE = "BOTH"
+            Otherwise NOP
+            End
+           /* Dopplete Tablespaces Ausfiltern */
+           If Pos(DBNAME"."TSNAME, TSDUP, 1) < 1 Then do
+              TSDUP = TSDUP DBNAME"."TSNAME
+              ADDRESS ISPEXEC 'TBADD   'TSLISTE
+            End
+        End
+      When auswkz = 'STF' Then Do
+           /* Dopplete Tablespaces Ausfiltern */
+           Find = Space(DBNAME"."TSNAME"."TBCreator"."TBNAME, 0)
+           If Pos(Find, TSDUP, 1) < 1 Then do
+              TSDUP = TSDUP Find
+              ADDRESS ISPEXEC 'TBADD   'TSLISTE
+            End
+            Else Do
+              ColListe.li = ""
+              ColListe.0  = ColListe.0 - 1
+            End
+        End
+      When auswkz = 'TP' THEN Do
+           /* Dopplete Tablespaces Ausfiltern */
+           If Pos(DBNAME"."TSNAME"."Part, TSDUP, 1) < 1 Then do
+              TSDUP = TSDUP DBNAME"."TSNAME"."Part
+              ADDRESS ISPEXEC 'TBADD   'TSLISTE
+            End
+        End
+      When auswkz = 'PDDL' THEN Do
+           /* Dopplete Tablespaces Ausfiltern */
+           If Pos(DBNAME"."TSNAME"."Part, TSDUP, 1) < 1 Then do
+              TSDUP = TSDUP DBNAME"."TSNAME"."Part
+              ADDRESS ISPEXEC 'TBADD   'TSLISTE
+            End
+        End
+      When auswkz = 'IC' Then do
+           ADDRESS ISPEXEC 'TBADD   'TSLISTE
+        End
+       Otherwise NOP
+    End
+
+   address ispexec 'TBSKIP  'COLTAB
+
+ End
+
+
+RC = 0
+address ispexec 'TBCLOSE 'COLTAB
+address ispexec 'TBCLOSE 'TSLISTE
+address ispexec 'TBOPEN  'TSLISTE
+
+RETURN
+
+Build_IncludePG_All:
+
+tabnr          = tabnr - 0
+USEDOT         = "Y"
+LUWTABLE       = "LUWTB"tabnr
+LUWTAB         = "LUWTB"tabnr
+COLTAB         = "COLTB"tabnr
+PGLISTE        = "PGLI"tabnr
+TBCOL          = "TBCOL"tabnr
+tabnr          = tabnr + 0
+address ispexec  'TBOPEN  'COLTAB
+ADDRESS ISPEXEC  'TBCLOSE 'PGLISTE
+ADDRESS ISPEXEC  'TBERASE 'PGLISTE
+ADDRESS ISPEXEC  'TBOPEN  'PGLISTE
+
+DO      = Eingabe
+IF RC <> 0 THEN Do
+select
+  when auswkz = 'PG'  Then Do
+     ADDRESS ISPEXEC 'TBCREATE 'PGLISTE' NAMES(CR,       ',
+                                              'NM,   ,   ',
+                                              'OWNER ,   ',
+                                              'QUALIF,   ',
+                                              'VER   ,   ',
+                                              'SQLERR,   ',
+                                              'VALOPT,   ',
+                                              'ISOLAT,   ',
+                                              'EXPL,     ',
+                                              'DEGREE,   ',
+                                              'KEEPDY,   ',
+                                              'REOPTV,   ',
+                                              'ENCCCS,   ',
+                                              'IMMWRITE, ',
+                                              'ROUND,    ',
+                                              'RELEASE,  ',
+                                              'DYNRUL,   ',
+                                              'ACTION,   ',
+                                              'SYSSEN,   ',
+                                              'BUSSEN,   ',
+                                              'PDSNAME   ',
+                                              'APPLCMP   ',
+                                              'CONSTMT   ',
+                                              ') '
+
+   End
+  Otherwise do
+     ADDRESS ISPEXEC 'TBCREATE 'PGLISTE' NAMES(CR,       ',
+                                              'NM,   ,   ',
+                                              'OWNER ,   ',
+                                              'QUALIF,   ',
+                                              'VER   ,   ',
+                                              'SQLERR,   ',
+                                              'VALOPT,   ',
+                                              'ISOLAT,   ',
+                                              'EXPL,     ',
+                                              'DEGREE,   ',
+                                              'KEEPDY,   ',
+                                              'REOPTV,   ',
+                                              'ENCCCS,   ',
+                                              'IMMWRITE, ',
+                                              'ROUND,    ',
+                                              'RELEASE,  ',
+                                              'DYNRUL,   ',
+                                              'ACTION,   ',
+                                              'SYSSEN,   ',
+                                              'BUSSEN,   ',
+                                              'PDSNAME   ',
+                                              'APPLCMP   ',
+                                              'CONSTMT   ',
+                                              ') '
+
+   End
+ End
+   If rc <> 0 Then DO
+      say 'TBCREATE 'PGLISTE "RC="RC
+      say "ZEDSMSG="ZEDSMSG
+      say "ZERRLM="ZERRLM
+      say "ZERRMSG="ZERRMSG
+      say "ZERRSM="ZERRSM
+    End
+ End
+
+address ispexec 'TBOPEN  'COLTAB
+address ispexec 'TBTOP   'COLTAB
+address ispexec 'TBSKIP  'COLTAB
+anz         = 0
+TSDUP = ""
+Drop ColListe.
+ColListe.0 = 0
+
+Do while RC = 0
+   Select
+     When  auswkz = 'PG' Then do
+         EXCLUDE_AUTO_PARSE = "CONTOKEN "
+         Call Auto_Parse
+
+         CR          = COLLID
+         NM          = NAME
+         VER         = VERSION
+         OWNER       = OWNER
+         QUALIF      = QUALIFIER
+         DEGREE      = DEGREE
+         KEEPDY      = KEEPDYNAMIC
+         ENCCCS      = ENCODING_CCSID
+         IMMWRITE    = IMMEDWRITE
+         VALOPT      = VALIDATE
+         ACTION      = "REPLACE"
+         PDSNAME     = Space("'" PDSNAME "'", 0)
+         EXPL        = EXPLAIN
+         ISOLAT      = ISOLATION
+         ROUND       = ROUNDING
+         SQLERR      = SQLERROR
+         APPLCMP     = APPLCOMPAT
+         If APPLCMP  = "" Then APPLCMP = compatmode
+
+         select
+            when ROUND = 'C'  Then Round = 'CEILING'
+            when ROUND = 'D'  Then Round = 'DOWN'
+            when ROUND = 'F'  Then Round = 'FLOOR'
+            when ROUND = 'G'  Then Round = 'HALFDOWN'
+            when ROUND = 'E'  Then Round = 'HALFEVEN'
+            when ROUND = 'H'  Then Round = 'HALFUP'
+            when ROUND = 'U'  Then Round = 'UP'
+            otherwise nop
+          end
+
+
+         select
+           When ISOLAT  = 'R'  Then ISOLAT = 'RR'
+           When ISOLAT  = 'S'  Then ISOLAT = 'CS'
+           When ISOLAT  = 'T'  Then ISOLAT = 'RS'
+           When ISOLAT  = 'U'  Then ISOLAT = 'UR'
+           Otherwise NOP
+          End
+
+         select
+           When SQLERR  = 'C'  Then SQLERR = 'CONTINUE'
+           When SQLERR  = 'N'  Then SQLERR = 'NOPACKAGE'
+           Otherwise NOP
+          End
+
+         select
+           When REOPTV  = 'A'  Then REOPTV = 'AUTO'
+           When REOPTV  = 'B'  Then REOPTV = 'NONE'
+           When REOPTV  = 'Y'  Then REOPTV = 'ALWAYS'
+           When REOPTV  = '1'  Then REOPTV = 'ONCE'
+           Otherwise REOPTV = 'NONE'
+          End
+
+         select
+           When EXPL    = 'N'  Then EXPL   = 'NO'
+           When EXPL    = 'Y'  Then EXPL   = 'YES'
+           Otherwise NOP
+          End
+
+         select
+           When VALOPT  = 'B'  Then VALOPT = 'BIND'
+           When VALOPT  = 'R'  Then VALOPT = 'RUN'
+           Otherwise NOP
+          End
+
+          Select
+            When DYNAMICRULES = "B"   THEN DYNRUL = "BIND"
+            When DYNAMICRULES = "D"   THEN DYNRUL = "DEFINEBIND"
+            When DYNAMICRULES = "E"   THEN DYNRUL = "DEFINERUN"
+            When DYNAMICRULES = "H"   THEN DYNRUL = "INVOKEBIND"
+            When DYNAMICRULES = "I"   THEN DYNRUL = "INVOKERUN"
+            When DYNAMICRULES = "R"   THEN DYNRUL = "RUN"
+            Otherwise                      DYNRUL = "BIND"
+           End
+
+          select
+            When SYSTIMESENSITIVE   = "N"  THEN SYSSEN = "NO"
+            When SYSTIMESENSITIVE   = "Y"  THEN SYSSEN = "YES"
+            Otherwise NOP
+           End
+
+          select
+            When BUSTIMESENSITIVE   = "N"  THEN BUSSEN = "NO"
+            When BUSTIMESENSITIVE   = "Y"  THEN BUSSEN = "YES"
+            Otherwise NOP
+           End
+
+
+          select
+            When CONC_STMT          = "N"  THEN CONSTMT = "NO"
+            When CONC_STMT          = "Y"  THEN CONSTMT = "YES"
+            Otherwise NOP
+           End
+
+        ADDRESS ISPEXEC 'TBADD   'PGLISTE
+      End
+      Otherwise NOP
+    End
+
+   address ispexec 'TBSKIP  'COLTAB
+
+ End
+
+RC = 0
+address ispexec 'TBCLOSE 'COLTAB
+address ispexec 'TBCLOSE 'PGLISTE
+address ispexec 'TBOPEN  'PGLISTE
+
+RETURN
+
+
+Auto_Parse:
+/* Zuweisen der CZEILE zu den Column Names */
+
+If Datatype(Auto_Parse_Cols.0) <> "NUM" Then Do
+   address ispexec "TBOPEN " TBCOL
+   Address ISPEXEC "TBTOP  " TBCOL
+   Address ISPEXEC "TBSKIP" TBCOL
+   Auto_Parse_Cols.0 = 0
+   do while rc = 0
+      Auto_Parse_Cols.0 = Auto_Parse_Cols.0 + 1
+      APCOLI = Auto_Parse_Cols.0
+      CLName = Translate(CLNAME, '_', '-')
+      Auto_Parse_Cols.APCOLI.#CONAME = CLNAME
+      Address ISPEXEC "TBSKIP" TBCOL
+   end
+   address ispexec "TBCLOSE" TBCOL
+ End
+
+PZeile = CZEILE
+do APCOLI = 1 To Auto_Parse_Cols.0
+   parse value PZeile with PVal "0a0d"x  PZeile
+   CLName = Auto_Parse_Cols.APCOLI.#CONAME
+   PVAL   = Translate(PVAL, ' ', '"')
+   interpret STRIP(CLNAME) " = Strip(PVAL)"
+end
+
+
+return 0
+
+AUTO_PARSE_old:
+/* Zuweisen der CZEILE zu den Column Names */
+
+address ispexec "TBOPEN " TBCOL
+Address ISPEXEC "TBTOP  " TBCOL
+Address ISPEXEC "TBSKIP" TBCOL
+
+PZeile = CZEILE
+MAX_AUTO_PARSE_COUNTER = 0
+do while rc = 0
+   MAX_AUTO_PARSE_COUNTER = MAX_AUTO_PARSE_COUNTER + 1
+
+   If MAX_AUTO_PARSE         > 0 ,
+    & MAX_AUTO_PARSE_COUNTER > MAX_AUTO_PARSE Then do
+      Leave
+    End
+
+   parse value PZeile with PVal "0a0d"x  PZeile
+   CLName = Translate(CLNAME, '_', '-')
+   PVAL   = Translate(PVAL, ' ', '"')
+   interpret STRIP(CLNAME) " = Strip(PVAL)"
+   Address ISPEXEC "TBSKIP" TBCOL
+end
+
+MAX_AUTO_PARSE = 0
+
+address ispexec "TBCLOSE" TBCOL
+
+return 0
+
+error: failure: syntax: novalue:
+return

@@ -1,0 +1,191 @@
+/****************************REXX**************************************/
+/** ICINFO : ENTWEDER VOR EINE IMAGECOPY GEHEN UND ICINFO TIPPEN     **/
+/**          ODER PER JOB MIT IMAGECOPY WEGSCHICKEN.                 **/
+/**          ONLINE : DER JOB GIBT INFORMATIONEN UEBER DIE           **/
+/**                   IMAGE COPY (DBID, PSID, OBID(TS) OBID(TB) )    **/
+/**          BATCH  : ES WIRD NUR DIE OBID(TB) AUSGEGEBEN ABER       **/
+/**                   IN FORM "OBID 00xx" DAMIT DAS GANZE BEI        **/
+/**                   EINEM UNLOAD GENUTZT WERDEN KANN.              **/
+/**                                                                  **/
+/**                                                                  **/
+/*******************************X**************************************/
+ENV = "TSO"
+X = MSG('OFF')
+"DELSTACK"
+USER        = USERID()
+USERID      = USER
+PARSE SOURCE SRC.1 SRC.2 SRC.3 SRC.4 SRC.5 SCR.6 SRC.7 SRC.8 SRC.9
+CALL CHK_DD_STMT
+/* ADDRESS TSO CLEAR   */
+DSN  = ARG(1)     /* dataset name    */
+TAPE = ARG(2)     /* Tape Volumne Gerneric name  */
+DEVTYPE = Find_Voltype(dsn)
+
+RUN_ENV = "ONLINE"
+FOUND = POS("ICOPYDSN", DDLISTE, 1)
+IF FOUND > 0 THEN DO
+   OK =  listdsi("ICOPYDSN file")
+   say "DSN="SYSDSNAME
+   RUN_ENV = "BATCH"
+ END
+
+IF RUN_ENV = "ONLINE" THEN DO
+   DSN = ARG(1)
+   say "DSN="DSN
+   "FREE FI(ICDSN)"
+   "ALLOCATE FI(ICDSN) DSN("DSN") SHR"
+    ADDRESS TSO "EXECIO 1 DISKR ICDSN (STEM ICREC. FINIS"
+   "FREE FI(ICDSN)"
+ END
+Else do
+ ADDRESS TSO "EXECIO 1 DISKR ICOPYDSN (STEM ICREC. FINIS"
+ END
+
+HPGDBID      = SUBSTR(ICREC.1,  13, 2)    /* SMALLINT DBID     */
+HPGPSID      = SUBSTR(ICREC.1,  15, 2)    /* SMALLINT PSID     */
+HPGHPREF     = SUBSTR(ICREC.1,  16, 4)    /* INTEGER           */
+HPGCATRL     = SUBSTR(ICREC.1,  20, 1)    /* BYTE              */
+HPGREL       = SUBSTR(ICREC.1,  21, 1)    /* BYTE              */
+HPGSSNM      = SUBSTR(ICREC.1,  41, 4)    /* CHAR     SSID     */
+HPGFOID      = SUBSTR(ICREC.1,  45, 2)    /* SMALLINT OBID TS  */
+HPGPGSZ      = SUBSTR(ICREC.1,  47, 2)    /* SMALLINT PART SIZE*/
+HPGSGSZ      = SUBSTR(ICREC.1,  49, 2)    /* SMALLINT SEGSIZE  */
+HPGPARTN     = SUBSTR(ICREC.1,  51, 2)    /* SMALLINT Part NR. */
+HPGTBLC      = SUBSTR(ICREC.1,  57, 2)    /* SMALLINT          */
+HPGROID      = SUBSTR(ICREC.1,  59, 2)    /* SMALLINT OBID TB  */
+HPGMAXL      = SUBSTR(ICREC.1,  65, 2)    /* SMALLINT          */
+HPGCONTM     = SUBSTR(ICREC.1,  74, 10)   /* SMALLINT          */
+HPGSGNAM     = SUBSTR(ICREC.1,  83, 8)    /* CHAR     SG  NAME */
+HPGVCATN     = SUBSTR(ICREC.1,  91, 8)    /* CHAR     CAT NAME */
+HPGRBRBA     = SUBSTR(ICREC.1,  99, 6)    /* HEX      RBA      */
+HPGCLOG      = SUBSTR(ICREC.1,  70, 1)    /* HEX TS INFO UTS.  */
+HPGCLOG      = X2B(C2X(HPGCLOG))          /* HEX TS INFO UTS.  */
+
+HPGDBIDX =  C2X(HPGDBID)
+HPGDBIDD =  C2D(HPGDBID)
+HPGPSIDX =  C2X(HPGPSID)
+HPGPSIDD =  C2D(HPGPSID)
+HPGFOIDX =  C2X(HPGFOID)
+HPGFOIDD =  C2D(HPGFOID)
+HPGROIDX =  C2X(HPGROID)
+HPGROIDD =  C2D(HPGROID)
+HPGPGSZ  =  C2D(HPGPGSZ)
+HPGSGSZ  =  C2D(HPGSGSZ)
+HPGPARTN =  C2D(HPGPARTN)
+SAY "DBID    =  X'"C2X(HPGDBID)"'"  RIGHT(C2D(HPGDBID), 4)
+SAY "PSID    =  X'"C2X(HPGPSID)"'"  RIGHT(C2D(HPGPSID), 4)
+SAY "OBID TS =  X'"C2X(HPGFOID)"'"  RIGHT(C2D(HPGFOID), 4)
+SAY "OBID TB =  X'"C2X(HPGROID)"'"  RIGHT(C2D(HPGROID), 4)
+SAY "SYS NAME= "HPGSSNM
+SAY "SG  NAME= "HPGSGNAM
+SAY "CAT NAME= "HPGVCATN
+SAY "Page Size " HPGPGSZ
+SAY "Segsize   "HPGSGSZ
+SAY "Part Nr.  "HPGPARTN
+SAY "TSTYPE    "HPGCLOG
+INFO1 = ""
+INFO2 = ""
+INFO3 = ""
+INFO4 = ""
+INFO5 = ""
+INFO6 = ""
+INFO7 = ""
+INFO8 = ""
+If Substr(HPGCLOG, 1, 1) = 1 THEN
+   INFO1 = "log records are counted."
+If Substr(HPGCLOG, 2, 1) = 1 THEN
+   INFO2 = "page set is a LOB table space page set."
+If Substr(HPGCLOG, 3, 1) = 1 THEN
+   INFO3 = "this data set is EA-enabled."
+If Substr(HPGCLOG, 4, 1) = 1 THEN
+   INFO4 = "migration to ENFM is successful. "
+If Substr(HPGCLOG, 5, 1) = 1 THEN
+   INFO5 = "pageset or partition is in reordered row format."
+If Substr(HPGCLOG, 6, 1) = 1 THEN
+   INFO6 = "partitioned by range universal.  "
+If Substr(HPGCLOG, 7, 1) = 1 THEN
+   INFO7 = "table space is partition-by-growth. "
+If Substr(HPGCLOG, 8, 1) = 1 THEN
+   INFO8 = "full logging on the table space. "
+SAY " 1....... "INFO1
+SAY " .1...... "INFO2
+SAY " ..1..... "INFO3
+SAY " ...1.... "INFO4
+SAY " ....1... "INFO5
+SAY " .....1.. "INFO6
+SAY " ......1. "INFO7
+SAY " .......1 "INFO8
+
+FOUND = POS("TBOBID", DDLISTE, 1)
+IF FOUND > 0 THEN DO
+ DROP OBIDREC.
+ OBIDREC.0 = 1
+ OBIDREC.1 = "OBID "RIGHT(C2D(HPGROID), 4, '0')
+ ADDRESS TSO "EXECIO * DISKW TBOBID (STEM OBIDREC. FINIS"
+ END
+EXIT
+
+CHK_DD_STMT:
+
+  DDLISTE = ''
+  Tcb = Storage(21C,4)                  /* get TCB address*/
+  Tiot  = Storage(D2X(C2D(Tcb)+12),4)   /* add 12 for TIOT address */
+  dd    = D2X(C2D(Tiot)+28)             /* point to 1st DD */
+  ddlen = Storage(D2X(C2D(Tiot)+24),1)  /* dd length? */
+  Tiot  = D2X(C2D(Tiot)+24)             /* point to 1st TIOT ddname */
+  Jfcb  = Storage(D2X(X2D(Tiot)+12),3)  /* get JFCB address */
+
+      /* go through all ddnames */
+  Do while C2D(ddlen) /= 0
+      /* do one ddname */
+    If Storage(dd,1) /= '00'X Then Do
+       If Storage(dd,8) /= '' Then do
+          DDLISTE = DDLISTE STORAGE(DD,8)
+       end
+    End
+    Tiot  = D2X(X2D(Tiot)+C2D(ddlen))    /* point to next TIOT entry */
+    ddlen = Storage(Tiot,1)              /* get length of tiot entry */
+    dd    = D2X(X2D(Tiot)+4)             /* point to ddname in TIOT  */
+    Jfcb  = Storage(D2X(X2D(Tiot)+12),3) /* get next JFCB address    */
+  End
+return DDLISTE
+
+Find_Voltype:
+
+dsn        = Arg(1)
+
+Voltype.0  = 12
+Voltype.1  = "3010200E DASD 3380   "
+Voltype.2  = "3010300F DASD 3390   "
+Voltype.3  = "30102004 DASD 9345   "
+Voltype.4  = "30C08003 TAPE 3400-2 "
+Voltype.5  = "34008003 TAPE 3400-3 "
+Voltype.6  = "32008003 TAPE 3400-5 "
+Voltype.7  = "32108003 TAPE 3400-6 "
+Voltype.8  = "33008003 TAPE 3400-9 "
+Voltype.9  = "78008080 TAPE 3480   "
+Voltype.10 = "78048080 TAPE 3480X  "
+Voltype.11 = "78048081 TAPE 3490   "
+Voltype.12 = "78048083 TAPE 3590-1 "
+DEVTYPE    = ""
+
+B = OUTTRAP("LCAT.","*","NOCONCAT")
+ADDRESS TSO "LISTCAT ENT("DSN") ALL"
+
+if Datatype(lcat.0) <> "NUM" Then LCAT.0 = 0
+Do lci = 1 to lcat.0
+   If Substr(Word(lcat.lci, 2), 1, 9) = "DEVTYPE--" Then do
+      dev = Translate(Word(lcat.lci, 2), " ", "-")
+      dev = Substr(Word(dev, 2), 3, 8)
+      Leave
+    End
+ End
+
+Do lci = 1 to Voltype.0
+   If dev = Word(Voltype.lci, 1) Then do
+      DEVTYPE = Word(Voltype.lci, 2)
+      Leave
+    End
+ End
+
+ Return DEVTYPE

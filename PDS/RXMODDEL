@@ -1,0 +1,47 @@
+/* +------------------------REXX-------------------------------------+*/
+/* |                                                                 |*/
+/* |  Program   : RXMODDEL                                           |*/
+/* |  ERSTELLT  : ULRICH BR¢UER       27.11.1998                     |*/
+/* |  FUNKTION  : GENEIEREN DELETE STATEMENT FUER  DATASETS          |*/
+/* |              DIE VORHER MIT MODIFY RECOVERY GEL¦SCHT WURDEN.    |*/
+/* |                                                                 |*/
+/* +-----------------------------------------------------------------+*/
+/*                                                                    */
+/* TRACE I  */
+ENVIRONMENT = ADDRESS()
+USER =  USERID()
+
+SAY "START OF RXMODDEL (DELETE MODIFYD DATASETS)" DATE() TIME()
+
+"EXECIO * DISKR MODIFID ( STEM MODLIST. FINIS"
+IF RC /= 0 THEN DO
+   SAY "RETURNCODE NACH LESEN MODIFID " RC
+   EXIT 12
+ END
+
+DROP AUSLIST.
+AUSLIST.0 = 0
+DO I = 1 TO MODLIST.0
+   SAY  MODLIST.I
+   PARSE VALUE MODLIST.I WITH A1 'DSN=' DSNAME ',' REST
+   IF DSNAME = '' THEN ITERATE
+   OK = ADDLIST(" DELETE "DSNAME"  SCR")
+ END
+
+IF AUSLIST.0 = 0 THEN DO
+   AUSLIST.0 = 1
+   AUSLIST.1 = "      "
+ END
+
+"EXECIO * DISKW DELFILE  ( STEM AUSLIST. FINIS"
+
+SAY "END   OF RXMODDEL " DATE() TIME()
+
+EXIT
+
+ADDLIST:
+ AUSLIST.0  = AUSLIST.0 + 1
+ AIX        = AUSLIST.0
+ AUSLIST.AIX = ARG(1)
+ SAY ARG(1)
+ RETURN 0

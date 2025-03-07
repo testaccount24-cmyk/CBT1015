@@ -1,0 +1,96 @@
+//ZOSC192B EXEC PGM=ZOSC1920
+//STEPLIB  DD DISP=SHR,DSN=MGDB05.ISPF.LOADLIB
+//         DD DISP=SHR,DSN=DB2C.V12R1M0.SDSNLOAD
+//SYSPROC  DD DISP=SHR,DSN=MGDB05.ISPF.CLISTUDB
+//OUTDD  DD DSN=MGDB05.ISPF.DDLOUTC,
+//            DISP=(MOD,CATLG,CATLG),
+//            SPACE=(CYL,(10,20),RLSE),
+//            DCB=(RECFM=FB,LRECL=100,BLKSIZE=0,DSORG=PS)
+//RXPARM   DD *
+SSID              = "DB2C"            /* DB2 SSID            */
+LOCATION          = ""                /* LOCATION TO CONNECT */
+AUSWAHL           = "DB"              /* DB, SC, TS,TB, ...  */
+OBJECT            = "A2IMDB"          /* Object Name         */
+lcmd              = "HDDL"            /* Command DDL oder HDDL */
+CURSQLID          = "DB2SW"           /* Current SQLID         */
+trace             = "OFF"             /* Set trace ON or OFF */
+WLTYPE            = 2                 /* Set Worklist Type 1/2 */
+
+                                /* Generate Statements           */
+G_DATABASE        =  "Y"        /*  DB /        Y/N              */
+G_TABLESPACE      =  "Y"        /*  DB / SC     Y/N              */
+G_TABLE           =  "Y"        /*  DB / SC     Y/N              */
+G_INDEX           =  "Y"        /*  DB / SC     Y/N              */
+G_COMMENT         =  "Y"        /*  DB / SC     Y/N              */
+G_AUXTABLE        =  "Y"        /*  DB / SC     Y/N              */
+G_PRIMARYKEY      =  "Y"        /*  DB / SC     Y/N              */
+G_FOREIGNKEY      =  "Y"        /*  DB / SC     Y/N              */
+
+G_Trigger         =  "N"        /*  DB / SC     Y/N              */
+G_SProc           =  "N"        /*  DB / SC     Y/N              */
+G_Synonym         =  "N"        /*  DB / SC     Y/N              */
+G_Permission      =  "N"        /*  DB / SC     Y/N              */
+G_View            =  "N"        /*  DB / SC     Y/N              */
+G_Sequence        =  "N"        /*     / SC     Y/N              */
+G_Alias           =  "N"        /*     / SC     Y/N              */
+G_Variable        =  "N"        /*     / SC     Y/N              */
+G_Datatype        =  "N"        /*     / SC     Y/N              */
+
+G_GRANTTABLE      =  "N"        /*  DB / SC     Y/N              */
+G_GRANTVIEW       =  "N"        /*  DB / SC     Y/N              */
+G_GRANTSQ         =  "N"        /*  DB / SC     Y/N              */
+G_GRANTRT         =  "N"        /*  DB / SC     Y/N              */
+
+/*
+//SYSPRINT DD SYSOUT=*
+//SYSTSPRT DD SYSOUT=*
+//SYSTSIN  DD DUMMY
+/*
+//ZOSC192B EXEC PGM=ZOSC1920
+//STEPLIB  DD DISP=SHR,DSN=MGDB05.ISPF.LOADLIB
+//         DD DISP=SHR,DSN=DB2C.V12R1M0.SDSNLOAD
+//SYSPROC  DD DISP=SHR,DSN=MGDB05.ISPF.CLISTUDB
+//OUTDD  DD DSN=MGDB05.ISPF.DDLOUTC,
+//            DISP=(MOD,CATLG,CATLG),
+//            SPACE=(CYL,(10,20),RLSE),
+//            DCB=(RECFM=FB,LRECL=100,BLKSIZE=0,DSORG=PS)
+//RXPARM   DD *
+SSID              = "DB2C"            /* DB2 SSID            */
+LOCATION          = ""                /* LOCATION TO CONNECT */
+AUSWAHL           = "SC"              /* DB, SC, TS,TB, ...  */
+OBJECT            = "BIMS64"          /* Object Name         */
+lcmd              = "HDDL"            /* Command DDL oder HDDL */
+CURSQLID          = "DB2SW"           /* Current SQLID         */
+trace             = "OFF"             /* Set trace ON or OFF */
+WLTYPE            = 2                 /* Set Worklist Type 1/2 */
+
+                                /* Generate Statements           */
+                                /* Generate Statements           */
+G_DATABASE        =  "N"        /*  DB /        Y/N              */
+G_TABLESPACE      =  "N"        /*  DB / SC     Y/N              */
+G_TABLE           =  "N"        /*  DB / SC     Y/N              */
+G_INDEX           =  "N"        /*  DB / SC     Y/N              */
+G_COMMENT         =  "N"        /*  DB / SC     Y/N              */
+G_AUXTABLE        =  "N"        /*  DB / SC     Y/N              */
+G_PRIMARYKEY      =  "N"        /*  DB / SC     Y/N              */
+G_FOREIGNKEY      =  "N"        /*  DB / SC     Y/N              */
+
+G_View            =  "Y"        /*  DB / SC     Y/N              */
+G_Trigger         =  "Y"        /*  DB / SC     Y/N              */
+G_SProc           =  "Y"        /*  DB / SC     Y/N              */
+G_Synonym         =  "Y"        /*  DB / SC     Y/N              */
+G_Permission      =  "Y"        /*  DB / SC     Y/N              */
+G_Sequence        =  "Y"        /*     / SC     Y/N              */
+G_Alias           =  "Y"        /*     / SC     Y/N              */
+G_Variable        =  "Y"        /*     / SC     Y/N              */
+G_Datatype        =  "Y"        /*     / SC     Y/N              */
+
+G_GRANTTABLE      =  "N"        /*  DB / SC     Y/N              */
+G_GRANTVIEW       =  "N"        /*  DB / SC     Y/N              */
+G_GRANTSQ         =  "N"        /*  DB / SC     Y/N              */
+G_GRANTRT         =  "N"        /*  DB / SC     Y/N              */
+
+/*
+//SYSPRINT DD SYSOUT=*
+//SYSTSPRT DD SYSOUT=*
+//SYSTSIN  DD DUMMY

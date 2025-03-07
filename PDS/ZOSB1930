@@ -1,0 +1,1883 @@
+/* REXX */
+/*******************************************************************/
+/*                                                                 */
+/* ProgramNAME      : ZOSB1930                                     */
+/* AUSRUF           : Procedure  x=ZOSB1930(ssid,loc,ausw,obj)     */
+/* AUTHER           : ULRICH BRAEUER                               */
+/* FUNKTION         : AG : Arbeiten mit Virtual Indexes            */
+/*                  : Neue Version                                 */
+/*                                                                 */
+/*******************************************************************/
+
+SIGNAL ON ERROR
+SIGNAL OFF FAILURE
+SIGNAL OFF ERROR
+
+PARSE SOURCE SRC.1  , /* ENVIRONMENT  (TSO)            */
+             SRC.2  , /* AUFRUF ALS (COMMAND)          */
+             SRC.3  , /* Program NAME (LUW97000)       */
+             SRC.4  , /* SYS00186 (TEMP FILE)          */
+             SRC.5  , /* AUFRUF AUS LIB (X.X.CLISTUDB) */
+             SRC.6  , /* ?                             */
+             SRC.7  , /* TSO                           */
+             SRC.8  , /* ISPF                          */
+             SRC.9  , /* ?                             */
+
+
+ENV        = "TSO"
+X          = MSG('OFF')
+USER       = USERID()
+SYSCATS    = "SYSCAT"
+SYSIBMS    = "SYSIBM"
+SYSIBMA    = "SYSIBMADM"
+SYSPROCA   = "SYSPROC"
+RECLEN     = 4096
+TRACKS     = 60
+DSNRECON   = "N"
+SYSUID  = ""
+SYSPWD  = ""
+ADDRESS ISPEXEC 'VGET (DSNRECON) PROFILE'
+ADDRESS ISPEXEC 'VGET (TRACKS) PROFILE'
+ADDRESS ISPEXEC 'VGET (RECLEN) PROFILE'
+ADDRESS ISPEXEC 'VGET (SYSIBMS) PROFILE'
+ADDRESS ISPEXEC 'VGET (SYSCATS) PROFILE'
+ADDRESS ISPEXEC 'VGET (SYSIBMA) PROFILE'
+ADDRESS ISPEXEC 'VGET (SYSPROCA) PROFILE'
+ADDRESS ISPEXEC 'VGET (CURSCHEM) PROFILE'
+ADDRESS ISPEXEC 'VGET (SYSUID)   PROFILE'
+ADDRESS ISPEXEC 'VGET (SYSPWD)   PROFILE'
+
+if CURSCHEM = '' Then CURSCHEM = USERID()
+
+ADDRESS ISPEXEC 'VGET (UDBTRACE) PROFILE'
+IF UDBTRACE = 'ON' THEN TRACE R
+ELSE                    TRACE
+
+
+ssid        = arg(1)
+location    = arg(2)
+auswkz      = arg(3)
+lnr         = arg(4)
+tabnr       = arg(5)
+Do_All      = arg(6)
+eingabe     = arg(7)
+eingabe2    = arg(8)
+statement   = arg(9)
+object1     = arg(10)
+object2     = arg(11)
+object3     = arg(12)
+object4     = arg(13)
+object5     = arg(14)
+EDIT        = arg(15)
+Object_list = arg(16)
+DB2Vers     = arg(17)
+proclib     = arg(18)
+ISPFILE     = arg(19)
+
+obj         = ""
+tablespace  = ""
+DBNAME      = ""
+STGROUP     = ""
+DB2_SSID    = SSID
+RXDB2_PUTSTEM     = 'AUSGABE.'
+RXDB2_GETSTEM     = 'EINGABE.'
+
+
+parse value DB2Vers with DBENV 4 DBVers 6 DBRel 8 DBMod
+parse value Object1 with DB2_CREATOR1 '.' DB2_NAME1
+parse value Object2 with DB2_CREATOR2 '.' DB2_NAME2
+parse value Object3 with DB2_CREATOR3 '.' DB2_NAME3
+parse value Object4 with DB2_CREATOR4 '.' DB2_NAME4
+parse value Object5 with DB2_CREATOR5 '.' DB2_NAME5
+
+ADDRESS ISPEXEC 'VGET (CURSQLID) PROFILE'
+ADDRESS ISPEXEC 'VGET ('STRIP(SSID)'SQID) PROFILE'
+
+DB2_SSID    = SSID
+DSNRECON_SAVE = DSNRECON
+
+If DSNRECON_SAVE = "Y" Then Do
+   DSNRECON  = 'N'
+   ADDRESS ISPEXEC 'VPUT (DSNRECON) PROFILE'
+   Call Load_DSNREXX_930
+ End
+
+crlf           = "0a0d"x
+Tabnr          = Tabnr + 1
+CZeile         = ""
+LUWTABLE       = "LUWTB"tabnr
+COLTAB         = "COLTB"tabnr
+BRTAB          = "BROWS"tabnr
+TBCOL          = "TBCOL"tabnr
+SELTAB         = "SELTB"tabnr
+connected      = "N"
+
+DROP HVLIST.
+HVLIST.0 = 0
+drop sl.
+sl.0 = 0
+anzcols = 0
+
+SSID_CURRENT_SQLID = value(STRIP(SSID)"SQID")
+If length(SSID_CURRENT_SQLID) > 0 then do
+   CURSQLID = SSID_CURRENT_SQLID
+ End
+
+IF CURSQLID   = "NONE" THEN CURSQLID = ""
+IF CURSQLID   = ""     THEN CURSQLID = ""
+
+eingabe3 = subword(eingabe2, 2)
+eingabe2 = Word(eingabe2, 1)
+if Substr(eingabe2, 1, 4) = "UTIL" Then eingabe2 = "UTIL"
+
+red   = '01'x                              /* Assign colors to       */
+blue  = '02'x                              /*   Attribute bytes      */
+green = '03'x                              /*   found in the data    */
+white = '04'x
+in1   = '05'x
+in2   = '06'x
+in3   = '07'x
+uid   = '08'x
+pwd   = '09'x
+endin = '3a'x
+keyw  = '3b'x
+keytab.0 = 5
+keytab.1 = in1
+keytab.2 = in2
+keytab.3 = in3
+keytab.4 = uid
+keytab.5 = pwd
+maxlines = 0                               /* set max number of lines*/
+dyndata  = ''                              /* initialize data        */
+cmddata  = ''                              /* initialize data        */
+curline = 1                                /* set current line #     */
+
+
+Call Explain_Statement
+
+If DSNRECON_SAVE = "Y" Then Do
+   DSNRECON  = 'Y'
+   ADDRESS ISPEXEC 'VPUT (DSNRECON) PROFILE'
+   Call UNLoad_DSNREXX_930
+ End
+
+
+Call Edit_Stmt  /* Anzeige Erwuenscht */
+
+Return Stmt
+
+Explain_Statement:
+
+If Length(CURSCHEM) = 0 Then CURSCHEM = USERID()
+
+CURSQLID   = Left(CURSQLID,  8, " ")
+EXPLSCHEMA = Left(CURSQLID,  8, " ")
+CURSCHEMA  = Left(" "     ,  8, " ")
+CURSCHEMA  = Left(USERID() ,18, " ")
+CURSCHEMA  = Left(CURSCHEM , 8, " ")
+QUERYNUM   = Left(99999999,  8, "0")
+EDITSTMT   = Left("Y"      , 1, " ")
+EXPLSTMT   = Left("Y"      , 1, " ")
+VIRTIND    = Left("N"      , 1, " ")
+
+area.0 = 11
+area.1  = white"Explain Statement : "
+area.2  = white" "
+area.3  = white" "
+area.4  = white" Explain "keyw"Edit_Stmt       "in1 ||EDITSTMT ||endin,
+               "Y/N"
+area.5  = white"         "keyw"Explain         "in1 ||EXPLSTMT ||endin,
+               "Y/N"
+area.6  = white"         "keyw"Virtual Indexes "in1||VIRTIND   ||endin,
+               "Y/N"
+area.7  =      " "
+area.8  = white"         "keyw"Current_Sqlid   "in1 ||CURSQLID ||endin,
+          white" Current SQLID                 "
+area.9  = white"         "keyw"Virtual_Schema  "in1 ||EXPLSCHEMA||endin,
+          white" SCHEMA fuer Virtual Indexes   "
+area.10 = white"         "keyw"Current_Schema  "in1 ||CURSCHEMA||endin,
+          white" SCHEMA fuer Select statement  "
+area.11 = white"         "keyw"QueryNummer     "in1 ||QUERYNUM ||endin
+area.12 = white"  "
+
+Call Anzeige_Dyn_Panel
+PF   = ''
+
+current_Sqlid_val  = Strip(current_Sqlid_val, 'T' )
+Current_Schema_val = Strip(Current_Schema_val, 'T' )
+Virtual_Schema_val = Strip(Virtual_Schema_val, 'T' )
+
+If length(Current_Schema_val) = 0 Then Current_Schema_val = USERID()
+If Length(Virtual_Schema_val) = 0 Then Virtual_Schema_val = USERID()
+
+If Length(Strip(current_Sqlid_val)) > 0 Then do
+   SQLSTMT = "set current sqlid = '"current_Sqlid_val"'"
+   Call EXECUTE_IMMEDIATE_930
+ end
+
+If Edit_Stmt_Val = "Y" Then do
+   STMT = RXSQLFOR(statement)
+   OK = Anzeigen_daten(STMT)
+   If SL.0 = 0 Then Do
+      SL.0 = 1
+      SL.1 = " "
+    End
+   Call Edit_Stmt                   /* Anzeige Erwuenscht */
+   Call Get_Stmt
+   DROP SL.
+   SL.0 = 0
+   statement = A1_STMT.1
+   STMT = RXSQLFOR(statement)
+   OK = Anzeigen_daten(STMT)
+ End
+
+If Virtual_Val = "Y" Then do
+   ADDRESS "TSO" "DELSTACK"
+   Call Virtual_Indexes
+
+
+   Do vi = 1 to DSN_VIRTUAL_INDEXES.0
+      Select
+        When DSN_VIRTUAL_INDEXES.vi.WattIss  = "C" Then NOP
+        When DSN_VIRTUAL_INDEXES.vi.WattIss  = "D" Then NOP
+        Otherwise                                       Iterate
+       End
+      TBName  = word(STRIP(DSN_VIRTUAL_INDEXES.vi), 1)
+      IXName  = word(STRIP(DSN_VIRTUAL_INDEXES.vi), 2)
+      SQLSTMT = Subword(STRIP(DSN_VIRTUAL_INDEXES.vi), 3)
+      Call EXECUTE_IMMEDIATE_930
+      sql_text = sqlstmt
+      do while length(sql_text) > 0
+         parse value sql_text with text ',' rest
+         sql_text = rest
+         If Length(Strip(rest)) = 0 then Do
+             OK = NextSl('-- 'Strip(Text) )
+            leave
+          end
+         Else Do
+             OK = NextSl('-- 'Strip(Text) ',')
+          end
+       end
+    End
+   SQLSTMT = "COMMIT "
+   Call EXECUTE_IMMEDIATE_930
+ End
+
+If Explain_Val = "Y"  ,
+ & Length(Strip(statement)) > 0 Then Do
+   ADDRESS "TSO" "DELSTACK"
+   Call ZOSB1916 SSID     , ,
+                Location  , ,
+                Current_Sqlid_Val, ,
+                Virtual_Schema_Val, ,
+                Current_Schema_Val, ,
+                QUERYNUM_Val     , ,
+                statement , ,
+                ""
+    /* GGF noch ne where clouse einf}egen mit tbname und indexname */
+    If Length(Strip(CURSQLID)) > 0 Then do
+       SQLSTMT = "set current sqlid = '"Strip(CURSQLID, 'T')"' "
+       Call EXECUTE_IMMEDIATE_930
+     end
+    SQLSTMT = "delete from ",
+              Strip(Virtual_Schema_val)".DSN_VIRTUAL_INDEXES "
+    Call EXECUTE_IMMEDIATE_930
+    SQLSTMT = "commit "
+    Call EXECUTE_IMMEDIATE_930
+    OBJ = "EDIT_DIREKT"
+ End
+
+
+Return
+
+Virtual_Indexes:
+
+Drop DSN_VIRTUAL_INDEXES.
+DSN_VIRTUAL_INDEXES.0 = 0
+
+EnterBack = "N"
+InitArea  = "Y"
+
+Call Init_Vindex
+
+
+EnterBack = "Y"
+InitArea  = "Y"
+Do Forever
+   TODO             = " "
+   ToDo_Val         = " "
+   area.0  = 15
+   area.1  = white"Virtual Indexes :   "
+   area.2  = white" "
+   area.3  = white" "
+   area.4  = white"Bitte erst Tabelle ausw{hlen "
+   area.5  = white"  "keyw"TBCREATOR     "in1 ||TBCREATOR_Val || endin ,
+               "  "keyw"TBNAME " ||    in1 ||TBNAME_Val    || endin
+   area.6  = white"  "
+   area.7  = white"  "
+   area.8  = white"         "keyw"TODO          "in1 ||TODO ||endin
+   area.9  = white"                         C=Craete "
+   area.10 = white"                         D=Delete "
+   area.11 = white"                         E=Edit / Alter "
+   area.12 = white"  "
+   area.13 = white"  "
+   area.14 = white"  "
+   area.15 = white"  "
+
+   InitArea  = "Y"
+   Call Anzeige_Dyn_Panel
+   InitArea  = "Y"
+   Object    = ""
+
+   Object1   = ""
+   Object2   = Space(TBCREATOR_Val "." TBNAME_Val, 0)
+   If Object2 <> "." ,
+    & Object2 <> Old_Object Then Do
+      AUSWKZ    = "CO"       /* Lesen Tablecolumns */
+      co_anz = 0
+      Call Lesen_daten
+      Call CZeile_Lesen
+
+      AUSWKZ    = "IX"       /* Lesen Indexes      */
+      ix_anz = 0
+      Call Lesen_daten
+      Call CZeile_Lesen
+      Old_Object = Object2
+    End
+
+
+   If Object2 <> "." Then Do
+      Select
+         When ToDo_Val = "C" Then do
+           Call Virtual_Indexes_Create
+         End
+         When ToDo_Val = "D" Then do
+           Call Virtual_Indexes_Delete
+         End
+         When ToDo_Val = "E" Then do
+           Call Virtual_Indexes_Edit
+         End
+         Otherwise NOP
+       End
+    End
+
+    If PF   = 'PF03'               THEN LEAVE
+    If PF   = 'PF04'               THEN EXIT 4
+    If RESP = "ENTER"              Then NOP
+End
+
+Return
+
+Virtual_Indexes_Create:
+
+area.0 = 24
+area.1  = white"Create an Virtual Index  :  "
+area.2  = white" "
+area.3  = white" "
+area.4  = white"   TBCREATOR " || TBCREATOR_Val            || ,
+               " TBNAME "        || TBNAME_Val             || ""
+area.5  = white"  "keyw"IXCREATOR     "in1 ||IXCREATOR     || endin ,
+               ""keyw"IXNAME "in1 ||IXNAME        || endin
+area.6  = white"  "keyw"ENABLE        "in1 ||ENABLE        || endin ,
+               " Y/N "
+area.7  = white"  "keyw"MODE          "in1 ||MODE          || endin ,
+               " C/D  C=Create D=Drop "
+area.8  = white"  "keyw"UNIQUERULE    "in1 ||UNIQUERULE    || endin ,
+               " D/U    "
+area.9  = white"  "keyw"CLUSTERING    "in1 ||CLUSTERING    || endin ,
+               " Y/N           "
+area.10 = white"  "keyw"INDEXTYPE     "in1 ||INDEXTYPE     || endin ,
+               " 2/D  2=Non Part D=Part"
+area.11 = white"  "keyw"PADDED        "in1 ||PADDED        || endin ,
+               " Y/N  Y=PADDED "
+area.12 = white"  "keyw"COLCOUNT      "in1 ||COLCOUNT      || endin
+area.13 = white"  "keyw"PGSIZE        "in1 ||PGSIZE        || endin ,
+               "K "
+area.14 = white"  "keyw"NLEAF          "in1 ||NLEAF         || endin
+area.15 = white"  "keyw"NLEVELS        "in1 ||NLEVELS       || endin
+area.16 = white"  "keyw"FIRSTKEYCARDF  "in1 ||FIRSTKEYCARDF || endin
+area.17 = white"  "keyw"FULLKEYCARDF   "in1 ||FULLKEYCARDF  || endin
+area.18 = white"  "keyw"CLUSTERRATIOF  "in1 ||CLUSTERRATIOF || endin
+area.19 = white"  "keyw"KEYTARGET_COUNT"in1 ||KEYTARGET_COUNT|| endin
+area.20 = white"  "keyw"UNIQUE_COUNT   "in1 || UNIQUE_COUNT   || endin
+area.21 = white"  "keyw"IX_EXTENSION_TYPE"in1||IX_EXTENSION_TYPE||endin,
+               "' '=simple, 'V'=XML, 'S'=calar expression "
+area.22 = white"  "keyw"DATAREPEATFACTORF"in1||DATAREPEATFACTORF||endin
+area.23 = white"  "keyw"SPARSE           "in1||SPARSE        || endin,
+               "'N'=entry each row, 'Y' not contain ",
+               "'X' exclude NULL Val."
+area.24 = white"  "
+
+
+
+Area.0 = area.0 + 1
+Ai     = area.0
+Area.Ai = white"   AW  Or CNR Colname " || endin
+
+Do coi = 1 to co_anz
+   Area.0 = area.0 + 1
+   Ai     = area.0
+   ColAw  = "  "
+   Colnum = Right(Co_colno.coi, 3, '0')
+   Colnam = Left(co_name.coi, 50, ' ')
+
+   Area.Ai = white" "keyw"" || in1 || ColAw    || endin || ,
+                     keyw"" || in1 || Colorder || endin || ,
+                     colnum || " " || ,
+                     colnam
+ End
+
+EnterBack = "Y"
+InitArea  = "Y"
+Do Forever
+   Call Anzeige_Dyn_Panel
+   InitArea  = "N"
+   If PF   = 'PF03'               THEN LEAVE
+   If PF   = 'PF04'               THEN EXIT 4
+   If RESP = "ENTER"              Then NOP
+End
+
+DSN_VIRTUAL_INDEXES.0 = DSN_VIRTUAL_INDEXES.0 + 1
+Di = DSN_VIRTUAL_INDEXES.0
+DSN_VIRTUAL_INDEXES.Di.WattIss = "C"
+
+ixstdname = "VIX" || date('j') || time('s')
+If IXCREATOR_VAL = "" Then IXCREATOR_VAL = USERID()
+If IXNAME_VAL    = "" Then IXNAME_VAL    = ixstdname
+IX_Insert = Space(TBCREATOR_VAL   "." TBName_Val, 0)              ,
+            Space(IXCREATOR_VAL   "." IXName_Val, 0)              ,
+            "INSERT INTO " ,
+            Strip(Virtual_Schema_val)".DSN_VIRTUAL_INDEXES ( " ,
+            "TBCREATOR, TBNAME, IXCREATOR, IXNAME, ENABLE, MODE,  " ,
+            "UNIQUERULE, COLCOUNT, CLUSTERING, NLEAF, NLEVELS,    " ,
+            "INDEXTYPE, PGSIZE, FIRSTKEYCARDF, FULLKEYCARDF,      " ,
+            "CLUSTERRATIOF, PADDED,                               " ,
+            "KEYTARGET_COUNT, UNIQUE_COUNT,                       " ,
+            "IX_EXTENSION_TYPE, DATAREPEATFACTORF, SPARSE         " ,
+            ""
+
+
+
+anzZVars = 2
+coi      = 0
+ColCount = 0
+drop SortTab.
+SortTab.0 = 0
+Do i = 1 to co_anz*AnzZVars by AnzZVars
+   Coi   = Coi   + 1
+   Temp_Val = "COL"  || i   || "_Val"
+
+   ausw  = Value(Col || i   || "_Val" )
+   order = Value(Col || i+1 || "_Val" )
+   Interpret "Drop "COL || i   || "_Val"   /* Drop Values */
+   Interpret "Drop "COL || i+1 || "_Val" /* Drop Values */
+   If ausw = "COL"  || i   || "_Val" Then Iterate
+   if ausw = "" Then Iterate
+   SortTab.0 = SortTab.0 + 1
+   Coli     = SortTab.0
+
+   ColCount = ColCount + 1
+   Colnam = Left(co_name.coi, 50, ' ')
+   CoLNo  = Right(co_ColNo.coi, 3, ' ')
+   /* COLNO1, ORDERING1, .... COLNO64, ORDERING64  */
+   IX_Insert = IX_Insert ", COLNO" || ColCount ", ORDERING" || Colcount
+
+   If order   = "D" then Nop
+   else order = "A"
+   SortTab.coli = ausw
+   SortTab.Coli = SortTab.Coli "," co_ColNo.coi
+   SortTab.Coli = SortTab.Coli "," "'"order"'"
+ End
+
+
+IX_Insert = IX_INSERT " ) VALUES ( "
+IX_Insert = IX_Insert " '"strip(TBCREATOR_VAL) ||"'"
+IX_Insert = IX_Insert ",'"Strip(TBNAME_VAL)    ||"'"
+IX_Insert = IX_Insert ",'"Strip(IXCREATOR_VAL) ||"'"
+IX_Insert = IX_Insert ",'"Strip(IXNAME_VAL)    ||"'"
+IX_Insert = IX_Insert ",'"ENABLE_VAL    ||"'"
+IX_Insert = IX_Insert ",'"MODE_VAL      ||"'"
+IX_Insert = IX_Insert ",'"UNIQUERULE_VAL||"'"
+IX_Insert = IX_Insert "," COLCOUNT
+IX_Insert = IX_Insert ",'"CLUSTERING_VAL||"'"
+IX_Insert = IX_Insert "," NLEAF_VAL
+IX_Insert = IX_Insert "," NLEVELS_VAL
+IX_Insert = IX_Insert ",'"INDEXTYPE_VAL ||"'"
+IX_Insert = IX_Insert ", "PGSIZE_VAL
+IX_Insert = IX_Insert "," FIRSTKEYCARDF_VAL
+IX_Insert = IX_Insert "," FULLKEYCARDF_VAL
+IX_Insert = IX_Insert "," CLUSTERRATIOF_VAL
+IX_Insert = IX_Insert ",'"PADDED_VAL    ||"'"
+IX_Insert = IX_Insert "," KEYTARGET_COUNT_Val
+IX_Insert = IX_Insert "," UNIQUE_COUNT_Val
+IX_Insert = IX_Insert ",'"IX_EXTENSION_TYPE_Val || "'"
+IX_Insert = IX_Insert "," DATAREPEATFACTORF_Val
+IX_Insert = IX_Insert ",'"SPARSE_Val || "'"
+
+Call SORTASC
+
+Do coli = 1 To SortTab.0
+   IX_Insert = IX_Insert Subword(SortTab.Coli, 2)
+ End
+DSN_VIRTUAL_INDEXES.di = IX_Insert ")"
+
+PF = ""
+Return
+
+Virtual_Indexes_Delete:
+
+
+area.0 = 10
+area.1  = white"Delete an Virtual Index  :  "
+area.2  = white" "
+area.3  = white" "
+area.4  = white"  TBCREATOR     "    || TBCREATOR_Val ||  ,
+               "  TBNAME "           || TBNAME_Val
+area.5  = white" "
+area.6  = white" "
+area.7  = white" "
+area.8  = white" "
+area.9  = white" "
+area.10 = white" "
+
+EnterBack = "Y"
+InitArea  = "Y"
+IXNR    = 0
+Do ixnr = 1 to ix_anz
+
+   SEL = " "
+   area.0 = area.0 + 1
+   ai     = area.0
+   INR     = Right(IXNR, 3, '0')
+
+   SEL     = ix_ausw.ixnr
+   area.ai = white"   "keyw"" || in1 || SEL || endin ,
+             Left(Space(ix_Creator.ixnr   "." ix_Name.ixnr  , 0), 40) ,
+             Left(Space(ix_TBCreator.ixnr "." ix_TBName.ixnr, 0), 40) ,
+             ""
+ End
+
+Do Forever
+   Call Anzeige_Dyn_Panel
+   InitArea  = "N"
+   If PF   = 'PF03'               THEN LEAVE
+   If PF   = 'PF04'               THEN EXIT 4
+   If RESP = "ENTER"              Then NOP
+End
+
+
+anzZVars = 1
+Di = DSN_VIRTUAL_INDEXES.0 + 1
+DSN_VIRTUAL_INDEXES.Di.WattIss = "D"
+Do i = 1 to ix_anz*AnzZVars by AnzZVars
+   Temp_Val = "COL"  || i   || "_Val"
+   ausw  = Value(Col || i   || "_Val" )
+   Interpret "Drop "COL || i   || "_Val"   /* Drop Values */
+   If ausw =  Temp_val Then Iterate
+   if ausw =  ""       Then Iterate
+   if ausw <> "D"      Then Iterate
+
+   AUSWKZ  = "KC"       /* Lesen Keycolumns */
+   Object  = Space(ix_Creator.i  "." ix_Name.i, 0)
+   Object2 = ""
+   KC_anz = 0
+   Call Lesen_daten
+   Call CZeile_Lesen
+   Call Drop_Index
+   ix_ausw.i = ausw
+
+ End
+PF = ""
+
+Return
+
+Drop_Index:
+DSN_VIRTUAL_INDEXES.0 = DSN_VIRTUAL_INDEXES.0 + 1
+Di = DSN_VIRTUAL_INDEXES.0
+IX_Insert = Space(ix_TBCreator.i   "." ix_TBName.i , 0)           ,
+            Space(ix_Creator.i "." ix_Name.i       , 0)           ,
+            "INSERT INTO " ,
+            Strip(Virtual_Schema_val)".DSN_VIRTUAL_INDEXES ( ",
+            "TBCREATOR, TBNAME, IXCREATOR, IXNAME, ENABLE, MODE,  " ,
+            "UNIQUERULE, COLCOUNT, CLUSTERING, NLEAF, NLEVELS,    " ,
+            "INDEXTYPE, PGSIZE, FIRSTKEYCARDF, FULLKEYCARDF,      " ,
+            "CLUSTERRATIOF, PADDED,                               " ,
+            "KEYTARGET_COUNT, UNIQUE_COUNT,                       " ,
+            "IX_EXTENSION_TYPE, DATAREPEATFACTORF, SPARSE         " ,
+            ""
+Do kci = 1 to KC_anz
+   IX_Insert = IX_Insert ", COLNO" || kci
+   IX_Insert = IX_Insert ", ORDERING" || kci
+ End
+
+IX_Insert = IX_INSERT " ) VALUES ( "
+IX_Insert = IX_Insert " '"strip(TBCREATOR_VAL)  ||"'"
+IX_Insert = IX_Insert ",'"Strip(TBNAME_VAL)     ||"'"
+IX_Insert = IX_Insert ",'"Strip(ix_Creator.i)   ||"'"
+IX_Insert = IX_Insert ",'"Strip(ix_Name.i)      ||"'"
+IX_Insert = IX_Insert ",'Y'"   /* ENABLE = YES    */
+IX_Insert = IX_Insert ",'D'" /* TYPE DROP INDEX */
+IX_Insert = IX_Insert ",'" || ix_UNIQUERULE.i || "'"
+IX_Insert = IX_Insert "," KC_anz
+IX_Insert = IX_Insert ",'" || ix_CLUSTERING.i || "'"
+IX_Insert = IX_Insert ", -1"
+IX_Insert = IX_Insert ", -1"
+IX_Insert = IX_Insert ",'"ix_INDEXTYPE.i     ||"'"
+IX_Insert = IX_Insert ","PGSIZE
+IX_Insert = IX_Insert ", -1"
+IX_Insert = IX_Insert ", -1"
+IX_Insert = IX_Insert ", "ix_CLUSTERRATIOF.i
+IX_Insert = IX_Insert ",'"ix_PADDED.i   ||"'"
+IX_Insert = IX_Insert ","ix_KEYTARGET_COUNT.i
+IX_Insert = IX_Insert ","ix_UNIQUE_COUNT.i
+IX_Insert = IX_Insert ",'"ix_EXTENSION_TYPE.i"'"
+IX_Insert = IX_Insert ",-1"
+IX_Insert = IX_Insert ",'"IX_SPARSE.i"'"
+
+Do kci = 1 to KC_anz
+   IX_Insert  = IX_Insert "," kc_COLNO.kci
+   IX_Insert  = IX_Insert ",'" || kc_ORDERING.kci || "'"
+ End
+
+DSN_VIRTUAL_INDEXES.Di = IX_Insert || ")"
+
+ Return
+
+Virtual_Indexes_Edit:
+
+TODO      = Left(" "     , 1, " ")
+
+area.0 = 4
+area.1  = white"Edit      Virtual Index  :  "
+area.2  = white" "
+area.3  = white" "
+do di = 1 to DSN_VIRTUAL_INDEXES.0
+   area.0 = area.0 + 1
+   ai     = Area.0
+   TODO   = DSN_VIRTUAL_INDEXES.Di.WattIss
+   Index  = Word(DSN_VIRTUAL_INDEXES.Di, 2)
+   area.ai = white"  "keyw"TODO"Di in1 ||TODO ||endin white index
+ End
+area.0  = area.0 + 1 ;  ai     = Area.0 ;
+area.ai = white"  "
+area.0  = area.0 + 1 ;  ai     = Area.0 ;
+area.ai = white"  "
+
+EnterBack = "Y"
+InitArea  = "Y"
+Do Forever
+   Call Anzeige_Dyn_Panel
+   InitArea  = "N"
+   If PF   = 'PF03'               THEN LEAVE
+   If PF   = 'PF04'               THEN EXIT 4
+   If RESP = "ENTER"              Then NOP
+End
+
+Do di = 1 to DSN_VIRTUAL_INDEXES.0
+    If DSN_VIRTUAL_INDEXES.Di.WattIss <> Value("todo"di"_val") Then Do
+       DSN_VIRTUAL_INDEXES.Di.WattIss =  Value("todo"di"_val")
+     End
+ End
+
+PF = ""
+
+Return
+
+Init_Vindex:
+
+TBCREATOR          =  ""
+TBNAME             =  ""
+IXCREATOR          =  ""
+IXNAME             =  ""
+ENABLE             =  "Y"
+MODE               =  "C"
+UNIQUERULE         =  "D"
+COLCOUNT           =  "1"
+CLUSTERING         =  "N"
+NLEAF              =  "-1"
+NLEVELS            =  "-1"
+INDEXTYPE          =  "2"
+PGSIZE             =  "4"
+FIRSTKEYCARDF      =  "-1"
+FULLKEYCARDF       =  "-1"
+CLUSTERRATIOF      =  "0"
+PADDED             =  "N"
+KEYTARGET_COUNT    =   0
+UNIQUE_COUNT       =   0
+IX_EXTENSION_TYPE  =  ' '
+DATAREPEATFACTORF  =  -1
+SPARSE             =  'N'
+
+TBCREATOR          = Left(TBCREATOR         ,  8, " ")
+TBNAME             = Left(TBNAME            , 25, " ")
+TBCREATOR_Val      = Left(TBCREATOR         ,  8, " ")
+TBNAME_Val         = Left(TBNAME            , 25, " ")
+IXCREATOR          = Left(IXCREATOR         ,  8, " ")
+IXNAME             = Left(IXNAME            , 25, " ")
+ENABLE             = Left(ENABLE            ,  1, "Y")
+MODE               = Left(MODE              ,  1, "C")
+UNIQUERULE         = Left(UNIQUERULE        ,  1, "D")
+COLCOUNT           = Left(COLCOUNT          ,  3, " ")
+CLUSTERING         = Left(CLUSTERING        ,  1, "N")
+NLEAF              = Right(NLEAF            , 10, " ")
+NLEVELS            = Right(NLEVELS          , 10, " ")
+INDEXTYPE          = Left(INDEXTYPE         ,  1, "2")
+PGSIZE             = Left(PGSIZE            ,  2, " ")
+FIRSTKEYCARDF      = Right(FIRSTKEYCARDF    , 10, " ")
+FULLKEYCARDF       = Right(FULLKEYCARDF     , 10, " ")
+CLUSTERRATIOF      = Right(CLUSTERRATIOF    , 10, " ")
+PADDED             = Left(PADDED            ,  1, "Y")
+KEYTARGET_COUNT    = Right(KEYTARGET_COUNT  , 10, " ")
+UNIQUE_COUNT       = Right(UNIQUE_COUNT     , 10, " ")
+IX_EXTENSION_TYPE  = Left(IX_EXTENSION_TYPE ,  1, "S")
+DATAREPEATFACTORF  = Right(DATAREPEATFACTORF, 10, " ")
+SPARSE             = Left(SPARSE            ,  1, "N")
+ColAw              = Right(" "              ,  3, " ")
+COLNAME            = Left(" "               , 30, " ")
+COLOrder           = Left("A"               ,  1, " ")
+
+Return
+
+Anzeige_Dyn_Panel_Neu:
+
+ADDRESS ISPEXEC  "VGET (ZSCREENW,ZSCREEND)"
+dyndata = ""
+Do ai = 1 to area.0
+   dyndata = dyndata || Left(area.ai, ZSCREENW, ' ')
+ end
+
+If InitArea  <> "N" THEN InitArea  = "Y"
+If EnterBack <> "Y" THEN EnterBack = "N"
+
+Call ZOSB1906 DYNDATA ,,
+              EnterBack ,,
+              InitArea
+
+Do QUEUED()
+   Parse pull Text
+   Interpret Text
+ End
+
+PF = RESULT
+
+Return
+
+Anzeige_Dyn_Panel:
+
+If InitArea <> "N" Then do
+   Zeile = 0
+   DROP ausgabe.
+   ausgabe.0 = 0
+   MaxLines = area.0
+   curline = 1                        /* set current line #     */
+   dyndata  = ""
+   ADDRESS ISPEXEC  "VGET (ZSCREENW,ZSCREEND)"
+   Do ai = 1 to area.0
+      dyndata = dyndata || Left(area.ai, ZSCREENW, ' ')
+    end
+   dyndata = dyndata || endin
+   dynarea = substr(dyndata,1+(curline-1)*ZSCREENW) /*set dyn var  */
+   dynarea = dyndata
+
+   MaxScreenLines = ZSCREEND-5
+   dyndata_len = Length(dyndata)
+   trenner = in1
+   START   = Pos(keyw, dyndata, 1)
+   If START  < 1 Then START = 1
+   DYNPOS  = START + 1
+   Do ki = 1 to keytab.0
+      Found    = Pos(keytab.ki, dyndata, START )
+      If Found > 0  Then Do
+         SELECT
+           When  DYNPOS =  START + 1   Then dynpos = Found + 1
+           When  Found  <  DYNPOS      Then dynpos = Found + 1
+           Otherwise NOP
+          END
+       End
+    End
+   znr     = 1
+ End
+
+
+NNCount = 0
+If EnterBack = "Y" Then PFTASTEN = "ENTER=GO PF03=RETURN PF04=Cancel"
+else                    PFTASTEN = "      PF03=GO    PF04=Cancel "
+
+Do Until disprc > 0
+
+  start   = 1+(curline-1)*ZSCREENW
+  dynarea = substr(dyndata, Start)
+  size = length(dynarea)                   /* Set a scalar variable  */
+  ADDRESS ISPEXEC "DISPLAY PANEL(PDYNPNL1)"
+
+  MaxScreenLines = DYNDPTH
+  DynArea_len = MaxScreenLines*ZSCREENW
+  dyndata1= Substr(dyndata, 1,  1+(curline-1)*ZSCREENW-1)
+  start   = Length(dyndata1) + Length(dynarea) + 1
+  Dyndata = Dyndata1 || dynarea || Substr(Dyndata, start)
+  Eingabe = dynarea
+  Eingabe = dyndata
+
+  disprc = rc                              /* save return code       */
+  ADDRESS ISPEXEC "VGET (ZVERB,ZSCROLLA,ZSCROLLN, ZSCROLLD) "
+  ADDRESS ISPEXEC "VGET (ZXSMAX, ZXSMIN) "
+  dynrc = rc
+  SELECT                                   /* Process scrolling      */
+    When(zverb  = 'UP')   Then Do          /* Scroll up              */
+     If zscrolla = 'MAX' Then Do           /*  if scroll was max     */
+        curline = 1                       /*    scroll to top       */
+      End
+     Else Do                               /*  else a number is known*/
+      curline = curline - MaxScreenLines        /* (max is bottom)   */
+      if curline < 1 then Curline = 1
+      End
+     End
+    When(zverb  = 'DOWN') Then Do          /* Scroll down            */
+     If zscrolla = 'MAX' Then Do           /*  if scroll was max     */
+      curline = maxlines                   /*    scroll to bottom    */
+     end
+     Else do                               /*  else a number is known*/
+      curline = curline + MaxScreenLines        /* (max is bottom)   */
+      If curline > maxlines Then Curline = maxlines
+      if DynArea_len >= dyndata_len Then Do  /* NUR EINE SEITE */
+         curline = 1
+       End
+      end
+     end
+    Otherwise;                      /* could use left & right too    */
+  End
+  if dynrc > 8 then Do
+     say "Display RC="RC
+     say "ZEDSMSG="ZEDSMSG
+     say "ZERRLM="ZERRLM
+     say "ZERRMSG="ZERRMSG
+     say "ZERRSM="ZERRSM
+     say rc object1
+   End
+
+  DO While Length(eingabe) > 0
+     Zeile = zeile + 1
+     trenner = in1
+
+     FoundL = 0
+     Do ki = 1 to keytab.0
+        Found    = Pos(keytab.ki, eingabe, 1)
+        If Found = 0 Then Iterate
+        Select
+          When FoundL = 0 Then Do
+               Trenner = keytab.KI
+               FoundL  = Found
+           End
+          When FoundL > 0 & Found < FoundL Then Do
+               Trenner = keytab.KI
+               FoundL  = Found
+           End
+          Otherwise NOP
+         End
+      End
+
+     /*    Keyword Finden   */
+     epos     = Pos(keyw, eingabe, 1)
+     xpos     = Pos(Trenner, eingabe, epos+1)
+     elen     = xpos - epos -1
+     If    elen < 0 Then Leave
+     Keyword  =  Substr(eingabe, epos+1, elen  )
+     Keyword  =  Word(Keyword, 1)
+
+     If Length(Keyword) < 1 Then Do
+        NNCount = NNCount + 1
+        KeyWord = "Col" || NNCount
+      End
+
+     /*    EINGABE Finden   */
+     epos     = Pos(Trenner, eingabe, 1)
+     if epos  < 1 then leave
+     xpos     = Pos(endin, eingabe, epos+1)
+     elen     = xpos - epos -1
+     if elen < 1 then Do
+        If Length(KeyWord) > 0 Then evalue = ""
+      End
+     Else evalue   = Substr(eingabe, epos+1, elen  )
+     eingabe  = Substr(eingabe, xpos+ 1)
+
+     Interpret Strip(Keyword) || "_VAL" "= evalue"
+   End
+   If PF = 'PF03'               THEN LEAVE
+   If PF = 'PF04'               THEN EXIT 4
+   If RESP = "ENTER" & EnterBack = "Y" Then return
+End                                        /* End of display loop    */
+
+Return
+
+CZeile_Lesen:
+
+address ispexec 'TBOPEN  'COLTAB
+address ispexec 'TBTOP   'COLTAB
+address ispexec 'TBSKIP  'COLTAB
+ai    = 0
+Do while RC = 0
+
+   ai    = ai + 1
+   Select
+    When AUSWKZ  = "CO" Then Do
+         co_anz = ai
+         parse value CZeile with co_TBCREATOR.ai          value(crlf) ,
+                                 co_TBNAME.ai             value(crlf) ,
+                                 co_Colno.ai              value(crlf) ,
+                                 co_Name.ai               value(crlf) ,
+                                 co_COLTYPE.ai            value(crlf) ,
+                                 co_LENGTH.ai             value(crlf) ,
+                                 co_SCALE.ai              value(crlf) ,
+                                 co_NULLS.ai              value(crlf) ,
+                                 co_DEFAULT.ai            value(crlf) ,
+                                 co_COMPRESS.ai           value(crlf) ,
+                                 .
+      End
+    When AUSWKZ  = "IX"  Then Do
+         ix_anz = ai
+         parse value CZeile with ix_CREATOR.ai            value(crlf) ,
+                                 ix_NAME.ai               value(crlf) ,
+                                 ix_TBCREATOR.ai          value(crlf) ,
+                                 ix_TBNAME.ai             value(crlf) ,
+                                 ix_BPOOL.ai              value(crlf) ,
+                                 ix_DBNAME.ai             value(crlf) ,
+                                 ix_INDEXSPACE.ai         value(crlf) ,
+                                 ix_HASH.ai               value(crlf) ,
+                                 ix_CLUSTERING.ai         value(crlf) ,
+                                 ix_CLUSTERED.ai          value(crlf) ,
+                                 ix_UNIQUERULE.ai         value(crlf) ,
+                                 ix_FULLKEYCARD.ai        value(crlf) ,
+                                 ix_CLOSERULE.ai          value(crlf) ,
+                                 ix_COPY.ai               value(crlf) ,
+                                 ix_PIECESIZE.ai          value(crlf) ,
+                                 ix_PADDED.ai             value(crlf) ,
+                                 ix_COMPRESS.ai           value(crlf) ,
+                                 ix_INDEXTYPE.ai          value(crlf) ,
+                                 ix_SPARSE.ai             value(crlf) ,
+                                 ix_VERSION.AI            value(crlf) ,
+                                 ix_CLUSTERRATIOF.ai      value(crlf) ,
+                                 ix_FIRSTKEYCARDF.ai      value(crlf) ,
+                                 ix_FULLKEYCARDF.ai       value(crlf) ,
+                                 ix_NLEAF.ai              value(crlf) ,
+                                 ix_NLEVELS.ai            value(crlf) ,
+                                 ix_EXTENSION_TEXT.ai     value(crlf) ,
+                                 ix_EXTENSION_TYPE.ai     value(crlf) ,
+                                 ix_KEYTARGET_COUNT.ai    value(crlf) ,
+                                 ix_UNIQUE_COUNT.ai       value(crlf) ,
+                                 ix_DATAREPEATFACTORF.ai  value(crlf) ,
+                                 .
+
+       ix_ausw.ai = " "
+       If ix_UNIQUERULE.ai   <> "D" Then ix_UNIQUERULE.ai    = "U"
+       If ix_PADDED.ai        = ""  Then ix_PADDED.ai        = "N"
+       If ix_FIRSTKEYCARDF.ai =  0  Then ix_FIRSTKEYCARDF.ai = -1
+       If ix_FULLKEYCARDF.ai  =  0  Then ix_FULLKEYCARDF.ai  = -1
+       If ix_CLUSTERRATIOF.ai =  0  Then ix_CLUSTERRATIOF.ai = -1
+       If ix_NLEAF.ai         =  0  Then ix_NLEAF.ai         = -1
+       If ix_NLEVELS.ai       =  0  Then ix_NLEVELS.ai       = -1
+       If ix_NLEVELS.ai       =  0  Then ix_NLEVELS.ai       = -1
+       If ix_KEYTARGET_COUNT.ai < 0 Then ix_NLEVELS.ai       = 0
+       If ix_UNIQUE_COUNT.ai    < 0 Then ix_NLEVELS.ai       = 0
+       If ix_INDEXTYPE.ai = "2" | ix_INDEXTYPE.ai =  "D" Then Nop
+       Else ix_INDEXTYPE.ai  = "2"
+      End
+    When AUSWKZ  = "KC"  Then Do
+         kc_anz = ai
+         parse value CZeile with kc_IXNAME.ai             value(crlf) ,
+                                 kc_IXCREATOR.ai          value(crlf) ,
+                                 kc_COLNAME.ai            value(crlf) ,
+                                 kc_COLNO.ai              value(crlf) ,
+                                 kc_COLSEQ.ai             value(crlf) ,
+                                 kc_ORDERING.ai           value(crlf) ,
+                                 .
+      End
+    Otherwise leave
+    End
+
+   address ispexec 'TBSKIP  'COLTAB
+ End
+
+Return
+
+
+Edit_Stmt:
+
+DSNAME = ZOSB1900("ZOSB1","DSNAME", "STMT", LNR)
+LRECL   = RECLEN
+
+IF LISTDSI(DSNAME) = 0 THEN do
+    ADDRESS "TSO" "ALLOC F(SELDD) DA("DSNAME") SHR"
+ end
+else do
+    ADDRESS "TSO" "ALLOC F(SELDD) DA("DSNAME") NEW CATALOG ,
+          SPACE("TRACKS","TRACKS") TRACKS REUSE,
+          LRECL("RECLEN") UNIT(SYSDA)"
+ end
+
+
+ADDRESS "TSO" "EXECIO * DISKW SELDD ( STEM SL. FINIS"
+ADDRESS "TSO" "FREE FI(SELDD)"
+
+ok   = ZOSB1911(SSID,     ,
+                LOCATION,  ,
+                EINGABE,   ,
+                OBJ,       ,
+                DSNAME,    ,
+                LNR   )
+
+return
+
+Get_Stmt:
+
+DSNAME = ZOSB1900("ZOSB1","DSNAME", "STMT", LNR)
+LRECL   = RECLEN
+
+IF LISTDSI(DSNAME) = 0 THEN do
+    ADDRESS "TSO" "ALLOC F(SELDD) DA("DSNAME") SHR"
+ end
+else do
+    ADDRESS "TSO" "ALLOC F(SELDD) DA("DSNAME") NEW CATALOG ,
+          SPACE("TRACKS","TRACKS") TRACKS REUSE,
+          LRECL("RECLEN") UNIT(SYSDA)"
+ end
+
+
+DROP IN1.
+IN1.0 = 0
+ADDRESS "TSO" "EXECIO * DISKR SELDD ( STEM IN1. FINIS"
+ADDRESS "TSO" "FREE FI(SELDD)"
+
+
+
+DROP IN.
+IN.0 = 0
+DO INI = 1 TO IN1.0
+
+   IN1.INI = STRIP(IN1.INI)
+   IF SUBSTR(IN1.INI, 1, 3)  = '-- ' THEN ITERATE
+   NureinTeil = 0
+   if NureinTeil = 0 Then NurEinTeil = wordpos(' -- ', IN1.INI, 1)
+   IF NurEinTeil > 0 Then do
+      if NurEinTeil > 1 Then NurEinTeil = NurEinTeil -1
+      IN1.INI = Subword(IN1.INI, 1, NurEinTeil)
+    end
+   If Strip(IN1.INI) = "" Then Iterate
+   IN.0 = IN.0 + 1
+   INX  = IN.0
+   IN.INX = IN1.INI
+ END
+/* EINZELNE A1_STMTS AUFBEREITEN      */
+DROP A1_STMT.
+A1_STMT.0    = 0
+A1_STMT.0    = 1
+A1_STMT.1    = ""
+DROP STMTOUT.
+STMTOUT.0 = 1
+STMTOUT.1.U1STMT.0 = 0
+DO I = 1 TO IN.0
+   If Substr(Strip(IN.i), 1, 2) = "--" Then do
+      Select
+        When Substr(Strip(IN.i), 1, 10)  = "--SQLTERM="    Then do
+             parse value IN.i with w1 "=" SQLTERM .
+             SQLTERM = STRIP(SQLTERM)
+             ITERATE
+         End
+
+        When Substr(Strip(IN.i), 1, 14)  = "--SPROCPARSER=" Then do
+             parse value IN.i with w1 "=" SPROCPARSER .
+             SPROCPARSER = STRIP(SPROCPARSER)
+             ITERATE
+         End
+
+        When Word(IN.i, 1)  = "--#SET" ,
+           & Word(IN.i, 2)  = "TERMINATOR" Then Do
+             parse value IN.i with w1 w2 SQLTERM .
+             SQLTERM = STRIP(SQLTERM)
+             ITERATE
+          End
+
+        When Substr(Strip(IN.i), 1, 2)  = "--"              Then do
+             ITERATE
+         End
+
+        otherwise NOP
+       End
+    End
+   SI = A1_STMT.0
+   A1_STMT.SI = STRIP(A1_STMT.SI) || " " || STRIP(IN.i)
+   STMTOUT.SI.U1STMT.0 = STMTOUT.SI.U1STMT.0 + 1
+   STMTI = STMTOUT.SI.U1STMT.0
+   STMTOUT.SI.U1STMT.STMTI = STRIP(IN.i)
+   TEST = REVERSE(SPACE(IN.I, 0))
+   select
+     When substr(test, 1, 2) = END_SQL_TERM then do
+          A1_STMT.0    = A1_STMT.0 - 1
+          STMTOUT.0    = A1_STMT.0
+          LEAVE
+      END
+     When substr(test, 1, 1) = SQLTERM | I = In.0 Then do
+          test = reverse(strip(A1_STMT.si))
+          if substr(test, 1, 1) = SQLTERM Then do
+             A1_STMT.si = reverse(substr(test, 2))
+           End
+          A1_STMT.si = Strip(A1_STMT.si)
+          A1_STMT.0    = A1_STMT.0 + 1
+          STMTOUT.0    = A1_STMT.0
+          SI           = A1_STMT.0
+          A1_STMT.SI = ""
+          STMTOUT.Si.U1STMT.0 = 0
+      END
+     OTHERWISE NOP
+    END
+ END
+
+RETURN 0
+
+
+Lesen_daten:
+
+
+Tablespace = ""
+DBNAME     = ""
+STGROUP    = ""
+
+LOC  = LOCATION
+FK   = AUSWKZ
+OB   = object
+OB2  = Object2
+OB3  = Object3
+OB4  = Object4
+OB5  = Object5
+TS   = Tablespace
+DB   = DBNAME
+SG   = STGROUP
+LOBJ = ListObject
+
+DDLTEXT = ""
+DDLTEXT = DDLTEXT ZOSB1AC3(SSID,   ,           /* SSID    */
+                           EDIT_SQL,,          /* Edit SQL */
+                           LOC,    ,           /* LOCATION */
+                           LNR,    ,           /* TABLENR */
+                           TABNR,  ,           /* TABLENR */
+                           FK,     ,           /* FUKTION */
+                           OB,     ,           /* OBJECT  */
+                           OB2,    ,           /* TABLE   */
+                           OB3,    ,           /* TABLE   */
+                           OB4,    ,           /* TABLE   */
+                           OB5,    ,           /* TABLE   */
+                           TS,     ,           /* TABLESPACE */
+                           DB,     ,           /* DATABASE   */
+                           SG,     ,           /* STORAGEGROUP */
+                           LOBJ,   ,           /* List Object*/
+                           ISPFILE)            /* ISPFILE    */
+
+DDLTEXT = STRIP(DDLTEXT)
+Select
+  when FK  =  "SQLIM" Then do
+       sqlcode = word(ddltext, 1)
+       parse value ddltext with "SQLERRMC=" SQLERRMC
+   End
+  Otherwise do
+     IF LENGTH(DDLTEXT) = 0 THEN DO
+        X        = MSG('ON')
+        ZEDSMSG = ""
+        ZEDLMSG = " -KEIN TREFFER ZUR AUSWAHL- "
+        ADDRESS ISPEXEC "SETMSG MSG(ISRZ001)"
+        X        = MSG('OFF')
+        RETURN 8
+      End
+
+     DO FOREVER
+        PARSE VALUE DDLTEXT WITH LZEILE  '-NR' REST
+        IF SUBSTR(LZEILE, 1, 4) = "*UZ*" THEN DO
+           UZeile = substr(LZeile, 5)
+         end
+        IF REST = '' THEN LEAVE
+        DDLTEXT = REST
+      END
+
+  End
+ End
+
+return
+
+SORTASC:
+tausch = ''
+do i1 = 1 to SORTTab.0-1
+   do i2 = i1+1 to SORTTab.0
+      if SORTTab.I1 > SORTTab.I2 Then do
+         tausch = SORTTab.I1
+         SORTTab.i1 = SORTTab.I2
+         SORTTab.i2 = tausch
+       end
+    end
+ end
+return
+
+Anzeigen_daten:
+
+DDLTEXT = ARG(1)
+
+DROP LISTE.
+LISTE.0 = 0
+DROP SL.
+SL.0    = 0
+DO FOREVER
+   LISTE.0 = LISTE.0 + 1
+   IND = LISTE.0
+   PARSE VALUE DDLTEXT WITH LISTE.IND '-NR' REST
+   IF REST = '' THEN LEAVE
+   DDLTEXT = REST
+ END
+
+sqlterm = ";"
+
+DO IND = 1 TO LISTE.0
+   IF STRIP(LISTE.IND) = '' THEN ITERATE
+   DDLTEXT = LISTE.IND
+   DO FOREVER
+      PARSE VALUE DDLTEXT WITH ZEILE  '-NL' REST
+      DDLTEXT = REST
+      if length(zeile) = 0 Then Zeile = "   "
+      sl.0 = sl.0 + 1
+      sli = sl.0
+      sl.sli = ZEILE
+      If substr(Strip(sl.sli), 1, 10) = "--SQLTERM=" Then do
+         Parse value(sl.sli) with test "=" sqlterm .
+         sqlterm = Strip(Sqlterm)
+       end
+      IF REST = '' THEN do
+         If Strip(sl.sli) <> ""  ,
+          & substr(Strip(sl.sli), 1, 10) <> "--SQLTERM=" Then do
+            sl.sli = sl.sli"   " || sqlterm
+          End
+         leave
+       end
+    END
+ END
+
+max_blanks = 6
+blank_such = LEFT(' ',max_blanks,' ')
+
+Do i = 1 to SL.0
+   blz = 0
+   drop azline
+   azline = ""
+   sl.i = Strip( sl.i, 'T', ' ' )
+   if sl.i = "" Then SL.i = " "
+   IF POS(blank_such, sl.i) < 1 THEN Iterate
+   Do bli = 1 to length(sl.i)
+      if substr(sl.i, bli, 1) = " " Then Do
+         Blz = Blz + 1
+       End
+      Else Do
+         Blz = 0
+       End
+      if blz > max_blanks Then Iterate
+      azline = azline || substr(sl.i, bli, 1)
+    End
+   sl.i = azline
+ End
+
+DDLTEXT = ""
+DROP DDLTEXT
+
+return 0
+
+NextSl:
+ If sl.0 = 0 Then do
+    SL.0 = 3
+    SL.1 = "--SQLTERM=;"
+    SL.2 = "--SPROCPARSER=,"
+    SL.3 = " "
+    If Length(CURSQLID) > 0 Then Do
+       SL.0 = 5
+       SL.4 = "SET CURRENT SQLID = '"Strip(CURSQLID, 'T')"'  ;"
+       SL.5 = " "
+     End
+  End
+
+ sl.0   = sl.0 + 1
+ sli    = sl.0
+ sl.sli = Arg(1)
+return 0
+
+
+ZOSB1916:
+
+
+If ENV = "TSO" Then do
+   SSID       = ARG(1)   /* SSID               */
+   location   = ARG(2)   /* Location (Connect) */
+   CurrSqlid  = ARG(3)   /* Current SQLID      */
+   ExplSchema = ARG(4)   /* Current SQLID      */
+   CurrSchema = ARG(5)   /* Current Schema     */
+   QueryNum   = ARG(6)   /* Query Number       */
+   EXP_QUERY  = ARG(7)   /* SQL TEXT           */
+   If Length(EXP_QUERY) < 0 then Do
+      ZEDLMSG = "SQL TEXT IS EMPTY "
+      ADDRESS ISPEXEC "SETMSG MSG(ISRZ001)"
+      EXIT 12
+    End
+   rc = 0
+ End
+
+CALL HostVar
+CALL EXPLAIN_STMT_QUERY
+
+return
+
+EXPLAIN_STMT_QUERY:
+
+EXP_QUERY    = STRIP(EXP_QUERY)
+LPOS         = LENGTH(EXP_QUERY)
+IF SUBSTR(EXP_QUERY, LPOS, 1) = ';' THEN DO
+   LPOS = LPOS - 1
+   EXP_QUERY = SUBSTR(EXP_QUERY, 1, LPOS)
+ END
+
+If Datatype(QueryNum) <> "NUM" Then QueryNum = 99999
+If Length(Strip(CurrSqlid)) > 0 Then do
+   SQLSTMT      = "SET CURRENT SQLID='"Strip(CurrSqlid, 'T')"'"
+   Call EXECUTE_IMMEDIATE_930
+ End
+
+If Length(Strip(CurrSchema)) > 0 Then do
+   SQLSTMT      = "SET CURRENT SCHEMA='"Strip(CurrSchema, 'T')"'"
+   Call EXECUTE_IMMEDIATE_930
+ End
+
+SQLSTMT  = "DELETE FROM "CurrSqlid".PLAN_TABLE " ,
+           "WHERE QUERYNO = "QueryNum
+Call EXECUTE_IMMEDIATE_930
+SQLSTMT  = "DELETE FROM "CurrSqlid".DSN_COLDIST_TABLE " ,
+           "WHERE QUERYNO = "QueryNum
+Call EXECUTE_IMMEDIATE_930
+SQLSTMT  = "DELETE FROM "CurrSqlid".DSN_DETCOST_TABLE " ,
+           "WHERE QUERYNO = "QueryNum
+Call EXECUTE_IMMEDIATE_930
+SQLSTMT  = "DELETE FROM "CurrSqlid".DSN_FILTER_TABLE " ,
+           "WHERE QUERYNO = "QueryNum
+Call EXECUTE_IMMEDIATE_930
+SQLSTMT  = "DELETE FROM "CurrSqlid".DSN_FUNCTION_TABLE " ,
+           "WHERE QUERYNO = "QueryNum
+Call EXECUTE_IMMEDIATE_930
+SQLSTMT  = "DELETE FROM "CurrSqlid".DSN_KEYTGTDIST_TABLE " ,
+           "WHERE QUERYNO = "QueryNum
+Call EXECUTE_IMMEDIATE_930
+SQLSTMT  = "DELETE FROM "CurrSqlid".DSN_PGRANGE_TABLE " ,
+           "WHERE QUERYNO = "QueryNum
+Call EXECUTE_IMMEDIATE_930
+SQLSTMT  = "DELETE FROM "CurrSqlid".DSN_PGROUP_TABLE " ,
+           "WHERE QUERYNO = "QueryNum
+Call EXECUTE_IMMEDIATE_930
+SQLSTMT  = "DELETE FROM "CurrSqlid".DSN_PREDICAT_TABLE " ,
+           "WHERE QUERYNO = "QueryNum
+Call EXECUTE_IMMEDIATE_930
+SQLSTMT  = "DELETE FROM "CurrSqlid".DSN_PREDICATE_SELECTIVITY",
+           "WHERE QUERYNO = "QueryNum
+Call EXECUTE_IMMEDIATE_930
+SQLSTMT  = "DELETE FROM "CurrSqlid".DSN_PTASK_TABLE " ,
+           "WHERE QUERYNO = "QueryNum
+Call EXECUTE_IMMEDIATE_930
+SQLSTMT  = "DELETE FROM "CurrSqlid".DSN_QUERY_TABLE " ,
+           "WHERE QUERYNO = "QueryNum
+Call EXECUTE_IMMEDIATE_930
+SQLSTMT  = "DELETE FROM "CurrSqlid".DSN_SORTKEY_TABLE " ,
+           "WHERE QUERYNO = "QueryNum
+Call EXECUTE_IMMEDIATE_930
+SQLSTMT  = "DELETE FROM "CurrSqlid".DSN_SORT_TABLE " ,
+           "WHERE QUERYNO = "QueryNum
+Call EXECUTE_IMMEDIATE_930
+SQLSTMT  = "DELETE FROM "CurrSqlid".DSN_STATEMNT_TABLE " ,
+           "WHERE QUERYNO = "QueryNum
+Call EXECUTE_IMMEDIATE_930
+SQLSTMT  = "DELETE FROM "CurrSqlid".DSN_STRUCT_TABLE " ,
+           "WHERE QUERYNO = "QueryNum
+Call EXECUTE_IMMEDIATE_930
+SQLSTMT  = "DELETE FROM "CurrSqlid".DSN_USERQUERY_TABLE " ,
+           "WHERE QUERYNO = "QueryNum
+Call EXECUTE_IMMEDIATE_930
+SQLSTMT  = "DELETE FROM "CurrSqlid".DSN_VIEWREF_TABLE " ,
+           "WHERE QUERYNO = "QueryNum
+Call EXECUTE_IMMEDIATE_930
+SQLSTMT  = "DELETE FROM "CurrSqlid".DSN_STAT_FEEDBACK " ,
+           "WHERE QUERYNO = "QueryNum
+Call EXECUTE_IMMEDIATE_930
+SQLSTMT  = "DELETE FROM "CurrSqlid".DSN_QUERYINFO_TABLE " ,
+           "WHERE QUERYNO = "QueryNum
+Call EXECUTE_IMMEDIATE_930
+
+SQLSTMT      = "COMMIT "
+Call EXECUTE_IMMEDIATE_930
+
+SQLSTMT      = "EXPLAIN ALL SET QUERYNO="QueryNum" FOR " EXP_QUERY
+Call EXECUTE_IMMEDIATE_930
+
+
+EINGABE.0    = 1
+EINGABE.1 = "SELECT * FROM "CurrSqlid".PLAN_TABLE ",
+            "WHERE QUERYNO = "QueryNum ,
+            "ORDER BY PLANNO     ",
+            ""
+
+OBJECT = EINGABE.1
+AUSWKZ = "SQLEX"
+call Lesen_daten
+
+
+MAXLEN  = 0
+/* ERMITTELN MAX LAENGE DER COLUMNS   */
+Do j = 1 to Words(ddltext)
+   IF LENGTH(Word(ddltext, J)) > MAXLEN THEN
+      MAXLEN = LENGTH(Word(ddltext, J))
+ END
+
+ADDRESS ISPEXEC  'TBOPEN  'SELTAB
+ADDRESS ISPEXEC  'TBTOP   'SELTAB
+ADDRESS ISPEXEC  'TBSKIP  'SELTAB
+
+Anzahl      = 0
+OK = NextSl( COPIES('- START -', 8)  )
+do while rc = 0
+   Anzahl  = Anzahl + 1
+   IF Anzahl  > 1 THEN DO
+      OK = NextSl( ' ' )
+      OK = NextSl( COPIES('- NEXT  -', 8)   )
+    END /* END IF Anzahl > 1 */
+
+   Do coli = 1 to Words(ddltext)
+      COLNAME  = Word(DDLTEXT, coli)
+      COLTEXT  = value("COL"coli)
+      DROP EXTAB.
+      EXTAB.0 = 0
+      OK = EXPLAIN_TEXT(COLNAME, COLTEXT)  /* BESCHREIBUNG */
+      OK = NextSl( SUBSTR(COLNAME, 1, MAXLEN) '=' COLTEXT)
+      DO EXI = 1 TO EXTAB.0 /* WENN BESCHREIBUNG VORHANDEN */
+         OK = NextSl( '--'SUBSTR(' ', 1, MAXLEN) EXTAB.EXI )
+       END  /* END EXI = 1  */
+    End
+
+   Address ISPEXEC "TBSKIP" SELTAB
+end
+
+address ispexec "TBCLOSE" SELTAB
+
+
+OK = NextSl( COPIES('- END   -', 8) )
+OK = NextSl( " "  )
+
+TAB_READ.0  = 20
+TAB_READ.1  = ""
+TAB_READ.2  = "DSN_STATEMNT_TABLE     QUERYNO "
+TAB_READ.3  = "DSN_COLDIST_TABLE      QUERYNO "
+TAB_READ.4  = "DSN_DETCOST_TABLE      QUERYNO, QBLOCKNO, PLANNO "
+TAB_READ.5  = "DSN_FILTER_TABLE       QUERYNO, QBLOCKNO, PLANNO "
+TAB_READ.6  = "DSN_FUNCTION_TABLE     QUERYNO, QBLOCKNO "
+TAB_READ.7  = "DSN_KEYTGTDIST_TABLE   QUERYNO "
+TAB_READ.8  = "DSN_PGRANGE_TABLE      QUERYNO, QBLOCKNO "
+TAB_READ.9  = "DSN_PGROUP_TABLE       QUERYNO, QBLOCKNO "
+TAB_READ.10 = "DSN_PREDICAT_TABLE     QUERYNO, QBLOCKNO, PREDNO "
+TAB_READ.11 = "DSN_PREDICATE_SELECTIVITY QUERYNO, QBLOCKNO, SECTNOI "
+TAB_READ.12 = "DSN_PTASK_TABLE        QUERYNO, QBLOCKNO, PGDNO   "
+TAB_READ.13 = "DSN_QUERYINFO_TABLE    QUERYNO, QBLOCKNO "
+TAB_READ.14 = "DSN_QUERY_TABLE        QUERYNO, TYPE, QUERY_STAGE, " ,
+              "EXPLAIN_TIME, SEQNO "
+TAB_READ.15 = "DSN_SORTKEY_TABLE      QUERYNO, QBLOCKNO "
+TAB_READ.16 = "DSN_SORT_TABLE         QUERYNO, QBLOCKNO, PLANNO "
+TAB_READ.17 = "DSN_STRUCT_TABLE       QUERYNO, QBLOCKNO "
+TAB_READ.18 = "DSN_USERQUERY_TABLE    QUERYNO "
+TAB_READ.19 = "DSN_VIEWREF_TABLE      QUERYNO "
+TAB_READ.20 = "DSN_STAT_FEEDBACK      QUERYNO "
+
+Do tabi = 1 to TAB_READ.0
+   If TAB_READ.tabi = "" Then Iterate
+   DROP EINGABE.
+   DROP AUSGABE.
+   RXDB2_PUTSTEM  = 'AUSGABE.'
+   RXDB2_GETSTEM  = 'EINGABE.'
+   Table          = Word(TAB_READ.tabi, 1)
+   Order          = SubWord(TAB_READ.tabi, 2)
+   EINGABE.0 = 1
+   EINGABE.1 = "SELECT * FROM "CurrSqlid"."Table ,
+               "WHERE QUERYNO = "QueryNum ,
+               "ORDER BY "Order      ,
+               ""
+
+   ddltext = ""
+   OBJECT = EINGABE.1
+   AUSWKZ = "SQLEX"
+   call Lesen_daten
+   Call Read_More_Info
+
+ End
+
+ RETURN
+
+Read_More_Info:
+
+ADDRESS ISPEXEC  'TBOPEN  'SELTAB
+ADDRESS ISPEXEC  'TBTOP   'SELTAB
+ADDRESS ISPEXEC  'TBSKIP  'SELTAB
+If RC <> 0 Then Return
+
+OK = NextSl( COPIES('- START -'TAB_READ.tabi'- START -', 1) )
+Anzahl      = 0
+DO While RC = 0
+   Anzahl  = Anzahl + 1
+   IF Anzahl  > 1 THEN DO
+      OK = NextSl( ' ' )
+      OK = NextSl( COPIES('- NEXT  -', 8)   )
+    END /* END IF Anzahl > 1 */
+
+   Do coli = 1 to Words(ddltext)
+      COLNAME  = Word(DDLTEXT, coli)
+      COLTEXT  = value("COL"coli)
+      OK = NextSl( SUBSTR(COLNAME, 1, MAXLEN) '=' COLTEXT)
+    End
+   Address ISPEXEC "TBSKIP" SELTAB
+end  /* end while rc = 0 */
+
+address ispexec "TBCLOSE" SELTAB
+
+OK = NextSl( COPIES('- END -'TAB_READ.tabi'- END -', 1) )
+OK = NextSl( " " )
+
+Return
+
+
+Read_More_Info_old:
+OK = NextSl( COPIES('- START -'TAB_READ.tabi'- START -', 1) )
+DO I=1 TO AUSGABE.0
+   IF I > 1 THEN DO
+      OK = NextSl( '-----' )
+      OK = NextSl( COPIES('- NEXT  -', 8) )
+    END /* END IF I > 1 */
+   DO J=1 TO OUTSQLDA.SQLD
+      FNAME = STRIP(OUTSQLDA.J.SQLNAME)
+      INTERPRET "B="AUSGABE.I"."FNAME
+      COLNAME = OUTSQLDA.J.SQLNAME
+      COLNAME = STRIP(TRANSLATE(COLNAME))
+      COLTEXT = STRIP(TRANSLATE(B))
+      OK = NextSl( SUBSTR(COLNAME, 1, MAXLEN) '=' STRIP(B) )
+    END   /* END DO J=1 TO OUTSQLDA.SQLD   */
+ END   /* END DO I=1 TO AUSGABE.0  */
+OK = NextSl( COPIES('- END -'TAB_READ.tabi'- END  -', 1) )
+OK = NextSl( " " )
+
+Return
+
+HostVar:
+  DO I = 1 TO HVLIST.0
+     SHV = WORD(HVLIST.I, 1)
+     CHV = STRIP(SUBWORD(HVLIST.I, 2))
+     DO FOREVER
+        POS = POS(SHV, EXP_QUERY, 1)
+        NPOS = POS + LENGTH(SHV)
+        POS = POS - 1
+        IF POS < 1 THEN LEAVE
+        TEMP = SUBSTR(EXP_QUERY, 1, POS) ,
+               || CHV ,
+               || SUBSTR(EXP_QUERY, NPOS)
+        EXP_QUERY = TEMP
+      END
+   END
+
+  EXP_QUERY    =  ERSETZEN_STRING(EXP_QUERY, ': H', ':H')
+  EXP_QUERY    =  ERSETZEN_STRING(EXP_QUERY, ':H:H', '?')
+  EXP_QUERY    =  ERSETZEN_STRING(EXP_QUERY, ':H', '?')
+
+INPOS   = POS(" INTO ", EXP_QUERY, 1)
+FROMPOS = POS(" FROM ", EXP_QUERY, 1)
+
+If INPOS > 0 & FROMPOS > 0 Then do
+   EXP_QUERY = Substr(EXP_QUERY, 1, Inpos-1) || ,
+               Substr(EXP_QUERY, Frompos)
+ End
+
+RETURN
+
+
+EXECUTE_IMMEDIATE_930:
+    SQLSTMT = STRIP(SQLSTMT)
+
+    If SUBROUTINE    = 'Y' Then do
+       do SI = 1 to STMTOUT.I.STMT.0
+          ou.0 = ou.0 + 1 ; oui = ou.0;
+          ou.oui = "-- "STMTOUT.I.STMT.SI
+        End
+     End
+    AUSWKZ = "SQLIM"
+    object = SQLSTMT
+    call Lesen_daten
+
+
+    If SUBROUTINE    = 'Y' Then do
+       ou.0 = ou.0 + 1 ; oui = ou.0;
+       ou.oui = "-- SQLCODE = "SQLCODE SQLERRMC
+     End
+
+RETURN MaxRC
+
+Load_DSNREXX_930:
+ADDRESS TSO "SUBCOM DSNREXX"
+IF RC THEN   S_RC = RXSUBCOM('ADD','DSNREXX','DSNREXX')
+
+ADDRESS DSNREXX "CONNECT "DB2_SSID
+IF SQLCODE <  0 THEN SAY "CONNECT     SQLCODE="SQLCODE "<"DB2_SSID">"
+
+Return
+
+UNLoad_DSNREXX_930:
+ADDRESS TSO "SUBCOM DSNREXX"
+If RC = 0 Then do
+   ADDRESS DSNREXX "DISCONNECT"
+   S_RC = RXSUBCOM('DELETE','DSNREXX','DSNREXX')
+ End
+
+Return
+
+EXPLAIN_TEXT: PROCEDURE EXPOSE EXTAB.
+
+COLNAME = ARG(1)
+COLTEXT = ARG(2)
+
+EXTAB. = ''
+EXTAB.0 = 0
+
+ SELECT
+   WHEN COLNAME = 'METHOD'              THEN DO
+            SELECT
+               WHEN COLTEXT = '0' THEN DO
+                  EXTAB.0 = 2
+                  EXTAB.1 = 'FIRST TABLE ACCESSED, CONTINUATION OF'
+                  EXTAB.2 = 'PREVIOUS TABLE ACCESSED, OR NOT USED'
+                  END
+               WHEN COLTEXT = '1' THEN DO
+                  EXTAB.0 = 3
+                  EXTAB.1 = 'NESTED LOOP JOIN. FOR EACH ROW OF THE'
+                  EXTAB.2 = 'PRESENT COMPOSITE TABLE, MATCHING ROWS'
+                  EXTAB.3 = 'OF A NEW TABLE ARE FOUND AND JOINED.'
+                  END
+               WHEN COLTEXT = '2' THEN DO
+                  EXTAB.0 = 4
+                  EXTAB.1 = 'MERGE SCAN JOIN. THE PRESENT COMPOSITE'
+                  EXTAB.2 = 'TABLE AND THE NEW TABLE ARE SCANNED IN'
+                  EXTAB.3 = 'THE ORDER OF THE JOIN COLUMNS,'
+                  EXTAB.4 = 'AND MATCHING  ROWS ARE JOINED.'
+                  END
+               WHEN COLTEXT = '3' THEN DO
+                  EXTAB.0 = 4
+                  EXTAB.1 = 'SORTS NEEDED BY ORDER BY, GROUP BY, SELECT'
+                  EXTAB.2 = 'DISTINCT, UNION, A QUANTIFIED PREDICATE, OR'
+                  EXTAB.3 = 'THIS STEP DOES NOT ACCESS AN IN PREDICATE.'
+                  EXTAB.4 = 'A NEW TABLE.'
+                  END
+
+               WHEN COLTEXT = '3' THEN DO
+                  EXTAB.0 = 4
+                  EXTAB.1 = 'HYBRID JOIN. THE CURRENT COMPOSITE TABLE IS'
+                  EXTAB.2 = 'SCANNED IN THE ORDER OF THE JOINCOLUMN'
+                  EXTAB.3 = 'ROWS OF THE NEW TABLE. THE NEW TABLE IS'
+                  EXTAB.4 = 'ACCESSED USING LIST PREFETCH.'
+                  END
+               OTHERWISE EXTAB.0 = 0
+             END
+    END
+   WHEN COLNAME = 'ACCESSTYPE'          THEN DO
+            SELECT
+               WHEN COLTEXT = 'I' THEN DO
+                  EXTAB.0 = 2
+                  EXTAB.1 = 'BY AN INDEX (IDENTIFIED IN ACCESSCREATOR'
+                  EXTAB.2 = 'AND ACCESSNAME)'
+                  END
+               WHEN COLTEXT = 'I1' THEN DO
+                  EXTAB.0 = 1
+                  EXTAB.1 = 'BY A ONEFETCH INDEX SCAN'
+                  END
+               WHEN COLTEXT = 'N' THEN DO
+                  EXTAB.0 = 2
+                  EXTAB.1 = 'BY AN INDEX SCAN WHEN MATCHING PREDICATE'
+                  EXTAB.2 = 'CONTAINS IN KEYWORD'
+                  END
+               WHEN COLTEXT = 'R' THEN DO
+                  EXTAB.0 = 1
+                  EXTAB.1 = 'BY A TABLE SPACE SCAN'
+                  END
+               WHEN COLTEXT = 'M' THEN DO
+                  EXTAB.0 = 2
+                  EXTAB.1 = 'BY A MULTIPLE INDEX SCAN; FOLLOWED BY MX,'
+                  EXTAB.2 = 'MI, OR MU'
+                  END
+               WHEN COLTEXT = 'MX' THEN DO
+                  EXTAB.0 = 2
+                  EXTAB.1 = 'BY AN INDEX SCAN ON THE INDEX NAMED IN'
+                  EXTAB.1 = 'ACCESSNAME'
+                  END
+               WHEN COLTEXT = 'MI' THEN DO
+                  EXTAB.0 = 1
+                  EXTAB.1 = 'BY AN INTERSECTION OF MULTIPLE INDEXES'
+                  END
+               WHEN COLTEXT = 'MU' THEN DO
+                  EXTAB.0 = 2
+                  EXTMU.1 = 'BY A UNION OF MULTIPLE INDEXES  '
+                  END
+               OTHERWISE DO
+                  EXTAB.0 = 1
+                  EXTMU.1 = 'NOT APPLICABLE TO THE CURRENT ROW.     '
+                  END
+             END
+    END
+   WHEN COLNAME = 'TSLOCKMODE'          THEN DO
+            EXTAB.0 = 1
+            SELECT
+               WHEN COLTEXT = 'IS' THEN DO
+                    EXTAB.1 = 'INTENT SHARE LOCK  '
+                END
+               WHEN COLTEXT = 'IX' THEN DO
+                    EXTAB.1 =I'TENT EXCLUSIVE LOCK '
+                END
+               WHEN COLTEXT = 'S' THEN DO
+                    EXTAB.1 = 'SHARE LOCK'
+                END
+               WHEN COLTEXT = 'U'  THEN DO
+                    EXTAB.1 = 'UPDATE LOCK'
+                END
+               WHEN COLTEXT = 'X'  THEN DO
+                    EXTAB.1 = 'EXCLUSIVE LOCK'
+                END
+               WHEN COLTEXT = 'SIX' THEN DO
+                    EXTAB.1 = 'SHARE WITH INTENT EXCLUSIVE LOCK'
+                END
+               WHEN COLTEXT = 'N'  THEN DO
+                    EXTAB.1 = ' UR ISOLATION; NO LOCK'
+                END
+               WHEN COLTEXT = 'NS' THEN DO
+                    EXTAB.0 = 2
+                    EXTAB.1 = 'FOR UR ISOLATION, NO LOCK; FOR CS, RS, OR'
+                    EXTAB.2 = 'RR, AN S LOCK.'
+                END
+               WHEN COLTEXT = 'NIS' THEN DO
+                    EXTAB.0 = 2
+                    EXTAB.1 = 'FOR UR ISOLATION, NO LOCK; FOR CS, RS, OR'
+                    EXTAB.2 = 'RR, AN IS LOCK.'
+                    END
+               WHEN COLTEXT = 'NSS' THEN DO
+                    EXTAB.0 = 2
+                    EXTAB.1 = 'FOR UR ISOLATION, NO LOCK; FOR CS OR RS,'
+                    EXTAB.2 = 'AN IS LOCK; FOR RR, AN S LOCK.'
+                    END
+               WHEN COLTEXT = 'SS' THEN DO
+                    EXTAB.0 = 2
+                    EXTAB.1 = 'FOR UR, CS, OR RS ISOLATION, AN IS LOCK;'
+                    EXTAB.2 = 'FOR RR, AN S LOCK.            '
+                    END
+               OTHERWISE EXTAB.0 = 0
+             END
+    END
+   WHEN COLNAME = 'PARALLELISM_MODE'    THEN DO
+                    EXTAB.0 = 1
+           SELECT
+               WHEN COLTEXT = 'I'  THEN DO
+                    EXTAB.1 = 'QUERY I/O PARALLELISM      '
+                    END
+               WHEN COLTEXT = 'C'  THEN DO
+                    EXTAB.1 = 'QUERY CP PARALLELISM      '
+                    END
+               WHEN COLTEXT = 'X'  THEN DO
+                    EXTAB.1 = 'SYSPLEX QUERY PARALLELISM  '
+                    END
+               OTHERWISE EXTAB.0 = 0
+             END
+    END
+   WHEN COLNAME = 'JOIN_TYPE'           THEN DO
+           EXTAB.0 = 1
+           SELECT
+               WHEN COLTEXT = 'F'  THEN DO
+                    EXTAB.1 = 'FULL OUTER JOIN '
+                    END
+               WHEN COLTEXT = 'L'  THEN DO
+                    EXTAB.1 = 'LEFT OUTER JOIN '
+                    END
+               OTHERWISE DO
+                    EXTAB.1 = 'INNER JOIN OR NO JOIN '
+                    END
+             END
+    END
+   WHEN COLNAME = 'QBLOCK_TYPE'         THEN DO
+           EXTAB.0 = 1
+           SELECT
+               WHEN COLTEXT = 'SELECT'          THEN DO
+                    EXTAB.1 = COLTEXT
+                    END
+               WHEN COLTEXT = 'INSERT'          THEN DO
+                    EXTAB.1 = COLTEXT
+                    END
+               WHEN COLTEXT = 'UPDATE'          THEN DO
+                    EXTAB.1 = COLTEXT
+                    END
+               WHEN COLTEXT = 'DELETE'          THEN DO
+                    EXTAB.1 = COLTEXT
+                    END
+               WHEN COLTEXT = 'SELUPD'          THEN DO
+                    EXTAB.1 = 'SELECT WITH FOR UPDATE OF      '
+                    END
+               WHEN COLTEXT = 'DELCUR'          THEN DO
+                    EXTAB.1 = 'DELETE WHERE CURRENT OF CURSOR '
+                    END
+               WHEN COLTEXT = 'UPDCUR'          THEN DO
+                    EXTAB.1 = 'UPDATE WHERE CURRENT OF CURSOR '
+                    END
+               WHEN COLTEXT = 'CORSUB'          THEN DO
+                    EXTAB.1 = 'CORRELATED SUBQUERY            '
+                    END
+               WHEN COLTEXT = 'NCOSUB'          THEN DO
+                    EXTAB.1 = 'NONCORRELATED SUBQUERY         '
+                    END
+               OTHERWISE DO
+                    EXTAB.0 = 0
+                    END
+             END
+    END
+   OTHERWISE DO
+       EXPTAB.0 = 0
+    END
+  END
+ RETURN 0
+
+ERSETZEN_STRING: PROCEDURE
+
+BEFEHL = ARG(1)
+VON    = ARG(2)
+NACH   = ARG(3)
+X = POS(VON, BEFEHL, 1)
+IF X = 0 THEN X = 1
+DO Z = X TO LENGTH(BEFEHL)
+   X = POS(VON, BEFEHL, Z)
+   IF X = 0 THEN LEAVE
+   ELSE Z = X + 1
+
+   VONLEN = LENGTH(VON)
+   BEFEHL  = DELSTR(BEFEHL, X, VONLEN)
+   K = X - 1
+   BEFEHL  = INSERT(NACH, BEFEHL, K)
+END   /* END DO SCHLEIFE  */
+
+ RETURN BEFEHL
+
+SET_RC:
+   IF ARG(1) > MAXRC THEN Do
+      MAXRC = ARG(1)
+      IF ispf_env = 'ISPF' THEN DO
+         ZISPFRC = ARG(1)
+         ADDRESS ISPEXEC "VPUT (ZISPFRC) SHARED"
+       END
+    END
+Return MaxRC
+
+error: failure: syntax: novalue:
+If DSNRECON_SAVE = "Y" Then Do
+   DSNRECON  = 'Y'
+   ADDRESS ISPEXEC 'VPUT (DSNRECON) PROFILE'
+ End
+return

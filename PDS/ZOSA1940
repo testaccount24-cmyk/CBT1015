@@ -1,0 +1,1021 @@
+/* REXX */
+/*******************************************************************/
+/*                                                                 */
+/* ProgramNAME      : ZOSB1940                                     */
+/* AUSRUF           : Procedure  x=ZOSB1940(ssid,loc,ausw,obj)     */
+/* AUTHER           : ULRICH BRAEUER                               */
+/* FUNKTION         : AG : Build DSN1COPY                          */
+/* NOCH EINBAUEN    : BLOB UND XML WENN VORHANDEN                  */
+/*                                                                 */
+/*******************************************************************/
+
+SIGNAL ON SYNTAX          /* TURN ON SYNTAX TRAP */
+SIGNAL ON HALT            /* TRAP THIS ONLY ON LUW */
+SIGNAL OFF FAILURE
+SIGNAL OFF ERROR
+
+PARSE SOURCE SRC.1  , /* ENVIRONMENT  (TSO)            */
+             SRC.2  , /* AUFRUF ALS (COMMAND)          */
+             SRC.3  , /* Program NAME (LUW97000)       */
+             SRC.4  , /* SYS00186 (TEMP FILE)          */
+             SRC.5  , /* AUFRUF AUS LIB (X.X.CLISTUDB) */
+             SRC.6  , /* ?                             */
+             SRC.7  , /* TSO                           */
+             SRC.8  , /* ISPF                          */
+             SRC.9  , /* ?                             */
+
+/* PROCLIB = Strip(sysdsname) */
+
+ENV        = "TSO"
+X          = MSG('OFF')
+USER       = USERID()
+SYSCATS    = "SYSCAT"
+SYSIBMS    = "SYSIBM"
+SYSIBMA    = "SYSIBMADM"
+SYSPROCA   = "SYSPROC"
+RECLEN     = 4096
+TRACKS     = 60
+DSNRECON   = "N"
+SYSUID  = ""
+SYSPWD  = ""
+MAXROWS = 0
+ADDRESS ISPEXEC 'VGET (DSNRECON) PROFILE'
+ADDRESS ISPEXEC 'VGET (TRACKS) PROFILE'
+ADDRESS ISPEXEC 'VGET (RECLEN) PROFILE'
+ADDRESS ISPEXEC 'VGET (SYSIBMS) PROFILE'
+ADDRESS ISPEXEC 'VGET (SYSCATS) PROFILE'
+ADDRESS ISPEXEC 'VGET (SYSIBMA) PROFILE'
+ADDRESS ISPEXEC 'VGET (SYSPROCA) PROFILE'
+ADDRESS ISPEXEC 'VGET (CURSCHEM) PROFILE'
+ADDRESS ISPEXEC 'VGET (SYSUID)   PROFILE'
+ADDRESS ISPEXEC 'VGET (SYSPWD)   PROFILE'
+ADDRESS ISPEXEC 'VGET (MAXROWS)  PROFILE'
+if CURSCHEM = '' Then CURSCHEM = USERID()
+
+ssid        = arg(1)
+location    = arg(2)
+auswkz      = arg(3)
+lnr         = arg(4)
+tabnr       = arg(5)
+ISPFILE     = arg(6)
+Do_All      = arg(7)
+eingabe     = arg(8)
+eingabe2    = arg(9)
+statement   = arg(10)
+object1     = arg(11)
+object2     = arg(12)
+object3     = arg(13)
+object4     = arg(14)
+object5     = arg(15)
+EDIT        = arg(16)
+Object_list = arg(17)
+DB2Vers     = arg(18)
+proclib     = arg(19)
+
+obj         = ""
+tablespace  = ""
+DB2_SSID    = SSID
+DB2_LOC     = location
+
+parse value DB2Vers with DBENV 4 DBVers 6 DBRel 8 DBMod
+parse value Object1 with DB2_CREATOR1 '.' DB2_NAME1
+parse value Object2 with DB2_CREATOR2 '.' DB2_NAME2
+parse value Object3 with DB2_CREATOR3 '.' DB2_NAME3
+parse value Object4 with DB2_CREATOR4 '.' DB2_NAME4
+parse value Object5 with DB2_CREATOR5 '.' DB2_NAME5
+
+SELTAB         = "SELTB"tabnr
+MAXFetch       = ""
+If MAXROWS > 0 then do
+   MAXFetch = "FETCH FIRST "MAXROWS" ROWS ONLY"
+ End
+
+CURSQLID  = ""
+ADDRESS ISPEXEC 'VGET (CURSQLID) PROFILE'
+ADDRESS ISPEXEC 'VGET ('STRIP(SSID)'SQID) PROFILE'
+
+SSID_CURRENT_SQLID = value(STRIP(SSID)"SQID")
+If length(SSID_CURRENT_SQLID) > 0 then do
+   CURSQLID = SSID_CURRENT_SQLID
+ End
+IF CURSQLID   = "NONE" THEN CURSQLID = ""
+IF CURSQLID   = ""     THEN CURSQLID = ""
+
+eingabe3 = subword(eingabe2, 2)
+eingabe2 = Word(eingabe2, 1)
+if Substr(eingabe2, 1, 4) = "UTIL" Then eingabe2 = "UTIL"
+
+crlf           = "0a0d"x
+
+red   = '01'x                              /* Assign colors to       */
+blue  = '02'x                              /*   Attribute bytes      */
+green = '03'x                              /*   found in the data    */
+white = '04'x
+in1   = '05'x
+in2   = '06'x
+in3   = '07'x
+uid   = '08'x
+pwd   = '09'x
+endin = '3a'x
+keyw  = '3b'x
+keytab.0 = 5
+keytab.1 = in1
+keytab.2 = in2
+keytab.3 = in3
+keytab.4 = uid
+keytab.5 = pwd
+maxlines = 0                               /* set max number of lines*/
+dyndata  = ''                              /* initialize data        */
+cmddata  = ''                              /* initialize data        */
+curline = 1                                /* set current line       */
+
+Call Get_CFG_FILE
+
+RLIB = 'N'
+select
+   when eingabe   = "DSN1COPY" Then do
+        CALL JOB_DSN1COPY
+        EDIT   = 'NO'
+    End
+  Otherwise do
+       anzcols = 0
+   End
+ End
+
+if anzcols = 0 THEN RETURN 12
+if EDIT = "YES" THEN Call Edit_Stmt  /* Anzeige Erwuenscht */
+
+
+Return Stmt
+
+JOB_DSN1COPY:
+DB      = DB2_CREATOR1
+TS      = DB2_NAME1
+FDSN    = object2
+FDB     = DB2_CREATOR2
+FTS     = DB2_NAME2
+FDSN    = object3
+If DB   = "OBJECT1" Then DB  = ""
+If FDB  = "OBJECT2" Then FDB = ""
+
+ART         = "IC"
+FLOC        = Left(ssid, 8, " ")
+FDB         = Left(DB,   8, " ")
+FTS         = Left(TS,   8, " ")
+FPART       = Left(" ",  4, " ")
+
+TLOC        = Left(" ",  8, " ")
+TDB         = Left(" ",  8, " ")
+TTS         = Left(" ",  8, " ")
+TPART       = Left(" ",  4, " ")
+
+EnterBack = "Y"
+DO FOREVER
+   area.0 = 14
+   area.1  = white"DSN1COPY                                     "
+   area.2  = white"                                             "
+   area.3  = white" ART   "keyw"ART "in1 || ART || endin "  ",
+             "VS=VSAM/IC=Imagecopy"
+   area.4  = white" "
+   area.5  = white" FROM  "keyw"F_LOCATION   "in1|| FLOC || endin
+   area.6  = white"       "keyw"F_Database   "in1|| FDB  || endin
+   area.7  = white"       "keyw"F_Tablespace "in1|| FTS  || endin
+   area.8  = white"       "keyw"F_PATTITION  "in1|| FPART|| endin
+   area.9  = white" "
+   area.10 = white" TO    "keyw"T_LOCATION   "in1|| TLOC || endin
+   area.11 = white"       "keyw"T_Database   "in1|| TDB  || endin
+   area.12 = white"       "keyw"T_Tablespace "in1|| TTS  || endin
+   area.13 = white"       "keyw"T_PATTITION  "in1|| TPART|| endin
+   area.14 = white" "
+
+   Call Anzeige_Dyn_Panel
+   COMMAND = ZCMD
+
+   ART    = ART_Val
+   FLOC   = F_LOCATION_Val
+   FDB    = F_Database_Val
+   FTS    = F_Tablespace_Val
+   FPART  = F_PATTITION_Val
+
+   TLOC   = T_LOCATION_Val
+   TDB    = T_DATABASE_Val
+   TTS    = T_TABLESPACE_Val
+   TPART  = T_PATTITION_Val
+
+   MEM     = "DSN1CPY1"
+   SKEL    = "SK1COPY1"
+
+   /* PF Tasten Pruefen  */
+   Select
+      When SUBSTR(COMMAND,1,3) = "CAN"  THEN Return
+      When PF                  = 'PF03' THEN Return
+      When PF                  = 'PF04' THEN Return
+      Otherwise NOP
+     End
+
+   if FLOC <> "" & FDB <> "" & FTS <> "" ,
+    & TLOC <> "" & TDB <> "" & TTS <> "" Then Do
+      Select
+         When ART = "VS" Then Do
+              SKEL    = "SK1COPY1"
+              Call VSAM_2_VSAM
+              SSID     = DB2_SSID
+              LOCATION = DB2_LOC
+          END
+         When ART = "IC" Then Do
+              SKEL    = "SK1COPY2"
+              call IC_2_VSAM
+              SSID     = DB2_SSID
+              LOCATION = DB2_LOC
+          END
+         Otherwise NOP
+       END
+    End
+ End
+
+return
+
+VSAM_2_VSAM:
+
+SQLSTMT = "SELECT T1.DBNAME                           ",
+          "   ,   T1.NAME AS TSNAME                   ",
+          "   ,   T1.PARTITIONS                       ",
+          "   ,   T1.DBID AS DBID                     ",
+          "   ,   T1.PSID AS TSID                     ",
+          "   ,   T2.OBID AS TBID                     ",
+          "   ,   HEX(T1.DBID) AS HEX_DBID            ",
+          "   ,   HEX(T1.PSID) AS HEX_TSID            ",
+          "   ,   HEX(T2.OBID) AS HEX_TBID            ",
+          "   ,   T1.TYPE                             ",
+          "FROM "SYSIBMS".SYSTABLESPACE     T1        ",
+          "INNER JOIN "SYSIBMS".SYSTABLES   T2        ",
+          "ON    T1.DBNAME  = T2.DBNAME               ",
+          "AND   T1.NAME    = T2.TSNAME               ",
+          "AND   T2.TYPE IN('T', 'C', 'G', 'X', 'P', 'H', 'R' )",
+          ""
+AUSWKZ = "SQLEX"
+
+WHERELIST = ""
+CALL MAKE_WHERELIST "T1.DBNAME", Strip(FDB, "T")
+CALL MAKE_WHERELIST "T1.NAME", Strip(FTS, "T" )
+object = sqlstmt WHERELIST "ORDER BY T1.DBNAME, T1.NAME "
+If SSID     <> FLOC Then do
+   LOCATION = FLOC
+ End
+
+call Lesen_daten_940
+LOCATION = DB2_LOC
+
+ADDRESS ISPEXEC  'TBOPEN  'SELTAB
+ADDRESS ISPEXEC  'TBTOP   'SELTAB
+ADDRESS ISPEXEC  'TBSKIP  'SELTAB
+do while rc = 0
+   DB      = COL1
+   TS      = COL2
+   TSPART  = COL3
+   FDBID   = COL4
+   FTSID   = COL5
+   FTBID   = COL6
+   ADDRESS ISPEXEC  'TBSKIP  'SELTAB
+ End
+ADDRESS ISPEXEC  'TBCLOSE 'SELTAB
+ADDRESS ISPEXEC  'TBERASE 'SELTAB
+
+WHERELIST = ""
+CALL MAKE_WHERELIST "T1.DBNAME", Strip(TDB, "T")
+CALL MAKE_WHERELIST "T1.NAME", Strip(TTS, "T" )
+object = sqlstmt WHERELIST "ORDER BY T1.DBNAME, T1.NAME "
+If SSID     <> TLOC Then do
+   LOCATION = TLOC
+ End
+
+call Lesen_daten_940
+LOCATION = DB2_LOC
+
+ADDRESS ISPEXEC  'TBOPEN  'SELTAB
+ADDRESS ISPEXEC  'TBTOP   'SELTAB
+ADDRESS ISPEXEC  'TBSKIP  'SELTAB
+do while rc = 0
+   DB      = COL1
+   TS      = COL2
+   TSPART  = COL3
+   TDBID   = COL4
+   TTSID   = COL5
+   TTBID   = COL6
+   TLOB  = ""
+   IF COL10   = 'O' THEN TLOB = ",LOB"
+
+   ADDRESS ISPEXEC  'TBSKIP  'SELTAB
+ End
+ADDRESS ISPEXEC  'TBCLOSE 'SELTAB
+ADDRESS ISPEXEC  'TBERASE 'SELTAB
+
+Call Utility_Execute
+
+
+ Return
+
+IC_2_VSAM:
+
+SQLSTMT = "SELECT T1.DBNAME                           ",
+          "   ,   T1.NAME AS TSNAME                   ",
+          "   ,   T1.PARTITIONS                       ",
+          "   ,   T1.DBID AS DBID                     ",
+          "   ,   T1.PSID AS TSID                     ",
+          "   ,   T2.OBID AS TBID                     ",
+          "   ,   T1.TYPE                             ",
+          "FROM "SYSIBMS".SYSTABLESPACE     T1        ",
+          "INNER JOIN "SYSIBMS".SYSTABLES   T2        ",
+          "ON    T1.DBNAME  = T2.DBNAME               ",
+          "AND   T1.NAME    = T2.TSNAME               ",
+          "AND   T2.TYPE IN('T', 'C', 'G', 'X', 'P', 'H', 'R' )",
+          ""
+AUSWKZ = "SQLEX"
+
+WHERELIST = ""
+CALL MAKE_WHERELIST "T1.DBNAME", Strip(FDB, "T")
+CALL MAKE_WHERELIST "T1.NAME", Strip(FTS, "T" )
+object = sqlstmt WHERELIST "ORDER BY T1.DBNAME, T1.NAME "
+
+If SSID     <> FLOC Then do
+   LOCATION = FLOC
+ End
+
+call Lesen_daten_940
+LOCATION = DB2_LOC
+
+ADDRESS ISPEXEC  'TBOPEN  'SELTAB
+ADDRESS ISPEXEC  'TBTOP   'SELTAB
+ADDRESS ISPEXEC  'TBSKIP  'SELTAB
+do while rc = 0
+   DB      = COL1
+   TS      = COL2
+   FSPART  = COL3
+   FDBID   = COL4
+   FTSID   = COL5
+   FTBID   = COL6
+   FLOB  = ""
+
+   ADDRESS ISPEXEC  'TBSKIP  'SELTAB
+ End
+ADDRESS ISPEXEC  'TBCLOSE 'SELTAB
+ADDRESS ISPEXEC  'TBERASE 'SELTAB
+
+WHERELIST = ""
+CALL MAKE_WHERELIST "T1.DBNAME", Strip(TDB, "T")
+CALL MAKE_WHERELIST "T1.NAME", Strip(TTS, "T" )
+object = sqlstmt WHERELIST "ORDER BY T1.DBNAME, T1.NAME "
+
+
+If SSID     <> TLOC Then do
+   LOCATION = TLOC
+ End
+
+call Lesen_daten_940
+LOCATION = DB2_LOC
+
+ADDRESS ISPEXEC  'TBOPEN  'SELTAB
+ADDRESS ISPEXEC  'TBTOP   'SELTAB
+ADDRESS ISPEXEC  'TBSKIP  'SELTAB
+do while rc = 0
+   DB      = COL1
+   TS      = COL2
+   TSPART  = COL3
+   TDBID   = COL4
+   TTSID   = COL5
+   TTBID   = COL6
+   TLOB  = ""
+   IF COL7    = 'O' THEN TLOB = ",LOB"
+
+   ADDRESS ISPEXEC  'TBSKIP  'SELTAB
+ End
+ADDRESS ISPEXEC  'TBCLOSE 'SELTAB
+ADDRESS ISPEXEC  'TBERASE 'SELTAB
+
+
+SQLSTMT = "SELECT T1.DBNAME                           ",
+          "   ,   T1.TSNAME                           ",
+          "   ,   T1.DSNUM                            ",
+          "   ,   T1.ICTYPE                           ",
+          "   ,   T1.DSNAME                           ",
+          "   ,   T1.LOWDSNUM                         ",
+          "   ,   T1.HIGHDSNUM                        ",
+          "   ,   T1.LOGICAL_PART                     ",
+          "   ,   T1.TIMESTAMP                        ",
+          "   ,   HEX(T1.START_RBA)                   ",
+          "   ,   HEX(T1.PIT_RBA)                     ",
+          "   ,   STYPE                               ",
+          "FROM "SYSIBMS".SYSCOPY           T1        ",
+          ""
+WHERELIST = ""
+CALL MAKE_WHERELIST "T1.DBNAME", Strip(FDB, "T")
+CALL MAKE_WHERELIST "T1.TSNAME", Strip(FTS, "T")
+CALL MAKE_WHERELIST "", "T1.ICTYPE IN ('F', 'I') "
+
+object = sqlstmt WHERELIST ,
+         "ORDER BY T1.DBNAME, T1.TSNAME, T1.TIMESTAMP DESC" ,
+         MAXFetch
+
+If SSID     <> FLOC Then do
+   LOCATION = FLOC
+ End
+
+call Lesen_daten_940
+LOCATION = DB2_LOC
+
+Call Anzeige_IC
+
+TDSN = Get_VSAM_CLUSTER(TDB, TTS, TPART)
+
+ADDRESS ISPEXEC 'TBERASE 'SELTAB
+ADDRESS ISPEXEC 'TBCREATE 'SELTAB  ,
+                'KEYS(LNR) NAMES(DSN)'
+DSNLIST = SELTAB
+ADDRESS ISPEXEC 'TBOPEN 'SELTAB
+
+If DSNTAB.0 > 0 Then Do /* Auswahl wurde getroffen, SKEL ANZEIGEN */
+   DB    = Strip(TDB)
+   TS    = Strip(TTS)
+   PART  = Strip(TPART)
+   TSSID = Strip(TLOC)
+   SSID  = Strip(TLOC)
+   Call Get_CFG_FILE
+   SSID  = DB2_SSID
+
+   Do dsi = 1 to dsntab.0
+      LNR = DSI
+      DSN = dsntab.dsi;
+      DSN    = DSNTAB.DSNAME.DSNI
+      ICTYPE = DSNTAB.ICT.DSNI
+      STYPE  = DSNTAB.STY.DSNI
+      IF ICTYPE = 'F'  THEN CPTYPE = "FULLCOPY"
+      IF ICTYPE = 'I'  THEN CPTYPE = "INCRCOPY"
+      IF STYPE  = 'R'  THEN CPTYPE = SPACE(CPTYPE "," "INLCOPY", 0)
+      IF STYPE  = 'S'  THEN CPTYPE = SPACE(CPTYPE "," "INLCOPY", 0)
+      IF STYPE  = 'W'  THEN CPTYPE = SPACE(CPTYPE "," "INLCOPY", 0)
+      IF STYPE  = 'X'  THEN CPTYPE = SPACE(CPTYPE "," "INLCOPY", 0)
+      ADDRESS ISPEXEC 'TBADD   'SELTAB
+    End
+
+
+   Call Utility_Execute
+   SSID  = DB2_SSID
+   Call Get_CFG_FILE
+ End
+ADDRESS ISPEXEC 'TBCLOSE 'SELTAB
+ADDRESS ISPEXEC 'TBERASE 'SELTAB
+
+Return
+
+Anzeige_IC:
+
+TABNR          = tabnr + 1
+LUWTABLE       = "LUWTB"tabnr
+TABNR          = tabnr - 1
+ROWNR          = 0
+LCMD           = ' '
+LZEILE         = ''
+
+ADDRESS ISPEXEC  'TBCLOSE 'LUWTABLE
+ADDRESS ISPEXEC  'TBERASE 'LUWTABLE
+ADDRESS ISPEXEC  'TBOPEN  'LUWTABLE
+IF RC <> 0 THEN Do
+   ADDRESS ISPEXEC 'TBCREATE 'LUWTABLE  ,
+                   'KEYS(ROWNR) NAMES(LCMD, LZEILE)'
+   If rc <> 0 Then DO
+      say 'TBCREATE 'LUWTABLE "RC="RC
+      say "ZEDSMSG="ZEDSMSG
+      say "ZERRLM="ZERRLM
+      say "ZERRMSG="ZERRMSG
+      say "ZERRSM="ZERRSM
+    End
+ End
+ADDRESS ISPEXEC  'TBCLOSE 'LUWTABLE
+ADDRESS ISPEXEC  'TBOPEN  'LUWTABLE
+
+ADDRESS ISPEXEC  'TBOPEN  'SELTAB
+ADDRESS ISPEXEC  'TBTOP   'SELTAB
+ADDRESS ISPEXEC  'TBSKIP  'SELTAB
+UZEILE = " T"  ,
+         "DSN                                         ",
+         " L"  ,
+         " H"  ,
+         " PA"  ,
+         "TIMESTAMP         " ,
+         " S"
+do while rc = 0
+   rownr = rownr + 1
+   LZEILE = ""  ,
+            COL4  ,
+            COL5  ,
+            right(COL6, 2, ' ')  ,
+            right(COL7, 2, ' ')  ,
+            right(COL8, 3, ' ')  ,
+            Substr(COL9, 1, 19)  ,
+            Substr(COL12, 1, 1)  ,
+            ""
+   ADDRESS ISPEXEC 'TBADD   'LUWTABLE
+   ADDRESS ISPEXEC 'TBSKIP  'SELTAB
+ End
+ADDRESS ISPEXEC  'TBCLOSE 'SELTAB
+ADDRESS ISPEXEC  'TBCLOSE 'LUWTABLE
+
+CURSOR = 'CURSOR( )'
+CSRROW = 'CSRROW(1)'
+RETCODE = RC
+MESSAGE = 'MSG( )'
+ZTDSELS = 0
+ZTDTOP = 0
+LAUFNR = 1
+LOBJ   = ""
+
+Drop DSNTAB.
+DSNTAB.0 = 0
+
+DO FOREVER
+   address ispexec  'TBOPEN 'LUWTABLE
+   CURSOR = 'CURSOR(LZeile)'
+   CSRROW = 'CSRROW(1)'
+   address ISPEXEC 'TBTOP  'LUWTABLE
+   address ISPEXEC 'TBSKIP 'LUWTABLE' NUMBER('ZTDTOP')'
+   address ispexec 'TBDISPL 'LUWTABLE' PANEL(PLUWOBJA)',
+                   MESSAGE CURSOR 'CSRROW('LAUFNR')' ,
+                   'AUTOSEL(NO) POSITION(CRP)'
+
+   If rc > 4 then do
+      Say "*** Error on Display RC="rc
+      Say " ZERRSM =" ZERRSM
+      Say " ZERRLM =" ZERRLM
+      address ispexec 'TBCLOSE 'LUWTABLE
+      address ispexec 'TBERASE 'LUWTABLE
+      retuen
+    End
+
+   COMMAND = ZCMD
+
+   ADDRESS ISPEXEC "VGET (ZVERB,ZSCROLLA,ZSCROLLN, ZSCROLLD) "
+   ADDRESS ISPEXEC "VGET (ZXSMAX, ZXSMIN) "
+   ADDRESS ISPEXEC "VGET (ZSCREENW,ZSCREEND,ZSCREENC)"
+   Cur_Scroll = ZSCREENC // ZSCREENW
+   Cur_Zeile  = ZSCREENC % ZSCREENW
+   If Cur_Zeile < 4 Then Cur_Scroll = 0
+
+   /* PF Tasten Pruefen  */
+   InitArea  = "N"
+   COMMAND = ZCMD
+
+
+   /* PF Tasten Pruefen  */
+   Select
+      When SUBSTR(COMMAND,1,3) = "CAN"  THEN Do
+           address ispexec 'TBCLOSE 'LUWTABLE
+           address ispexec 'TBERASE 'LUWTABLE
+           Leave
+       End
+      When PF                  = 'PF03' THEN Do
+           address ispexec 'TBCLOSE 'LUWTABLE
+           address ispexec 'TBERASE 'LUWTABLE
+           Leave
+       End
+      When PF                  = 'PF04' THEN Do
+           address ispexec 'TBCLOSE 'LUWTABLE
+           address ispexec 'TBERASE 'LUWTABLE
+           Leave
+       End
+      Otherwise NOP
+     End
+
+    DO while ZTDSELS > 0
+       address ispexec 'TBGET   'LUWTABLE
+       DSNTAB.0 = DSNTAB.0 + 1; dsni = DSNTAB.0;
+       DSNTAB.dsname.dsni = Word(LZeile, 2)
+       DSNTAB.ICT.dsni    = Word(LZeile, 1)
+       DSNTAB.STY.dsni    = Word(LZeile, 7)
+       ADDRESS ISPEXEC 'TBSKIP 'LUWTABLE 'POSITION(ROWNO)'
+       if ZTDSELS = 1 then leave
+       address ispexec 'TBDISPL 'LUWTABLE
+     end /* DO cnt = 1....   */
+
+   address ispexec  'TBCLOSE 'LUWTABLE
+   If DSNTAB.0 > 0 Then Leave
+ End
+PF = ""
+InitArea  = "Y"
+
+return
+
+/*                          EXPOSE WHERELIST */
+/*
+Get_VSAM_CLUSTER: PROCEDURE EXPOSE SSID ,
+                                   FLOC ,
+                                   SYSIBMS,
+                                   SELTAB
+*/
+
+Get_VSAM_CLUSTER:
+DB2_CREATOR1 = ARG(1)
+DB2_NAME1    = ARG(2)
+
+AUSWKZ       = "SQLEX"
+
+WHERELIST    = ""
+CALL MAKE_WHERELIST "TP.DBNAME", DB2_CREATOR1
+CALL MAKE_WHERELIST "TP.TSNAME", DB2_NAME1
+
+SQLSTMT    = "SELECT  TP.PARTITION                            " ,
+             "      , TP.DBNAME                               " ,
+             "      , TP.TSNAME                               " ,
+             "     ,  CHAR(RTRIM(TP.VCATNAME)                        ",
+             "     CONCAT '.'                                        ",
+             "     CONCAT 'DSNDBC'                                   ",
+             "     CONCAT '.'                                        ",
+             "     CONCAT RTRIM(TS.DBNAME)                           ",
+             "     CONCAT '.'                                        ",
+             "     CONCAT RTRIM(TS.NAME)                             ",
+             "     CONCAT '.'                                        ",
+             "     CONCAT RTRIM(TP.IPREFIX)                          ",
+             "     CONCAT CHAR(SUBSTR(DIGITS(TS.INSTANCE), 2,4), 4)  ",
+             "     CONCAT '.'                                        ",
+             "     CONCAT 'A'                                        ",
+             "     CONCAT CASE WHEN TP.PARTITION = 0 THEN '001'      ",
+             "                 ELSE                                  ",
+             "      CHAR(SUBSTR(DIGITS(INT(TP.PARTITION)), 8, 3), 3) ",
+             "                END                                    ",
+             "      , 44) AS VSAMDS                                  ",
+             "      , COMPRESS                                " ,
+             "      , INT(TP.CARDF)  AS CARDF                 " ,
+             "      , INT(TP.SPACEF) AS SPACEF                " ,
+             "      , STORNAME                                " ,
+             "      , VCATNAME                                " ,
+             "      , CASE WHEN    PQTY < 0 THEN    PQTY      " ,
+             "             ELSE    PQTY * 4 END AS PQTY       " ,
+             "      , CASE WHEN    SQTY < 0 THEN    SQTY      " ,
+             "             ELSE    SQTY * 4 END AS SQTY       " ,
+             "      , IPREFIX                                 " ,
+             "      , TP.AVGROWLEN                            " ,
+             "      , TP.FORMAT                               " ,
+             "      , LIMITKEY                                " ,
+             "      , ST.SPACE / 1024 AS SPACE_MB             " ,
+             "FROM  "SYSIBMS".SYSTABLEPART TP " ,
+             "INNER JOIN "SYSIBMS".SYSTABLESPACE TS ",
+             " ON   TS.DBNAME   = TP.DBNAME     ",
+             " AND  TS.NAME     = TP.TSNAME     ",
+             "INNER JOIN "SYSIBMS".SYSTABLESPACESTATS ST" ,
+             " ON   TP.DBNAME    = ST.DBNAME     ",
+             " AND  TP.TSNAME    = ST.NAME       ",
+             " AND  TP.PARTITION = ST.PARTITION  ",
+             WHERELIST ,
+             "ORDER BY TP.DBNAME, TP.TSNAME, TP.PARTITION" ,
+             ""
+object = sqlstmt
+
+If SSID     <> TLOC Then do
+   LOCATION = TLOC
+ End
+
+ADDRESS ISPEXEC 'TBERASE 'SELTAB
+ADDRESS ISPEXEC 'TBCREATE 'SELTAB  ,
+                'KEYS(LNR) NAMES(DSN)'
+
+call Lesen_daten_940
+LOCATION = DB2_LOC
+
+ADDRESS ISPEXEC 'TBOPEN  'SELTAB
+ADDRESS ISPEXEC 'TBSKIP  'SELTAB
+TDSN = COL4
+ADDRESS ISPEXEC 'TBCLOSE 'SELTAB
+ADDRESS ISPEXEC 'TBERASE 'SELTAB
+
+Return TDSN
+
+Anzeige_Dyn_Panel:
+
+If InitArea <> "N" Then do
+   Zeile = 0
+   DROP ausgabe.
+   ausgabe.0 = 0
+   MaxLines = area.0
+   curline = 1                        /* set current line #     */
+   dyndata  = ""
+   ADDRESS ISPEXEC  "VGET (ZSCREENW,ZSCREEND)"
+   Do ai = 1 to area.0
+      dyndata = dyndata || Left(area.ai, ZSCREENW, ' ')
+    end
+   dyndata = dyndata || endin
+   dynarea = substr(dyndata,1+(curline-1)*ZSCREENW) /*set dyn var  */
+   dynarea = dyndata
+
+   MaxScreenLines = ZSCREEND-5
+   dyndata_len = Length(dyndata)
+   trenner = in1
+   START   = Pos(keyw, dyndata, 1)
+   If START  < 1 Then START = 1
+   DYNPOS  = START + 1
+   Do ki = 1 to keytab.0
+      Found    = Pos(keytab.ki, dyndata, START )
+      If Found > 0  Then Do
+         SELECT
+           When  DYNPOS =  START + 1   Then dynpos = Found + 1
+           When  Found  <  DYNPOS      Then dynpos = Found + 1
+           Otherwise NOP
+          END
+       End
+    End
+   znr     = 1
+ End
+
+
+NNCount = 0
+If EnterBack = "Y" Then PFTASTEN = "ENTER=GO PF03=RETURN PF04=Cancel"
+else                    PFTASTEN = "      PF03=GO    PF04=Cancel "
+
+Do Until disprc > 0
+
+  start   = 1+(curline-1)*ZSCREENW
+  dynarea = substr(dyndata, Start)
+  size = length(dynarea)                   /* Set a scalar variable  */
+  ADDRESS ISPEXEC "DISPLAY PANEL(PDYNPNL1)"
+  if RC    > 8 then Do
+     say "Display RC="RC
+     say "ZEDSMSG="ZEDSMSG
+     say "ZERRLM="ZERRLM
+     say "ZERRMSG="ZERRMSG
+     say "ZERRSM="ZERRSM
+     Exit 100
+   End
+
+  MaxScreenLines = DYNDPTH
+  DynArea_len = MaxScreenLines*ZSCREENW
+  dyndata1= Substr(dyndata, 1,  1+(curline-1)*ZSCREENW-1)
+  start   = Length(dyndata1) + Length(dynarea) + 1
+  Dyndata = Dyndata1 || dynarea || Substr(Dyndata, start)
+  Eingabe = dynarea
+  Eingabe = dyndata
+
+  disprc = rc                              /* save return code       */
+  ADDRESS ISPEXEC "VGET (ZVERB,ZSCROLLA,ZSCROLLN, ZSCROLLD) "
+  ADDRESS ISPEXEC "VGET (ZXSMAX, ZXSMIN) "
+  dynrc = rc
+  SELECT                                   /* Process scrolling      */
+    When(zverb  = 'UP')   Then Do          /* Scroll up              */
+     If zscrolla = 'MAX' Then Do           /*  if scroll was max     */
+        curline = 1                        /*    scroll to top       */
+      End
+     Else Do                               /*  else a number is known*/
+      curline = curline - MaxScreenLines   /* (max is bottom)   */
+      if curline < 1 then Curline = 1
+      End
+     End
+    When(zverb  = 'DOWN') Then Do          /* Scroll down            */
+     If zscrolla = 'MAX' Then Do           /*  if scroll was max     */
+      curline = maxlines                   /*    scroll to bottom    */
+     end
+     Else do                               /*  else a number is known*/
+      curline = curline + MaxScreenLines        /* (max is bottom)   */
+      If curline > maxlines Then Curline = maxlines
+      if DynArea_len >= dyndata_len Then Do  /* NUR EINE SEITE */
+         curline = 1
+       End
+      end
+     end
+    Otherwise;                      /* could use left & right too    */
+  End
+  if dynrc > 8 then Do
+     say "Display RC="RC
+     say "ZEDSMSG="ZEDSMSG
+     say "ZERRLM="ZERRLM
+     say "ZERRMSG="ZERRMSG
+     say "ZERRSM="ZERRSM
+     say rc object1
+   End
+
+  DO While Length(eingabe) > 0
+     Zeile = zeile + 1
+     trenner = in1
+
+     FoundL = 0
+     Do ki = 1 to keytab.0
+        Found    = Pos(keytab.ki, eingabe, 1)
+        If Found = 0 Then Iterate
+        Select
+          When FoundL = 0 Then Do
+               Trenner = keytab.KI
+               FoundL  = Found
+           End
+          When FoundL > 0 & Found < FoundL Then Do
+               Trenner = keytab.KI
+               FoundL  = Found
+           End
+          Otherwise NOP
+         End
+      End
+
+     /*    Keyword Finden   */
+     epos     = Pos(keyw, eingabe, 1)
+     xpos     = Pos(Trenner, eingabe, epos+1)
+     elen     = xpos - epos -1
+     If    elen < 0 Then Leave
+     Keyword  =  Substr(eingabe, epos+1, elen  )
+     Keyword  =  Word(Keyword, 1)
+
+     If Length(Keyword) < 1 Then Do
+        NNCount = NNCount + 1
+        KeyWord = "Col" || NNCount
+      End
+
+     /*    EINGABE Finden   */
+     epos     = Pos(Trenner, eingabe, 1)
+     if epos  < 1 then leave
+     xpos     = Pos(endin, eingabe, epos+1)
+     elen     = xpos - epos -1
+     if elen < 1 then Do
+        If Length(KeyWord) > 0 Then evalue = ""
+      End
+     Else evalue   = Substr(eingabe, epos+1, elen  )
+     eingabe  = Substr(eingabe, xpos+ 1)
+
+     Interpret Strip(Keyword) || "_VAL" "= evalue"
+   End
+   If PF = 'PF03'               THEN LEAVE
+   If PF = 'PF04'               THEN EXIT 4
+   If RESP = "ENTER" & EnterBack = "Y" Then return
+End                                        /* End of display loop    */
+
+Return
+
+Edit_Stmt:
+
+DSNAME = ZOSB1900("ZOSB1","DSNAME", "STMT", LNR)
+LRECL   = RECLEN
+
+IF LISTDSI(DSNAME) = 0 THEN do
+    ADDRESS "TSO" "ALLOC F(SELDD) DA("DSNAME") SHR"
+ end
+else do
+    ADDRESS "TSO" "ALLOC F(SELDD) DA("DSNAME") NEW CATALOG ,
+          SPACE("TRACKS","TRACKS") TRACKS REUSE,
+          LRECL("RECLEN") UNIT(SYSDA)"
+ end
+
+
+ADDRESS "TSO" "EXECIO * DISKW SELDD ( STEM SL. FINIS"
+ADDRESS "TSO" "FREE FI(SELDD)"
+
+ok   = ZOSB1911(SSID,     ,
+                LOCATION,  ,
+                EINGABE,   ,
+                OBJ,       ,
+                DSNAME,    ,
+                LNR   )
+
+return
+
+Get_CFG_FILE:
+/*  CFG FILE                            */
+
+mem     = "#SSIDINF"
+CFGFILE = Strip(sysdsname) || "(" || mem || ")"
+CFGFILE = proclib || "(" || mem || ")"
+ADDRESS TSO "FREE FILE(CFGF) NOHOLD"
+ADDRESS TSO "ALLOC F(CFGF) DATASET('"CFGFILE"') SHR"
+ADDRESS TSO "EXECIO * DISKR CFGF (STEM CONFIG. FINIS"
+ADDRESS TSO "EXECIO 0 DISKR CFGF ( FINIS"
+ADDRESS TSO "FREE FILE(CFGF) NOHOLD"
+
+Do I = 1 TO CONFIG.0
+   If Translate(Word(Config.i, 1))     = 'AG' ,
+    | TRANSLATE(Word(Config.i, 1))     = SSID Then do
+       CMDLINE =  Subword(CONFIG.i, 2)
+       INTERPRET  CMDLINE
+    End
+ End
+
+return 0
+
+Lesen_daten_940:
+
+LOC  = LOCATION
+FK   = AUSWKZ
+OB   = object
+OB2  = Object2
+OB3  = Object3
+OB4  = Object4
+OB5  = Object5
+TS   = Tablespace
+DB   = DATABASE
+SG   = STGROUP
+LOBJ = ListObject
+
+DDLTEXT = ""
+DDLTEXT = DDLTEXT ZOSB1AC3(SSID,   ,           /* SSID    */
+                           EDIT_SQL,,          /* Edit SQL */
+                           LOC,    ,           /* LOCATION */
+                           LNR,    ,           /* TABLENR */
+                           TABNR,  ,           /* TABLENR */
+                           FK,     ,           /* FUKTION */
+                           OB,     ,           /* OBJECT  */
+                           OB2,    ,           /* TABLE   */
+                           OB3,    ,           /* TABLE   */
+                           OB4,    ,           /* TABLE   */
+                           OB5,    ,           /* TABLE   */
+                           TS,     ,           /* TABLESPACE */
+                           DB,     ,           /* DATABASE   */
+                           SG,     ,           /* STORAGEGROUP */
+                           LOBJ,   ,           /* List Object*/
+                           ISPFILE)            /* ISPFILE    */
+
+DDLTEXT = STRIP(DDLTEXT)
+
+return
+
+MAKE_WHERELIST: PROCEDURE EXPOSE WHERELIST
+
+COLUMNNAME = ARG(1)
+ARGUMENT   = ARG(2)
+ARGTYPE    = ARG(3)
+
+IF LENGTH(STRIP(ARGUMENT)) = 0 THEN RETURN
+ARGUMENT   = TRANSLATE(ARGUMENT, '%', '*')
+
+IF TRANSLATE(WORD(WHERELIST, 1) ) = "WHERE" THEN ANDKZ = "AND"
+ ELSE ANDKZ = "WHERE"
+
+IF LENGTH(STRIP(COLUMNNAME)) = 0 ,
+ & LENGTH(STRIP(ARGUMENT)) > 0 THEN DO
+   WHERELIST = WHERELIST ANDKZ ARGUMENT
+   RETURN
+ END
+
+IF LENGTH(STRIP(ARGUMENT)) = 0 THEN RETURN
+
+If ARGTYPE = "NUM" Then do
+   IF POS('%', ARGUMENT) > 0 THEN DO
+      WHERELIST = WHERELIST ANDKZ COLUMNNAME "LIKE "ARGUMENT
+    END
+   Else Do
+      WHERELIST = WHERELIST ANDKZ COLUMNNAME "= "ARGUMENT
+    END
+ End
+Else Do
+   IF POS('%', ARGUMENT) > 0 ,
+    | POS('_', ARGUMENT) > 0 THEN DO
+      WHERELIST = WHERELIST ANDKZ COLUMNNAME "LIKE '"ARGUMENT"'"
+    END
+   Else Do
+      WHERELIST = WHERELIST ANDKZ COLUMNNAME "= '"ARGUMENT"'"
+    END
+ End
+
+RETURN
+
+Utility_Execute:
+
+OK    =  LISTDSI(ISPFILE "FILE")
+If SYSDSNAME = "" Then do
+   ADDRESS "TSO" "ALLOC F(ISPFILE) DA('"ISPFILE"') SHR"
+ End
+CLMEM = Strip(ISPFILE) || "(" || MEM || ")"
+ADDRESS ISPEXEC 'FTOPEN'
+If rc > 4 Then Do
+  Say 'FTOPEN   RC='RC
+  Say 'ZERRSM = 'ZERRSM
+  Say 'ZERRLM = 'ZERRLM
+ End
+ADDRESS ISPEXEC 'FTINCL 'SKEL
+If rc > 4 Then Do
+  Say 'FTINCL   RC='RC
+  Say 'ZERRSM = 'ZERRSM
+  Say 'ZERRLM = 'ZERRLM
+ End
+
+ADDRESS ISPEXEC "FTCLOSE NAME(" || MEM || ") LIBRARY(ISPFILE)"
+ADDRESS ISPEXEC "EDIT DATASET('"CLMEM"') PANEL(ISREFR01)"
+
+return
+
+error: failure: syntax: novalue: halt:
+say SRC.3":"
+cstr = CONDITION('Condition')         /* Name of trapped condition*/
+istr = CONDITION('Instruction')       /* CALL or SIGNAL           */
+dstr = CONDITION('Description')       /* Description or null      */
+sstr = CONDITION('Status')            /* ON, OFF, or DELAY        */
+Say  'Condition  :'cstr
+say  'Instruction:'istr
+say  'Description:'dstr
+say  'Status     :'sstr
+
+If condition = 'HALT' Then do
+   Say SRC.3 "manually abort " condition condition('C')
+ End
+ Else Do
+   Say SRC.3 condition
+   condition = condition('C')
+   source = strip(sourceline(sigl),"B")
+   say copies('*',79)
+   say left('* 'condition' CONDITION ON LINE 'sigl' OF REXX 'rexx,78)'*'
+   say left('* 'source,78)'*'
+   say left('* RETURN CODE 'rc,78)'*'
+   say left('* 'errortext(rc),78)'*'
+   say copies('*',79)
+ End
+exit 100

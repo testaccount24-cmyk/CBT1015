@@ -1,0 +1,3224 @@
+/* REXX */
+/*******************************************************************/
+/*                                                                 */
+/* PROGRAMMNAME     : ZOS91AC3                                     */
+/* AUSRUF           : AUS Program                                  */
+/* AUTHER           : ULRICH BRAEUER  11.08.1999                   */
+/* FUNKTION         : ANZEIGE DB2/UDB INFORMATIONEN                */
+/*                                                                 */
+/*                                                                 */
+/* AUFRUF           : ZOS91AC3 ARG1 ARG2 ARG3 ARG4 ARG5 ARG6       */
+/*                    ARG1 MUSS SEIN : SSID                        */
+/*                    ARG2 MUSS SEIN : LOCATION                    */
+/*                    ARG3 KANN SEIN : TS, TB, IX, VW,             */
+/*                                     SY, AL, PG, TR              */
+/*                    ARG4 KANN SEIN : CREATOR.NAME DES OBJEJCT    */
+/*                    ARG5 KANN SEIN : TBCREATOR.TABNAME           */
+/*                    ARG6 KANN SEIN : TABLESPACE NAME             */
+/*                    ARG7 KANN SEIN : DATABASE NAME               */
+/*   ERKLAERUNG ZU ARG4, ARG5, ARG6 |||                            */
+/*   ES IST MOEGLICH Z.B BEI DER FUNKTION IX ZU SAGEN, ICH WILL    */
+/*   ALLE INDEXES ZU EINER TABLE, ODER ZU EINEM TABLESPACE ODER    */
+/*   ZU EINER DATENBANK.                                           */
+/*   SINNFOLL IST ES AUCH ZU SAGEN, ICH WILL WISSEN, WELCHE PLAENE */
+/*   ODER PACKAGES AUF EINEN TABLESPCE GEHEN, Z.B. FUER REORGS     */
+/*   MIT ANSCHLIESENDEM REBIND. ||                                 */
+/*                                                                 */
+/*                                                                 */
+/*******************************************************************/
+
+ENV = "WIN"
+ENV = "TSO"
+USER = USERID()
+SYSCATS    = "SYSCAT"
+SYSIBMS    = "SYSIBM"
+SYSIBMA    = "SYSIBMADM"
+SYSPROCA   = "SYSPROC"
+DSNRECON   = "N"
+SYSUID  = ""
+SYSPWD  = ""
+MAXRows    = 0
+MAXFetch   = "FETCH FIRST 100 ROWS ONLY"
+MAXFetch   = ""
+
+If Env = 'TSO' Then do
+   X = MSG('OFF')
+
+   ADDRESS ISPEXEC 'VGET (DSNRECON) PROFILE'
+   ADDRESS ISPEXEC 'VGET (UDBTRACE) PROFILE'
+   ADDRESS ISPEXEC 'VGET (SYSIBMS) PROFILE'
+   ADDRESS ISPEXEC 'VGET (SYSCATS) PROFILE'
+   ADDRESS ISPEXEC 'VGET (SYSIBMA) PROFILE'
+   ADDRESS ISPEXEC 'VGET (SYSPROCA) PROFILE'
+   ADDRESS ISPEXEC 'VGET (MAXROWS)  PROFILE'
+   ADDRESS ISPEXEC 'VGET (SYSUID)   PROFILE'
+   ADDRESS ISPEXEC 'VGET (SYSPWD)   PROFILE'
+   ADDRESS ISPEXEC  "VGET (ZSCREENW,ZSCREEND)"
+   IF UDBTRACE = 'ON' THEN TRACE I
+   ELSE                    TRACE
+ End
+If MAXROWS > 0 then do
+   MAXFetch = "FETCH FIRST "MAXROWS" ROWS ONLY"
+ End
+
+DDLTEXT = ""
+DB_ENV  = "DSN"
+
+DB2_SSID       = ARG(1)  /* SSID      */
+DB2_EDITSQL    = ARG(2)  /* LOCATION  */
+DB2_LOC        = ARG(3)  /* LOCATION  */
+lnr            = ARG(4)  /* TABLENR   */
+TABNR          = ARG(5)  /* TABLENR   */
+DB2_FUNKTION   = ARG(6)  /* FUNKTION  */
+SUCH1          = ARG(7)  /* OBJECT CREATOR/NAME */
+SUCH2          = ARG(8)  /* TABLE  CREATOR/NAME */
+SUCH3          = ARG(9)  /* TABLE  CREATOR/NAME */
+SUCH4          = ARG(10) /* TABLE  CREATOR/NAME */
+SUCH5          = ARG(11) /* TABLE  CREATOR/NAME */
+DB2_TABLESPACE = ARG(12)
+DB2_DATABASE   = ARG(13)
+DB2_STORAGEGRP = ARG(14)
+DB2_LIST_OBJ   = ARG(15)
+DB2_CREATOR1   = ""
+DB2_NAME1      = ""
+DB2_CREATOR2   = ""
+DB2_NAME2      = ""
+DB2_CREATOR3   = ""
+DB2_NAME3      = ""
+DB2_CREATOR4   = ""
+DB2_NAME4      = ""
+DB2_CREATOR5   = ""
+DB2_NAME5      = ""
+DB2_TYPE       = ""
+LUWTABLE       = "LUWTB"tabnr
+COLTAB         = "COLTB"tabnr
+If Words(DB2_FUNKTION) > 1 Then do
+   parse value DB2_FUNKTION with DB2_FUNKTION DB2_TYPE
+ End
+
+IF POS('.', SUCH1) > 0 THEN
+   PARSE VALUE SUCH1 WITH DB2_CREATOR1 '.' DB2_NAME1
+ ELSE DB2_NAME1 = SUCH1
+
+IF POS('.', SUCH2) > 0 THEN
+   PARSE VALUE SUCH2 WITH DB2_CREATOR2 '.' DB2_NAME2
+ ELSE DB2_NAME2 = SUCH2
+
+IF POS('.', SUCH3) > 0 THEN
+   PARSE VALUE SUCH3 WITH DB2_CREATOR3 '.' DB2_NAME3
+ ELSE DB2_NAME3 = SUCH3
+
+IF POS('.', SUCH4) > 0 THEN
+   PARSE VALUE SUCH4 WITH DB2_CREATOR4 '.' DB2_NAME4
+ ELSE DB2_NAME4 = SUCH4
+
+IF POS('.', SUCH5) > 0 THEN
+   PARSE VALUE SUCH5 WITH DB2_CREATOR5 '.' DB2_NAME5
+ ELSE DB2_NAME5 = SUCH5
+
+
+If DSNRECON = "Y" Then Do
+   Call Load_DSNREXX
+ End
+RXDB2_SSID        = DB2_SSID
+RXDB2_GETSTEM     = 'EINGABE.'
+RXDB2_PUTSTEM     = 'AUSGABE.'
+ANZAHL_ROWS       = 0
+
+If Length(DB2_LOC) > 0 Then  OK = CONNECT_LOCATION(DB2_LOC)
+
+CALL OPEN_TABLE
+
+LCMD = "   "
+
+SELECT
+   WHEN DB2_FUNKTION = "SG" THEN CALL LIST_SG     /* TABLE SPACE  */
+   WHEN DB2_FUNKTION = "VO" THEN CALL LIST_VO     /* VOLUMES      */
+   WHEN DB2_FUNKTION = "DB" THEN CALL LIST_DB     /* TABLE SPACE  */
+   WHEN DB2_FUNKTION = "TS" THEN CALL LIST_TS     /* TABLE SPACE  */
+   WHEN DB2_FUNKTION = "TP" THEN CALL LIST_TP     /* Tablepart    */
+   WHEN DB2_FUNKTION = "TB" THEN CALL LIST_TB     /* TABLE        */
+   WHEN DB2_FUNKTION = "VW" THEN CALL LIST_VW     /* VIEW         */
+   WHEN DB2_FUNKTION = "IX" THEN CALL LIST_IX     /* INDEX        */
+   WHEN DB2_FUNKTION = "IP" THEN CALL LIST_IP     /* INDEX PART   */
+   WHEN DB2_FUNKTION = "TG" THEN CALL LIST_TG     /* TRIGGER      */
+   WHEN DB2_FUNKTION = "SY" THEN CALL LIST_SY     /* SYNONYM      */
+   WHEN DB2_FUNKTION = "AL" THEN CALL LIST_AL     /* ALIAS        */
+   WHEN DB2_FUNKTION = "FK" THEN CALL LIST_FK     /* FORREING KEY */
+   WHEN DB2_FUNKTION = "SE" THEN CALL LIST_SE     /* Sequence     */
+   WHEN DB2_FUNKTION = "RT" THEN CALL LIST_RT     /* Routines     */
+   WHEN DB2_FUNKTION = "PG" THEN CALL LIST_PG     /* PACKAGES     */
+   WHEN DB2_FUNKTION = "PL" THEN CALL LIST_PL     /* PLANS        */
+   WHEN DB2_FUNKTION = "DT" THEN CALL LIST_DT     /* DATATYPES    */
+   WHEN DB2_FUNKTION = "UA" THEN CALL LIST_UA     /* USER.AUTH.T/V*/
+   WHEN DB2_FUNKTION = "CO"    THEN CALL LIST_COLS /* COLUMNS TB/VW*/
+   WHEN DB2_FUNKTION = "STMT"  THEN CALL LIST_STMT /* PG STATEMENT */
+   WHEN DB2_FUNKTION = "ST"    THEN CALL LIST_STMT /* PG STATEMENT */
+   WHEN DB2_FUNKTION = "D"      THEN CALL LIST_DIS  /* DISP.      */
+   WHEN DB2_FUNKTION = "SR"    THEN CALL LIST_SR   /* Strings    */
+   WHEN DB2_FUNKTION = "CK"    THEN CALL LIST_CK   /* Checks     */
+   WHEN DB2_FUNKTION = "KC"    THEN CALL LIST_KC   /* KEY COLUMNS*/
+   WHEN DB2_FUNKTION = "LO"    THEN CALL LIST_LO   /* Locations  */
+   WHEN DB2_FUNKTION = "IPN"   THEN CALL LIST_IPN  /* IP Names   */
+   WHEN DB2_FUNKTION = "UN"    THEN CALL LIST_UN   /* USER Names   */
+   WHEN DB2_FUNKTION = "LU"    THEN CALL LIST_LU   /* LUNAMES      */
+   WHEN DB2_FUNKTION = "IC"    THEN CALL LIST_IC   /* SYSCOPY    */
+   WHEN DB2_FUNKTION = "RO"    THEN CALL LIST_RO   /* SYSROLES   */
+   WHEN DB2_FUNKTION = "MQT"   THEN CALL LIST_MQT  /* Mat.Query.TB.*/
+   WHEN DB2_FUNKTION = "DBRM"   THEN CALL LIST_DBRM /* DBRM         */
+   WHEN DB2_FUNKTION = "BP"     THEN CALL LIST_BP   /* BUFFERPOOL   */
+   WHEN DB2_FUNKTION = "SSIDI" THEN Do             /* Host Info    */
+        INR = 1
+        CALL LIST_SSI  /* Bufferpool   */
+    End
+   WHEN DB2_FUNKTION = "DSINFO" THEN Do            /* Host Info    */
+        INR = 2
+        CALL LIST_SSI  /* Bufferpool   */
+    End
+   OTHERWISE NOP
+ END
+
+CALL CLOSE_TABLE
+If Length(DB2_LOC) > 0 Then  OK = DISCONNECT_LOCATION(DB2_LOC)
+If DSNRECON = "Y" Then Do
+   Call UNLoad_DSNREXX
+ End
+
+if ANZAHL_ROWS = 0 Then DDLTEXT = ""
+RETURN DDLTEXT
+
+LIST_SG:
+CNR   = 1           /*  CURSOR NUMMER FUER TABLESPACE   */
+SNR   = CNR
+
+WHERELIST    = ""
+CALL MAKE_WHERELIST "CREATOR", DB2_CREATOR1
+CALL MAKE_WHERELIST "NAME", DB2_NAME1
+
+SQLSTMT    = "SELECT  NAME, CREATOR, VCATNAME                 " ,
+             "      , INT(SPACEF) AS SPACE                    " ,
+             "      , CREATORTYPE                             " ,
+             "      , RELCREATED                              " ,
+             "FROM  "SYSIBMS".SYSSTOGROUP SG ",
+             WHERELIST ,
+             "ORDER BY CREATOR, NAME " ,
+             ""
+
+CALL OPEN_CURSOR
+Call OPEN_COLTB
+
+DDLTEXT = DDLTEXT "*UZ*"
+DDLTEXT = DDLTEXT || LEFT("SGNAME", 18)
+DDLTEXT = DDLTEXT LEFT("CAT", 8)
+DDLTEXT = DDLTEXT RIGHT("SPACE", 9)
+DDLTEXT = DDLTEXT RIGHT("T", 1,' ')
+DDLTEXT = DDLTEXT RIGHT("R", 1,' ')
+DDLTEXT = DDLTEXT "-NR"
+DO WHILE SQLCODE = 0
+    SQLTEXT =         " FETCH C"CNR" INTO            ",
+             "       :NAME,:CREATOR,:VCATNAME " ,
+             "      ,:SPACE, :CREATORTYPE, :RELCREATED " ,
+             ""
+    Call EXECUTE_SQL_TEXT
+
+    Select
+        When SQLCODE = 100 THEN DO
+             CALL CLOSE_CURSOR    /* CLOSE CURSOR */
+             LEAVE
+          End
+        When SQLCODE <> 0  THEN DO
+             SAY "ERROR ON FETCH C"CNR", RC="RC ,
+                 "SQLCODE="SQLCODE         ,
+                 "SQLERRMC="SQLERRMC       ,
+                 ""
+             Exit 8
+          End
+        Otherwise NOP
+     End
+   LZEILE  = ''
+   LZEILE = LZEILE || LEFT(STRIP(CREATOR) || "." || Strip(NAME), 18)
+   LZEILE = LZEILE LEFT(VCATNAME, 8, ' ')
+   LZEILE = LZEILE RIGHT(SPACE, 9, ' ')
+   LZEILE = LZEILE RIGHT(CREATORTYPE, 1, ' ')
+   LZEILE = LZEILE RIGHT(RELCREATED, 1, ' ')
+   CALL ADD_TABLE
+ END
+
+CALL CLOSE_CURSOR
+RETURN
+
+LIST_VO:
+CNR   = 1           /*  CURSOR NUMMER FUER TABLESPACE   */
+SNR   = CNR
+
+WHERELIST    = ""
+CALL MAKE_WHERELIST "SGCREATOR", DB2_CREATOR1
+CALL MAKE_WHERELIST "SGNAME", DB2_NAME1
+
+SQLSTMT    = "SELECT  SGNAME, SGCREATOR, VOLID  " ,
+             "      , RELCREATED                " ,
+             "FROM  "SYSIBMS".SYSVOLUMES  VO    ",
+             WHERELIST ,
+             "ORDER BY SGCREATOR, SGNAME        " ,
+             ""
+
+CALL OPEN_CURSOR
+Call OPEN_COLTB
+
+DDLTEXT = DDLTEXT "*UZ*"
+DDLTEXT = DDLTEXT || LEFT("SGNAME", 18)
+DDLTEXT = DDLTEXT LEFT("VOLID", 18)
+DDLTEXT = DDLTEXT RIGHT("R", 1,' ')
+DDLTEXT = DDLTEXT "-NR"
+DO WHILE SQLCODE = 0
+    SQLTEXT =         " FETCH C"CNR" INTO            ",
+             "       :SGNAME,:SGCREATOR,:VOLID " ,
+             "      ,:RELCREATED " ,
+             ""
+    Call EXECUTE_SQL_TEXT
+
+    Select
+        When SQLCODE = 100 THEN DO
+             CALL CLOSE_CURSOR    /* CLOSE CURSOR */
+             LEAVE
+          End
+        When SQLCODE <> 0  THEN DO
+             SAY "ERROR ON FETCH C"CNR", RC="RC ,
+                 "SQLCODE="SQLCODE         ,
+                 "SQLERRMC="SQLERRMC       ,
+                 ""
+             Exit 8
+          End
+        Otherwise NOP
+     End
+   LZEILE  = ''
+   LZEILE = LZEILE || LEFT(STRIP(SGCREATOR) || "." || Strip(SGNAME), 18)
+   LZEILE = LZEILE LEFT(VOLID, 18, ' ')
+   LZEILE = LZEILE RIGHT(RELCREATED, 1, ' ')
+   CALL ADD_TABLE
+ END
+
+CALL CLOSE_CURSOR
+RETURN
+
+LIST_DB:
+CNR   = 1           /*  CURSOR NUMMER FUER TABLESPACE   */
+SNR   = CNR
+
+WHERELIST    = ""
+CALL MAKE_WHERELIST "CREATOR", DB2_CREATOR1
+CALL MAKE_WHERELIST "NAME", DB2_NAME1
+CALL MAKE_WHERELIST "STGROUP", DB2_STORAGEGRP
+
+SQLSTMT    = "SELECT  NAME, CREATOR, STGROUP    " ,
+             "      , BPOOL, INDEXBP            " ,
+             "      , DBID, ROSHARE             " ,
+             "      , TYPE                      " ,
+             "FROM  "SYSIBMS".SYSDATABASE DB    ",
+             WHERELIST ,
+             "ORDER BY CREATOR, NAME            " ,
+             ""
+
+CALL OPEN_CURSOR
+Call OPEN_COLTB
+
+DDLTEXT = DDLTEXT "*UZ*"
+DDLTEXT = DDLTEXT || LEFT("DBNAME", 18)
+DDLTEXT = DDLTEXT LEFT("STGROUP", 18)
+DDLTEXT = DDLTEXT LEFT("BPOOL", 8,' ')
+DDLTEXT = DDLTEXT LEFT("INDEXBP", 8,' ')
+DDLTEXT = DDLTEXT RIGHT("DBID", 4,' ')
+DDLTEXT = DDLTEXT RIGHT("R", 1,' ')
+DDLTEXT = DDLTEXT RIGHT("T", 1,' ')
+DDLTEXT = DDLTEXT "-NR"
+DO WHILE SQLCODE = 0
+    SQLTEXT =         " FETCH C"CNR" INTO         " ,
+             "         :NAME, :CREATOR, :STGROUP  " ,
+             "       , :BPOOL, :INDEXBP           " ,
+             "       , :DBID, :ROSHARE            " ,
+             "       , :TYPE                      " ,
+             ""
+    Call EXECUTE_SQL_TEXT
+
+    Select
+        When SQLCODE = 100 THEN DO
+             CALL CLOSE_CURSOR    /* CLOSE CURSOR */
+             LEAVE
+          End
+        When SQLCODE <> 0  THEN DO
+             SAY "ERROR ON FETCH C"CNR", RC="RC ,
+                 "SQLCODE="SQLCODE         ,
+                 "SQLERRMC="SQLERRMC       ,
+                 ""
+             Exit 8
+          End
+        Otherwise NOP
+     End
+   LZEILE  = ''
+   LZEILE = LZEILE || LEFT(STRIP(CREATOR) || "." || Strip(NAME), 18)
+   LZEILE = LZEILE LEFT(STGROUP, 18, ' ')
+   LZEILE = LZEILE LEFT(BPOOL, 8, ' ')
+   LZEILE = LZEILE LEFT(INDEXBP, 8, ' ')
+   LZEILE = LZEILE RIGHT(DBID, 4, ' ')
+   LZEILE = LZEILE RIGHT(ROSHARE, 1, ' ')
+   LZEILE = LZEILE RIGHT(TYPE, 1, ' ')
+   CALL ADD_TABLE
+ END
+
+CALL CLOSE_CURSOR
+RETURN
+
+LIST_TS:
+CNR   = 1           /*  CURSOR NUMMER FUER TABLESPACE   */
+SNR   = CNR
+
+WHERELIST    = ""
+CALL MAKE_WHERELIST "TS.DBNAME", DB2_CREATOR1
+CALL MAKE_WHERELIST "TS.NAME", DB2_NAME1
+CALL MAKE_WHERELIST "TP.STORNAME", DB2_STORAGEGRP
+
+SQLSTMT    = "SELECT  DISTINCT TS.DBNAME     ",
+             "     ,  TS.NAME       ",
+             "     ,  TP.STORNAME   ",
+             "     ,  TS.BPOOL      ",
+             "     ,  TS.DBID       ",
+             "     ,  TS.PARTITIONS ",
+             "     ,  TS.PGSIZE     ",
+             "     ,  INT(TS.NACTIVEF) AS NACTIVE ",
+             "     ,  TS.SEGSIZE    ",
+             "     ,  TS.NTABLES    ",
+             "FROM  "SYSIBMS".SYSTABLESPACE TS ",
+             "INNER JOIN "SYSIBMS".SYSTABLEPART TP ",
+             " ON   TS.DBNAME   = TP.DBNAME     ",
+             " AND  TS.NAME     = TP.TSNAME     ",
+             WHERELIST ,
+             "ORDER BY TS.DBNAME, TS.NAME",
+             ""
+
+CALL OPEN_CURSOR
+Call OPEN_COLTB
+
+DDLTEXT = DDLTEXT "*UZ*"
+DDLTEXT = DDLTEXT || LEFT("TSNAME", 18)
+DDLTEXT = DDLTEXT LEFT("DBID", 4)
+DDLTEXT = DDLTEXT LEFT("PART", 4)
+DDLTEXT = DDLTEXT RIGHT("PGSZ", 6,' ')
+DDLTEXT = DDLTEXT RIGHT("ACT-PG", 9,' ')
+DDLTEXT = DDLTEXT LEFT("BPOOL", 8,' ')
+DDLTEXT = DDLTEXT LEFT("SEGS", 4,' ')
+DDLTEXT = DDLTEXT RIGHT("TB", 3,' ')
+DDLTEXT = DDLTEXT "-NR"
+DO WHILE SQLCODE = 0
+    SQLTEXT =         " FETCH C"CNR" INTO            ",
+             "       :DBNAME                         " ,
+             "    ,  :NAME                           " ,
+             "    ,  :STORNAME                       " ,
+             "    ,  :BPOOL                          " ,
+             "    ,  :DBID                           " ,
+             "    ,  :PARTITIONS                     " ,
+             "    ,  :PGSIZE                         " ,
+             "    ,  :NACTIVE                        " ,
+             "    ,  :SEGSIZE                        " ,
+             "    ,  :NTABLES                        " ,
+             ""
+    Call EXECUTE_SQL_TEXT
+
+    Select
+        When SQLCODE = 100 THEN DO
+             CALL CLOSE_CURSOR    /* CLOSE CURSOR */
+             LEAVE
+          End
+        When SQLCODE <> 0  THEN DO
+             SAY "ERROR ON FETCH C"CNR", RC="RC ,
+                 "SQLCODE="SQLCODE         ,
+                 "SQLERRMC="SQLERRMC       ,
+                 ""
+             Exit 8
+          End
+        Otherwise NOP
+     End
+   LZEILE  = ''
+   LZEILE = LZEILE || LEFT(STRIP(DBNAME) || "." || Strip(NAME), 18)
+   LZEILE = LZEILE RIGHT(DBID, 4, ' ')
+   LZEILE = LZEILE RIGHT(PARTITIONS, 4, ' ')
+   LZEILE = LZEILE RIGHT(PGSIZE, 6,' ')
+   LZEILE = LZEILE RIGHT(NACTIVE, 9,' ')
+   LZEILE = LZEILE LEFT(BPOOL, 8,' ')
+   LZEILE = LZEILE RIGHT(SEGSIZE, 4, ' ')
+   LZEILE = LZEILE RIGHT(NTABLES, 3, ' ')
+   CALL ADD_TABLE
+ END
+
+CALL CLOSE_CURSOR
+RETURN
+
+LIST_TB:
+CNR = 2
+SNR = CNR
+
+WHERELIST    = ""
+CALL MAKE_WHERELIST "TB.CREATOR", DB2_CREATOR1
+CALL MAKE_WHERELIST "TB.NAME", DB2_NAME1
+CALL MAKE_WHERELIST "TB.DBNAME", DB2_CREATOR2
+CALL MAKE_WHERELIST "TB.TSNAME", DB2_NAME2
+CALL MAKE_WHERELIST "TB.DBNAME", DB2_DATABASE
+CALL MAKE_WHERELIST "TP.STORNAME", DB2_STORAGEGRP
+CALL MAKE_WHERELIST "", "TB.TYPE IN('T', 'M', 'C', 'G', 'X', 'P')"
+
+
+SQLSTMT   =  "SELECT DISTINCT TB.CREATOR  " ,
+             "    ,  TB.NAME     " ,
+             "    ,  TB.TYPE     " ,
+             "    ,  TB.DBNAME   " ,
+             "    ,  TB.TSNAME   " ,
+             "    ,  TB.PARENTS  " ,
+             "    ,  TB.CHILDREN " ,
+             "    ,  INT(TB.CARDF) AS CARD      " ,
+             "    ,  TB.COLCOUNT " ,
+             "    ,  TB.STATUS   " ,
+             "FROM "SYSIBMS".SYSTABLES TB " ,
+             "INNER JOIN "SYSIBMS".SYSTABLEPART TP" ,
+             "ON    TB.DBNAME   = TP.DBNAME    " ,
+             "AND   TB.TSNAME   = TP.TSNAME    " ,
+             WHERELIST ,
+             "ORDER BY 1, 2              " ,
+             ""
+
+CALL OPEN_CURSOR
+Call OPEN_COLTB
+
+DDLTEXT = DDLTEXT "*UZ*"
+DDLTEXT = DDLTEXT || SUBSTR("TBNAME", 1, 27)
+DDLTEXT = DDLTEXT SUBSTR("TY", 1, 2)
+DDLTEXT = DDLTEXT SUBSTR("TSNAME", 1, 18)
+DDLTEXT = DDLTEXT RIGHT("P C", 3)
+DDLTEXT = DDLTEXT RIGHT("CARD", 9)
+DDLTEXT = DDLTEXT RIGHT("COLS", 4)
+DDLTEXT = DDLTEXT RIGHT("ST", 2)
+DDLTEXT = DDLTEXT "-NR"
+DO WHILE SQLCODE = 0
+   SQLTEXT =         " FETCH C"CNR" INTO          ",
+             "     :CREATOR  " ,
+             "   , :NAME     " ,
+             "   , :TYPE     " ,
+             "   , :DBNAME   " ,
+             "   , :TSNAME   " ,
+             "   , :PARENTS  " ,
+             "   , :CHILDREN " ,
+             "   , :CARD     " ,
+             "   , :COLCOUNT " ,
+             "   , :STATUS   " ,
+             ""
+    Call EXECUTE_SQL_TEXT
+
+    Select
+        When SQLCODE = 100 THEN DO
+             CALL CLOSE_CURSOR    /* CLOSE CURSOR */
+             LEAVE
+          End
+        When SQLCODE <> 0  THEN DO
+             SAY "ERROR ON FETCH C"CNR", RC="RC ,
+                 "SQLCODE="SQLCODE         ,
+                 "SQLERRMC="SQLERRMC       ,
+                 ""
+             Exit 8
+          End
+        Otherwise NOP
+     End
+   LZEILE  = ''
+   XTBNAME = STRIP(CREATOR) || '.' || STRIP(NAME)
+   XTSNAME = STRIP(DBNAME) || '.' || STRIP(TSNAME)
+   LZEILE = LZEILE || SUBSTR(XTBNAME, 1, 27)
+   LZEILE = LZEILE SUBSTR(TYPE, 1, 2)
+   LZEILE = LZEILE SUBSTR(XTSNAME, 1, 18)
+   LZEILE = LZEILE RIGHT(PARENTS, 1, ' ')
+   LZEILE = LZEILE RIGHT(CHILDREN, 1, ' ')
+   LZEILE = LZEILE RIGHT(CARD, 9, ' ')
+   LZEILE = LZEILE RIGHT(COLCOUNT, 4, ' ')
+   LZEILE = LZEILE RIGHT(STATUS, 2, ' ')
+   LZEILE = strip(LZEILE)
+   CALL ADD_TABLE
+ END
+
+CALL CLOSE_CURSOR
+
+Return
+
+LIST_MQT:
+CNR = 2
+SNR = CNR
+
+WHERELIST    = ""
+CALL MAKE_WHERELIST "CREATOR", DB2_CREATOR1
+CALL MAKE_WHERELIST "NAME", DB2_NAME1
+CALL MAKE_WHERELIST "", "TYPE = 'M'"
+
+
+SQLSTMT   =  "SELECT CREATOR  " ,
+             "    ,  NAME     " ,
+             "    ,  TYPE     " ,
+             "    ,  DBNAME   " ,
+             "    ,  TSNAME   " ,
+             "    ,  PARENTS  " ,
+             "    ,  CHILDREN " ,
+             "    ,  INT(CARDF) AS CARD      " ,
+             "    ,  COLCOUNT " ,
+             "    ,  STATUS   " ,
+             "FROM "SYSIBMS".SYSTABLES T2 " ,
+             WHERELIST ,
+             "ORDER BY 1, 2              " ,
+             ""
+
+CALL OPEN_CURSOR
+Call OPEN_COLTB
+
+DDLTEXT = DDLTEXT "*UZ*"
+DDLTEXT = DDLTEXT || SUBSTR("TBNAME", 1, 27)
+DDLTEXT = DDLTEXT SUBSTR("TY", 1, 2)
+DDLTEXT = DDLTEXT SUBSTR("TSNAME", 1, 18)
+DDLTEXT = DDLTEXT RIGHT("P C", 3)
+DDLTEXT = DDLTEXT RIGHT("CARD", 9)
+DDLTEXT = DDLTEXT RIGHT("COLS", 4)
+DDLTEXT = DDLTEXT RIGHT("ST", 2)
+DDLTEXT = DDLTEXT "-NR"
+DO WHILE SQLCODE = 0
+   SQLTEXT =         " FETCH C"CNR" INTO          ",
+             "     :CREATOR  " ,
+             "   , :NAME     " ,
+             "   , :TYPE     " ,
+             "   , :DBNAME   " ,
+             "   , :TSNAME   " ,
+             "   , :PARENTS  " ,
+             "   , :CHILDREN " ,
+             "   , :CARD     " ,
+             "   , :COLCOUNT " ,
+             "   , :STATUS   " ,
+             ""
+    Call EXECUTE_SQL_TEXT
+
+    Select
+        When SQLCODE = 100 THEN DO
+             CALL CLOSE_CURSOR    /* CLOSE CURSOR */
+             LEAVE
+          End
+        When SQLCODE <> 0  THEN DO
+             SAY "ERROR ON FETCH C"CNR", RC="RC ,
+                 "SQLCODE="SQLCODE         ,
+                 "SQLERRMC="SQLERRMC       ,
+                 ""
+             Exit 8
+          End
+        Otherwise NOP
+     End
+   LZEILE  = ''
+   XTBNAME = STRIP(CREATOR) || '.' || STRIP(NAME)
+   XTSNAME = STRIP(DBNAME) || '.' || STRIP(TSNAME)
+   LZEILE = LZEILE || SUBSTR(XTBNAME, 1, 27)
+   LZEILE = LZEILE SUBSTR(TYPE, 1, 2)
+   LZEILE = LZEILE SUBSTR(XTSNAME, 1, 18)
+   LZEILE = LZEILE RIGHT(PARENTS, 1, ' ')
+   LZEILE = LZEILE RIGHT(CHILDREN, 1, ' ')
+   LZEILE = LZEILE RIGHT(CARD, 9, ' ')
+   LZEILE = LZEILE RIGHT(COLCOUNT, 4, ' ')
+   LZEILE = LZEILE RIGHT(STATUS, 2, ' ')
+   LZEILE = strip(LZEILE)
+   CALL ADD_TABLE
+ END
+
+CALL CLOSE_CURSOR
+
+Return
+
+
+LIST_AL:
+CNR = 2
+SNR = CNR
+
+WHERELIST    = ""
+CALL MAKE_WHERELIST "CREATOR", DB2_CREATOR1
+CALL MAKE_WHERELIST "NAME", DB2_NAME1
+CALL MAKE_WHERELIST "TBCREATOR", DB2_CREATOR2
+CALL MAKE_WHERELIST "TBNAME", DB2_NAME2
+CALL MAKE_WHERELIST "", "TYPE = 'A'"
+
+SQLSTMT   =  "SELECT CREATOR, NAME    " ,
+             "      ,TYPE, LOCATION   " ,
+             "      ,TBCREATOR, TBNAME" ,
+             "FROM "SYSIBMS".SYSTABLES T2 " ,
+             WHERELIST ,
+             "ORDER BY 1, 2              " ,
+             ""
+CALL OPEN_CURSOR
+Call OPEN_COLTB
+
+DDLTEXT = DDLTEXT "*UZ*"
+DDLTEXT = DDLTEXT || SUBSTR("NAME", 1, 27)
+DDLTEXT = DDLTEXT SUBSTR("TY", 1, 2)
+DDLTEXT = DDLTEXT SUBSTR("TBNAME", 1, 27)
+DDLTEXT = DDLTEXT "-NR"
+DO WHILE SQLCODE = 0
+   SQLTEXT =         " FETCH C"CNR" INTO                    ",
+             "     :CREATOR, :NAME " ,
+             "   , :TYPE, :LOCATION" ,
+             "   , :TBCREATOR, :TBNAME" ,
+             ""
+   Call EXECUTE_SQL_TEXT
+
+    Select
+        When SQLCODE = 100 THEN DO
+             CALL CLOSE_CURSOR    /* CLOSE CURSOR */
+             LEAVE
+          End
+        When SQLCODE <> 0  THEN DO
+             SAY "ERROR ON FETCH C"CNR", RC="RC ,
+                 "SQLCODE="SQLCODE         ,
+                 "SQLERRMC="SQLERRMC       ,
+                 ""
+             Exit 8
+          End
+        Otherwise NOP
+     End
+   LZEILE  = ''
+   XALNAME = STRIP(CREATOR) || '.' || STRIP(NAME)
+   If length(Strip(Location)) > 0 Then XTBNAME = STRIP(LOCATION) || "."
+   XTBNAME = ""
+   XTBNAME = XTBNAME || STRIP(TBCREATOR) || '.' || STRIP(TBNAME)
+   LZEILE = LZEILE || SUBSTR(XALNAME, 1, 27)
+   LZEILE = LZEILE SUBSTR(TYPE, 1, 2)
+   LZEILE = LZEILE SUBSTR(XTBNAME, 1, 27)
+   LZEILE = strip(LZEILE)
+   CALL ADD_TABLE
+ END
+
+CALL CLOSE_CURSOR
+
+Return
+
+LIST_DIS:
+CNR = 1
+SNR = CNR
+
+WHERELIST    = ""
+select
+   when DB2_LIST_OBJ = ""SYSIBMS".SYSSEQUENCES" then do
+        CALL MAKE_WHERELIST "SCHEMA", DB2_CREATOR1
+        CALL MAKE_WHERELIST "NAME", DB2_NAME1
+    End
+   when DB2_LIST_OBJ = ""SYSIBMS".SYSTABLESPACE" then do
+        CALL MAKE_WHERELIST "DBNAME", DB2_CREATOR1
+        CALL MAKE_WHERELIST "NAME", DB2_NAME1
+    End
+   when DB2_LIST_OBJ = ""SYSIBMS".SYSTRIGGERS" then do
+        CALL MAKE_WHERELIST "SCHEMA", DB2_CREATOR1
+        CALL MAKE_WHERELIST "NAME", DB2_NAME1
+    End
+   when DB2_LIST_OBJ = ""SYSIBMS".SYSCOLUMNS" then do
+        CALL MAKE_WHERELIST "NAME", DB2_NAME1
+        CALL MAKE_WHERELIST "TBCREATOR", DB2_CREATOR2
+        CALL MAKE_WHERELIST "TBNAME", DB2_NAME2
+    End
+   when DB2_LIST_OBJ = ""SYSIBMS".SYSVOLUMES" then do
+        CALL MAKE_WHERELIST "VOLID", DB2_NAME1
+        CALL MAKE_WHERELIST "SGCREATOR", DB2_CREATOR2
+        CALL MAKE_WHERELIST "SGNAME", DB2_NAME2
+    End
+   when DB2_LIST_OBJ = ""SYSIBMS".SYSROUTINES" then do
+        CALL MAKE_WHERELIST "SPECIFICNAME", DB2_NAME1
+        CALL MAKE_WHERELIST "SCHEMA", DB2_CREATOR2
+        CALL MAKE_WHERELIST "NAME", DB2_NAME2
+    End
+   when DB2_LIST_OBJ = ""SYSIBMS".SYSSTRINGS" then do
+        CALL MAKE_WHERELIST "CHAR(OUTCCSID)", DB2_CREATOR1
+        CALL MAKE_WHERELIST "CHAR(INCCSID)", DB2_NAME1
+    End
+   when DB2_LIST_OBJ = ""SYSIBMS".SYSCHECKS" then do
+        CALL MAKE_WHERELIST "TBOWNER", DB2_CREATOR1
+        CALL MAKE_WHERELIST "TBNAME", DB2_NAME1
+        CALL MAKE_WHERELIST "CHECKNAME" , DB2_NAME2
+    End
+   when DB2_LIST_OBJ = ""SYSIBMS".SYSKEYS" then do
+        CALL MAKE_WHERELIST "IXCREATOR", DB2_CREATOR1
+        CALL MAKE_WHERELIST "IXNAME", DB2_NAME1
+        CALL MAKE_WHERELIST "COLNAME" , DB2_NAME2
+    End
+   when DB2_LIST_OBJ = ""SYSIBMS".SYSINDEXPART" then do
+        CALL MAKE_WHERELIST "IXCREATOR", DB2_CREATOR1
+        CALL MAKE_WHERELIST "IXNAME", DB2_NAME1
+        CALL MAKE_WHERELIST "PARTITION", DB2_NAME2, "NUM"
+    End
+   when DB2_LIST_OBJ = ""SYSIBMS".SYSTABLEPART" then do
+        CALL MAKE_WHERELIST "DBNAME", DB2_CREATOR1
+        CALL MAKE_WHERELIST "TSNAME", DB2_NAME1
+        CALL MAKE_WHERELIST "PARTITION", DB2_NAME2, "NUM"
+    End
+   when DB2_LIST_OBJ = ""SYSIBMS".SYSPLAN" then do
+        CALL MAKE_WHERELIST "CREATOR", DB2_CREATOR1
+        CALL MAKE_WHERELIST "NAME", DB2_NAME1
+    End
+   when DB2_LIST_OBJ = ""SYSIBMS".SYSPACKAGE" Then do
+        CALL MAKE_WHERELIST "LOCATION", DB2_NAME1
+        CALL MAKE_WHERELIST "COLLID", DB2_CREATOR2
+        CALL MAKE_WHERELIST "NAME", DB2_NAME2
+    End
+   when DB2_LIST_OBJ = ""SYSIBMS".LUNAMES" Then do
+        CALL MAKE_WHERELIST "LUNAME", DB2_NAME1
+    End
+   when DB2_LIST_OBJ = ""SYSIBMS".SYSTABAUTH" Then do
+        CALL MAKE_WHERELIST "TCREATOR", DB2_CREATOR1
+        CALL MAKE_WHERELIST "TTNAME", DB2_NAME1
+        CALL MAKE_WHERELIST "GRANTOR", DB2_CREATOR2
+        CALL MAKE_WHERELIST "GRANTEE", DB2_NAME2
+    End
+   when DB2_LIST_OBJ = ""SYSIBMS".SYSCOPY" Then do
+        CALL MAKE_WHERELIST "DBNAME", DB2_CREATOR1
+        CALL MAKE_WHERELIST "TSNAME", DB2_NAME1
+        CALL MAKE_WHERELIST "TIMESTAMP", SUCH2
+    End
+   when DB2_LIST_OBJ = ""SYSIBMS".SYSROLES" Then do
+        CALL MAKE_WHERELIST "DEFINER", DB2_CREATOR1
+        CALL MAKE_WHERELIST "NAME", DB2_NAME1
+    End
+   when DB2_LIST_OBJ = ""SYSIBMS".LOCATIONS" Then do
+        CALL MAKE_WHERELIST "LINKNAME", DB2_CREATOR1
+        CALL MAKE_WHERELIST "LOCATION", DB2_NAME1
+    End
+   when DB2_LIST_OBJ = ""SYSIBMS".IPNAMES" Then do
+        CALL MAKE_WHERELIST "LINKNAME", DB2_NAME1
+    End
+   when DB2_LIST_OBJ = ""SYSIBMS".SYSTABLESPACESTATS" Then Do
+        CALL MAKE_WHERELIST "DBNAME", DB2_CREATOR1
+        CALL MAKE_WHERELIST "NAME", DB2_NAME1
+    End
+   when DB2_LIST_OBJ = ""SYSIBMS".SYSINDEXSPACESTATS" Then Do
+        CALL MAKE_WHERELIST "CREATOR", DB2_CREATOR1
+        CALL MAKE_WHERELIST "NAME", DB2_NAME1
+    End
+   when DB2_LIST_OBJ = ""SYSIBMS".USERNAMES" Then do
+        IF STRIP(DB2_CREATOR1) <> "" Then do
+           CALL MAKE_WHERELIST "AUTHID", DB2_CREATOR1
+         End
+        Else Do
+           CALL MAKE_WHERELIST "", "AUTHID = ' '"
+         End
+        CALL MAKE_WHERELIST "LINKNAME", DB2_NAME1
+        CALL MAKE_WHERELIST "TYPE", DB2_NAME2
+    End
+   when DB2_LIST_OBJ = ""SYSIBMS".SYSDBRM" Then Do
+        CALL MAKE_WHERELIST "NAME", DB2_NAME1
+        CALL MAKE_WHERELIST "PLCREATOR", DB2_CREATOR2
+        CALL MAKE_WHERELIST "PLNAME", DB2_NAME2
+    End
+   Otherwise do
+        CALL MAKE_WHERELIST "CREATOR", DB2_CREATOR1
+        CALL MAKE_WHERELIST "NAME", DB2_NAME1
+    End
+ End
+
+WHERELIST_SAVE = WHERELIST
+TBCols   = "*"
+Call Get_Table_cols
+WHERELIST      = WHERELIST_SAVE
+Eingabe.0 = 1
+Eingabe.1 = "SELECT "TBCols" FROM "DB2_LIST_OBJ WHERELIST
+Eingabe.1 = Eingabe.1
+
+CALL EXECUTE_SQL_DYNAMIC
+Call OPEN_COLTB
+
+DDLTEXT = DDLTEXT "*UZ*"
+DDLTEXT = DDLTEXT || SUBSTR("COLName", 1, 26)
+DDLTEXT = DDLTEXT SUBSTR("Col Value", 1, 18)
+DDLTEXT = DDLTEXT "-NR"
+do Ai = 1 to Ausgabe.0
+   DO ci = 1 TO words(cols)
+      If Ausgabe.0 > 1 Then do
+         IVAL = "b=AUSGABE.ai." ||  SPACE(word(cols, CI))
+         INTERPRET IVAL
+       End
+      Else do
+         B=OUTSQLDA.CI.SQLDATA
+       End
+   /*
+      IVAL = "b=AUSGABE.ai." ||  SPACE(word(cols, CI))
+      IVAL = "B=OUTSQLDA.CI.SQLDATA"
+      INTERPRET IVAL
+      B=OUTSQLDA.CI.SQLDATA
+   */
+
+      L = Left(word(Cols, ci), 25) || ":"
+      if b = "" Then B = " "
+      do while length(b) > 0
+         LZEILE  = l Substr(b, 1, 45)
+         CALL ADD_TABLE_LUWTABLE
+         L = '..........................'
+         b = substr(b, 46)
+       End
+    END
+ END
+
+CALL CLOSE_CURSOR
+RETURN
+
+Get_Table_cols:
+
+CNR = 1
+SNR = CNR
+parse value DB2_LIST_OBJ with TB_Creator "." TB_Name .
+TB_CREATOR = 'SYSIBM'
+WHERELIST = ""
+CALL MAKE_WHERELIST "TBCREATOR", TB_Creator
+CALL MAKE_WHERELIST "TBNAME", TB_Name
+
+SQLSTMT    = "SELECT COLNO               " ,
+             "     , NAME                " ,
+             "     , COLTYPE                   " ,
+             "FROM  "SYSIBMS".SYSCOLUMNS       " ,
+             WHERELIST ,
+             "ORDER BY COLNO                   " ,
+             ""
+
+CALL OPEN_CURSOR
+
+Komma    = ""
+TBCols   = ""
+DO WHILE SQLCODE = 0
+   SQLTEXT = " FETCH C"CNR" INTO            ",
+             "      :COLNO         " ,
+             "   ,  :NAME          " ,
+             "   ,  :COLTYPE          " ,
+            ""
+   Call EXECUTE_SQL_TEXT
+   Select
+       When SQLCODE = 100 THEN DO
+            CALL CLOSE_CURSOR    /* CLOSE CURSOR */
+            LEAVE
+         End
+       When SQLCODE <  0  THEN DO
+            SAY "ERROR ON FETCH C"CNR", RC="RC ,
+                "SQLCODE="SQLCODE         ,
+                "SQLERRMC="SQLERRMC       ,
+                ""
+            Exit 8
+         End
+       Otherwise NOP
+    End
+
+   If COLTYPE = 'BLOB' Then DO
+      NAME = "HEX(CAST(" || NAME" AS BLOB(10K))) AS "NAME
+    End
+
+   TBCols   = TBCols || Komma || Name
+   Komma    = ","
+ END   /* END WHILE SQLCODE = 0 */
+DROP NAME COLNO COLTYPE
+RETURN
+
+LIST_SE:
+CNR = 5
+SNR = CNR
+
+WHERELIST    = ""
+CALL MAKE_WHERELIST "SCHEMA", DB2_CREATOR1
+CALL MAKE_WHERELIST "NAME", DB2_NAME1
+
+SQLSTMT   =  "SELECT SCHEMA           " ,
+             "     , NAME             " ,
+             "     , SEQTYPE          " ,
+             "     , SEQUENCEID       " ,
+             "     , INCREMENT        " ,
+             "     , DCREATOR         " ,
+             "     , DNAME            " ,
+             "     , DCOLNAME         " ,
+             "     , START            " ,
+             "     , MAXVALUE         " ,
+             "     , MINVALUE         " ,
+             "     , MAXASSIGNEDVAL   " ,
+             "     , CYCLE            " ,
+             "     , CACHE            " ,
+             "     , ORDER            " ,
+             "     , DATATYPEID       " ,
+             "     , SOURCETYPEID     " ,
+             "     , CREATEDTS        " ,
+             "     , ALTEREDTS        " ,
+             "     , PRECISION        " ,
+             "     , RESTARTWITH      " ,
+             "     , REMARKS          " ,
+             "FROM "SYSIBMS".SYSSEQUENCES SE" ,
+             "LEFT OUTER JOIN "SYSIBMS".SYSSEQUENCESDEP SDEP " ,
+             " ON  SE.SEQUENCEID  = SDEP.BSEQUENCEID " ,
+             WHERELIST ,
+             "ORDER BY 1, 2              " ,
+             ""
+
+CALL OPEN_CURSOR
+Call OPEN_COLTB
+
+DDLTEXT = DDLTEXT "*UZ*"
+DDLTEXT = DDLTEXT || SUBSTR("Sequence", 1, 30)
+DDLTEXT = DDLTEXT SUBSTR("T",   1, 1)
+DDLTEXT = DDLTEXT SUBSTR("ID",  1, 5)
+DDLTEXT = DDLTEXT SUBSTR("MINVAL",  1,11)
+DDLTEXT = DDLTEXT SUBSTR("MAXVAL",  1,11)
+DDLTEXT = DDLTEXT SUBSTR("NEXTVAL",  1,15)
+DDLTEXT = DDLTEXT "-NR"
+DO WHILE SQLCODE = 0
+   SQLTEXT =         " FETCH C"CNR" INTO            ",
+            "      :SCHEMA        " ,
+            "   ,  :NAME          " ,
+            "   ,  :SEQTYPE          " ,
+            "   ,  :SEQUENCEID       " ,
+            "   ,  :INCREMENT        " ,
+            "   ,  :DCREATOR  :DCI   " ,
+            "   ,  :DNAME     :DNI   " ,
+            "   ,  :DCOLNAME  :COI   " ,
+            "   ,  :START            " ,
+            "   ,  :MAXVALUE         " ,
+            "   ,  :MINVALUE         " ,
+            "   ,  :MAXASSIGNEDVAL :I1" ,
+            "   ,  :CYCLE            " ,
+            "   ,  :CACHE            " ,
+            "   ,  :ORDER            " ,
+            "   ,  :DATATYPEID       " ,
+            "   ,  :SOURCETYPEID     " ,
+            "   ,  :CREATE_TIME      " ,
+            "   ,  :ALTER_TIME       " ,
+            "   ,  :PRECISION        " ,
+            "   ,  :RESTARTWITH   :I2" ,
+            "   ,  :REMARKS       :I3" ,
+            ""
+    Call EXECUTE_SQL_TEXT
+
+    Select
+        When SQLCODE = 100 THEN DO
+             CALL CLOSE_CURSOR    /* CLOSE CURSOR */
+             LEAVE
+          End
+        When SQLCODE <> 0  THEN DO
+             SAY "ERROR ON FETCH C"CNR", RC="RC ,
+                 "SQLCODE="SQLCODE         ,
+                 "SQLERRMC="SQLERRMC       ,
+                 ""
+             Exit 8
+          End
+        Otherwise NOP
+     End
+
+   IF DCI < 0 THEN DCREATOR  = ""
+   IF DNI < 0 THEN DNAME     = ""
+   IF COI < 0 THEN DCOLNAME  = ""
+   IF I1  < 0 THEN MAXASSIGNEDVAL = ""
+   IF I2  < 0 THEN RESTARTWITH    = ""
+   IF I3  < 0 THEN REMARKS        = ""
+
+   LZEILE  = ''
+   LZEILE = LZEILE || SUBSTR(Strip(SCHEMA) || "." || ,
+                             Strip(NAME), 1, 30)
+   LZEILE = LZEILE SUBSTR(SEQTYPE,1, 1)
+   LZEILE = LZEILE SUBSTR(SEQUENCEID,1, 5)
+   LZEILE = LZEILE SUBSTR(MINVALUE, 1, 11)
+   LZEILE = LZEILE SUBSTR(MAXVALUE, 1, 11)
+   LZEILE = LZEILE SUBSTR(MAXASSIGNEDVAL, 1, 15)
+   LZEILE = strip(LZEILE)
+   CALL ADD_TABLE
+ END
+
+CALL CLOSE_CURSOR
+
+RETURN
+
+LIST_RT:
+CNR = 5
+SNR = CNR
+
+WHERELIST    = ""
+CALL MAKE_WHERELIST "SCHEMA", DB2_CREATOR1
+CALL MAKE_WHERELIST "NAME", DB2_NAME1
+CALL MAKE_WHERELIST "ROUTINEID", DB2_NAME2, "NUM"
+
+SQLSTMT   =  "SELECT SCHEMA    " ,
+             "     , NAME      " ,
+             "     , ROUTINETYPE      " ,
+             "     , SPECIFICNAME     " ,
+             "     , LANGUAGE         " ,
+             "     , ROUTINEID        " ,
+             "FROM "SYSIBMS".SYSROUTINES " ,
+             WHERELIST ,
+             "ORDER BY 1, 2              " ,
+             ""
+
+CALL OPEN_CURSOR
+Call OPEN_COLTB
+
+DDLTEXT = DDLTEXT "*UZ*"
+DDLTEXT = DDLTEXT || SUBSTR("ROUTINE", 1, 27)
+DDLTEXT = DDLTEXT SUBSTR("TP ",   1, 3)
+DDLTEXT = DDLTEXT SUBSTR("SPEC.NAME",   1, 25)
+DDLTEXT = DDLTEXT SUBSTR("LANG",  1, 8)
+DDLTEXT = DDLTEXT RIGHT("ID", 4, ' ')
+DDLTEXT = DDLTEXT "-NR"
+DO WHILE SQLCODE = 0
+   SQLTEXT =         " FETCH C"CNR" INTO            ",
+            "      :SCHEMA      ",
+            "   ,  :NAME               ",
+            "   ,  :ROUTINETYPE        ",
+            "   ,  :SPECIFICNAME       ",
+            "   ,  :LANGUAGE           " ,
+            "   ,  :ROUTINEID          " ,
+            ""
+    Call EXECUTE_SQL_TEXT
+
+    Select
+        When SQLCODE = 100 THEN DO
+             CALL CLOSE_CURSOR    /* CLOSE CURSOR */
+             LEAVE
+          End
+        When SQLCODE <> 0  THEN DO
+             SAY "ERROR ON FETCH C"CNR", RC="RC ,
+                 "SQLCODE="SQLCODE         ,
+                 "SQLERRMC="SQLERRMC       ,
+                 ""
+             Exit 8
+          End
+        Otherwise NOP
+     End
+
+   LZEILE  = ''
+   LZEILE = LZEILE || SUBSTR(Strip(SCHEMA) || "." || ,
+                             Strip(NAME), 1, 27)
+   LZEILE = LZEILE SUBSTR(ROUTINETYPE, 1, 3)
+   LZEILE = LZEILE SUBSTR(SPECIFICNAME, 1, 25)
+   LZEILE = LZEILE SUBSTR(LANGUAGE, 1,  8)
+   LZEILE = LZEILE RIGHT(ROUTINEID, 4, ' ')
+   LZEILE = strip(LZEILE)
+   CALL ADD_TABLE
+ END
+
+CALL CLOSE_CURSOR
+
+RETURN
+
+LIST_IX:
+
+WHERELIST    = ""
+CALL MAKE_WHERELIST "IX.CREATOR", DB2_CREATOR1
+CALL MAKE_WHERELIST "IX.NAME", DB2_NAME1
+CALL MAKE_WHERELIST "IX.TBCREATOR", DB2_CREATOR2
+CALL MAKE_WHERELIST "IX.TBNAME", DB2_NAME2
+CALL MAKE_WHERELIST "IX.DBNAME", DB2_DATABASE
+CALL MAKE_WHERELIST "IP.STORNAME", DB2_STORAGEGRP
+CALL MAKE_WHERELIST "TB.DBNAME", DB2_CREATOR3
+CALL MAKE_WHERELIST "TB.TSNAME", DB2_NAME3
+
+EINGABE.0  = 1
+EINGABE.1  = "SELECT  DISTINCT      " ,
+             "        IX.CREATOR    " ,
+             "      , IX.NAME       " ,
+             "      , IX.TBCREATOR  " ,
+             "      , IX.TBNAME     " ,
+             "      , IX.CLUSTERING " ,
+             "      , IX.CLUSTERED  " ,
+             "      , IX.UNIQUERULE " ,
+             "      , IX.BPOOL      " ,
+             "      , INT( IX.FULLKEYCARDF) AS FULLKEYCARD " ,
+             "      , IX.DBNAME     " ,
+             "      , IX.INDEXSPACE " ,
+             "FROM  "SYSIBMS".SYSINDEXES IX " ,
+             "INNER JOIN  "SYSIBMS".SYSINDEXPART IP" ,
+             " ON   IX.CREATOR   = IP.IXCREATOR " ,
+             " AND  IX.NAME      = IP.IXNAME    " ,
+             "INNER JOIN  "SYSIBMS".SYSTABLES TB" ,
+             " ON   IX.TBCREATOR   = TB.CREATOR " ,
+             " AND  IX.TBNAME      = TB.NAME    " ,
+             WHERELIST ,
+             "ORDER BY IX.CREATOR, IX.NAME" ,
+             ""
+
+CALL EXECUTE_SQL_DYNAMIC
+Call OPEN_COLTB
+
+DDLTEXT = DDLTEXT "*UZ*"
+DDLTEXT = DDLTEXT || SUBSTR("IXNAME", 1, 25)
+DDLTEXT = DDLTEXT || SUBSTR("TBNAME", 1, 25)
+DDLTEXT = DDLTEXT || SUBSTR("BPOOL", 1, 8)
+DDLTEXT = DDLTEXT || SUBSTR("U ", 1, 2)
+DDLTEXT = DDLTEXT || SUBSTR("CL", 1, 2)
+DDLTEXT = DDLTEXT || RIGHT("CARD", 8, ' ')
+DDLTEXT = DDLTEXT "-NR"
+DO I = 1 TO AUSGABE.0
+   LZEILE  = ''
+   XIXNAME = STRIP(AUSGABE.I.CREATOR) || '.' || AUSGABE.I.NAME
+   XTBNAME = STRIP(AUSGABE.I.TBCREATOR) || '.' || AUSGABE.I.TBNAME
+   LZEILE = LZEILE || SUBSTR(XIXNAME, 1, 25)
+   LZEILE = LZEILE || SUBSTR(XTBNAME, 1, 25)
+   LZEILE = LZEILE || SUBSTR(AUSGABE.i.BPOOL, 1, 8)
+   LZEILE = LZEILE || SUBSTR(AUSGABE.i.UNIQUERULE, 1, 2)
+   LZEILE = LZEILE || SUBSTR(AUSGABE.i.CLUSTERING || ,
+                             AUSGABE.i.CLUSTERED, 1, 2)
+   LZEILE = LZEILE || RIGHT(AUSGABE.i.FULLKEYCARD, 8, ' ')
+   CALL ADD_TABLE
+ END
+
+
+RETURN
+
+LIST_IP:
+
+WHERELIST    = ""
+CALL MAKE_WHERELIST "IP.IXCREATOR", DB2_CREATOR1
+CALL MAKE_WHERELIST "IP.IXNAME", DB2_NAME1
+CALL MAKE_WHERELIST "IX.TBCREATOR", DB2_CREATOR2
+CALL MAKE_WHERELIST "IX.TBNAME", DB2_NAME2
+
+EINGABE.0  = 1
+EINGABE.1  = "SELECT  IP.PARTITION                            " ,
+             "      , IP.IXNAME                               " ,
+             "      , IP.IXCREATOR                            " ,
+             "      , INT(IP.CARDF) AS CARDF                  " ,
+             "      , INT(IP.SPACEF) AS SPACEF                " ,
+             "      , IP.EXTENTS                              " ,
+             "      , STORNAME                                " ,
+             "      , VCATNAME                                " ,
+             "      , IX.DBNAME                               " ,
+             "      , IX.INDEXSPACE                           " ,
+             "     ,  CHAR(RTRIM(IP.VCATNAME)                        ",
+             "     CONCAT '.'                                        ",
+             "     CONCAT 'DSNDBC'                                   ",
+             "     CONCAT '.'                                        ",
+             "     CONCAT RTRIM(IX.DBNAME)                           ",
+             "     CONCAT '.'                                        ",
+             "     CONCAT RTRIM(IX.INDEXSPACE)                       ",
+             "     CONCAT '.'                                        ",
+             "     CONCAT RTRIM(IP.IPREFIX)                          ",
+             "     CONCAT '0001'                                     ",
+             "     CONCAT '.'                                        ",
+             "     CONCAT 'A'                                        ",
+             "     CONCAT CASE WHEN IP.PARTITION = 0 THEN '001'      ",
+             "                 ELSE                                  ",
+             "      CHAR(SUBSTR(DIGITS(INT(IP.PARTITION)), 8, 3), 3) ",
+             "                END                                    ",
+             "     , 44) AS VSAMDS                                   ",
+             "FROM  "SYSIBMS".SYSINDEXPART IP " ,
+             "INNER JOIN "SYSIBMS".SYSINDEXES IX" ,
+             " ON   IX.CREATOR   = IP.IXCREATOR ",
+             " AND  IX.NAME      = IP.IXNAME    ",
+             WHERELIST ,
+             "ORDER BY IP.IXCREATOR, IP.IXNAME, IP.PARTITION" ,
+             ""
+
+CALL EXECUTE_SQL_DYNAMIC
+Call OPEN_COLTB
+
+DDLTEXT = DDLTEXT "*UZ*"
+DDLTEXT = DDLTEXT || SUBSTR("IXNAME", 1, 25)
+DDLTEXT = DDLTEXT RIGHT("PART", 4, ' ')
+DDLTEXT = DDLTEXT RIGHT("CARD", 8, ' ')
+DDLTEXT = DDLTEXT LEFT("STORNAME", 8, ' ')
+DDLTEXT = DDLTEXT LEFT("VCAT", 8, ' ')
+DDLTEXT = DDLTEXT RIGHT("SPACE", 9, ' ')
+DDLTEXT = DDLTEXT RIGHT("EXT", 3, ' ')
+DDLTEXT = DDLTEXT "-NR"
+DO I = 1 TO AUSGABE.0
+   LZEILE  = ''
+   XIXNAME = STRIP(AUSGABE.I.IXCREATOR) || '.' || AUSGABE.I.IXNAME
+   LZEILE = LZEILE || SUBSTR(XIXNAME, 1, 25)
+   LZEILE = LZEILE RIGHT(AUSGABE.I.PARTITION, 4, ' ')
+   LZEILE = LZEILE RIGHT(AUSGABE.I.CARDF, 8, ' ')
+   LZEILE = LZEILE  LEFT(AUSGABE.i.STORNAME, 8, ' ')
+   LZEILE = LZEILE  LEFT(AUSGABE.i.VCATNAME, 8, ' ')
+   LZEILE = LZEILE RIGHT(AUSGABE.I.SPACEF, 9, ' ')
+   LZEILE = LZEILE RIGHT(AUSGABE.I.EXTENTS, 3, ' ')
+   CALL ADD_TABLE
+ END
+
+RETURN
+
+LIST_TP:
+
+WHERELIST    = ""
+CALL MAKE_WHERELIST "TP.DBNAME", DB2_CREATOR1
+CALL MAKE_WHERELIST "TP.TSNAME", DB2_NAME1
+
+EINGABE.0  = 1
+EINGABE.1  = "SELECT  TP.PARTITION                            " ,
+             "      , TP.DBNAME                               " ,
+             "      , TP.TSNAME                               " ,
+             "     ,  CHAR(RTRIM(TP.VCATNAME)                        ",
+             "     CONCAT '.'                                        ",
+             "     CONCAT 'DSNDBC'                                   ",
+             "     CONCAT '.'                                        ",
+             "     CONCAT RTRIM(TS.DBNAME)                           ",
+             "     CONCAT '.'                                        ",
+             "     CONCAT RTRIM(TS.NAME)                             ",
+             "     CONCAT '.'                                        ",
+             "     CONCAT RTRIM(TP.IPREFIX)                          ",
+             " CONCAT CHAR(SUBSTR(DIGITS(INT(TS.INSTANCE)), 7, 4), 4)",
+             "     CONCAT '.'                                        ",
+             "     CONCAT 'A'                                        ",
+             "     CONCAT CASE WHEN TP.PARTITION = 0 THEN '001'      ",
+             "                 ELSE                                  ",
+             "      CHAR(SUBSTR(DIGITS(INT(TP.PARTITION)), 8, 3), 3) ",
+             "                END                                    ",
+             "      , 44) AS VSAMDS                                  ",
+             "      , COMPRESS                                " ,
+             "      , INT(TP.CARDF)  AS CARDF                 " ,
+             "      , INT(TP.SPACEF) AS SPACEF                " ,
+             "      , STORNAME, VCATNAME                      " ,
+             "      , PQTY * 4 AS PQTY                        " ,
+             "      , SQTY * 4 AS SQTY                        " ,
+             "FROM  "SYSIBMS".SYSTABLEPART TP " ,
+             "INNER JOIN "SYSIBMS".SYSTABLESPACE TS ",
+             " ON   TS.DBNAME   = TP.DBNAME     ",
+             " AND  TS.NAME     = TP.TSNAME     ",
+             WHERELIST ,
+             "ORDER BY TP.DBNAME, TP.TSNAME, TP.PARTITION" ,
+             ""
+
+CALL EXECUTE_SQL_DYNAMIC
+Call OPEN_COLTB
+
+DDLTEXT = DDLTEXT "*UZ*"
+DDLTEXT = DDLTEXT || SUBSTR("TSNAME", 1, 23)
+DDLTEXT = DDLTEXT RIGHT("PART", 4, ' ')
+DDLTEXT = DDLTEXT RIGHT("CARD", 9, ' ')
+DDLTEXT = DDLTEXT RIGHT("SPACE", 9, ' ')
+DDLTEXT = DDLTEXT RIGHT("PQTY", 8, ' ')
+DDLTEXT = DDLTEXT RIGHT("SQTY", 8, ' ')
+DDLTEXT = DDLTEXT RIGHT("CMP", 3, ' ')
+DDLTEXT = DDLTEXT "-NR"
+DO I = 1 TO AUSGABE.0
+   LZEILE  = ''
+   XTSNAME = STRIP(AUSGABE.I.DBNAME) || '.' || AUSGABE.I.TSNAME
+   LZEILE = LZEILE || SUBSTR(XTSNAME, 1, 23)
+   LZEILE = LZEILE RIGHT(AUSGABE.I.PARTITION, 4, ' ')
+   LZEILE = LZEILE RIGHT(AUSGABE.I.CARDF, 9, ' ')
+   LZEILE = LZEILE RIGHT(AUSGABE.I.SPACEF, 9, ' ')
+   LZEILE = LZEILE RIGHT(AUSGABE.i.PQTY    , 8, ' ')
+   LZEILE = LZEILE RIGHT(AUSGABE.i.SQTY    , 8, ' ')
+   LZEILE = LZEILE RIGHT(AUSGABE.i.COMPRESS, 3, ' ')
+   CALL ADD_TABLE
+ END
+
+
+RETURN
+
+LIST_CK:
+
+WHERELIST    = ""
+CALL MAKE_WHERELIST "TBOWNER", DB2_CREATOR1
+CALL MAKE_WHERELIST "TBNAME", DB2_NAME1
+CALL MAKE_WHERELIST "CHECKNAME", DB2_NAME2
+
+EINGABE.0  = 1
+EINGABE.1  = "SELECT T1.TBOWNER               ",
+             "     , T1.TBNAME                ",
+             "     , T1.CHECKNAME             ",
+             "     , T1.CREATOR               ",
+             "     , T1.DBID                  ",
+             "     , T1.OBID                  ",
+             "     , T1.TIMESTAMP             ",
+             "     , T1.RBA                   ",
+             "     , T1.IBMREQD               ",
+             "     , T1.CHECKCONDITION        ",
+             "     , T1.RELCREATED            ",
+             "     , T1.ENVID                 ",
+             "FROM  "SYSIBMS".SYSCHECKS T1 " ,
+             WHERELIST ,
+             "ORDER BY T1.TBOWNER, T1.TBNAME, T1.CHECKNAME " ,
+             ""
+
+CALL EXECUTE_SQL_DYNAMIC
+Call OPEN_COLTB
+
+DDLTEXT = DDLTEXT "*UZ*"
+DDLTEXT = DDLTEXT || SUBSTR("TABLE-Name", 1, 35)
+DDLTEXT = DDLTEXT || SUBSTR("Checkname", 1, 25)
+DDLTEXT = DDLTEXT || SUBSTR("Creator", 1, 8)
+DDLTEXT = DDLTEXT || RIGHT("DBID", 5, ' ')
+DDLTEXT = DDLTEXT || RIGHT("OBID", 5, ' ')
+DDLTEXT = DDLTEXT "-NR"
+DO I = 1 TO AUSGABE.0
+   LZEILE  = ''
+   XTBNAME = STRIP(AUSGABE.I.TBOWNER) || '.' || AUSGABE.I.TBNAME
+   LZEILE = LZEILE || SUBSTR(XTBNAME, 1, 35)
+   LZEILE = LZEILE || SUBSTR(AUSGABE.i.CHECKNAME, 1, 25)
+   LZEILE = LZEILE || SUBSTR(AUSGABE.i.CREATOR, 1, 8)
+   LZEILE = LZEILE || RIGHT(AUSGABE.i.DBID, 5, ' ')
+   LZEILE = LZEILE || RIGHT(AUSGABE.i.OBID, 5, ' ')
+   CALL ADD_TABLE
+ END
+
+
+RETURN
+
+LIST_KC:
+
+WHERELIST    = ""
+CALL MAKE_WHERELIST "KC.IXCREATOR", DB2_CREATOR1
+CALL MAKE_WHERELIST "KC.IXNAME", DB2_NAME1
+CALL MAKE_WHERELIST "IX.TBCREATOR", DB2_CREATOR2
+CALL MAKE_WHERELIST "IX.TBNAME", DB2_NAME2
+CALL MAKE_WHERELIST "TB.DBNAME", DB2_CREATOR3
+CALL MAKE_WHERELIST "TB.TSNAME", DB2_NAME3
+
+EINGABE.0  = 1
+EINGABE.1  = "SELECT KC.IXNAME                ",
+             "     , KC.IXCREATOR             ",
+             "     , KC.COLNAME               ",
+             "     , KC.COLNO                 ",
+             "     , KC.COLSEQ                ",
+             "     , KC.ORDERING              ",
+             "     , IX.TBCREATOR             ",
+             "     , IX.TBNAME                ",
+             "     , IX.ISOBID                ",
+             "     , CO.COLTYPE               ",
+             "     , CO.LENGTH                " ,
+             "     , CO.SCALE                 " ,
+             "     , CO.COLCARD               " ,
+             "     , INT(CO.COLCARDF) AS COLCARD " ,
+             "     , CO.NULLS                 " ,
+             "     , CO.DEFAULT               " ,
+             "FROM  "SYSIBMS".SYSKEYS KC " ,
+             "INNER JOIN "SYSIBMS".SYSINDEXES IX ",
+             "ON  KC.IXCREATOR  = IX.CREATOR  ",
+             "AND KC.IXNAME     = IX.NAME     ",
+             "INNER JOIN "SYSIBMS".SYSCOLUMNS CO ",
+             "ON  IX.TBCREATOR  = CO.TBCREATOR  ",
+             "AND IX.TBNAME     = CO.TBNAME     ",
+             "AND KC.COLNAME    = CO.NAME       ",
+             "INNER JOIN "SYSIBMS".SYSTABLES TB ",
+             "ON  IX.TBCREATOR  = TB.CREATOR    ",
+             "AND IX.TBNAME     = TB.NAME       ",
+             WHERELIST ,
+             "ORDER BY TB.CREATOR, TB.NAME      " ,
+             "       , KC.IXCREATOR, KC.IXNAME, KC.COLSEQ" ,
+             ""
+
+CALL EXECUTE_SQL_DYNAMIC
+Call OPEN_COLTB
+
+DDLTEXT = DDLTEXT "*UZ*"
+DDLTEXT = DDLTEXT || RIGHT("ISOB", 4, ' ')
+DDLTEXT = DDLTEXT RIGHT("SEQ", 3, ' ')
+DDLTEXT = DDLTEXT SUBSTR("O", 1, 1)
+DDLTEXT = DDLTEXT SUBSTR("Colname", 1, 25)
+DDLTEXT = DDLTEXT SUBSTR("Coltype", 1, 10)
+DDLTEXT = DDLTEXT RIGHT("Len", 9, ' ')
+DDLTEXT = DDLTEXT RIGHT("ColCardf", 9, ' ')
+DDLTEXT = DDLTEXT SUBSTR("ND", 1, 2)
+DDLTEXT = DDLTEXT "-NR"
+DO I = 1 TO AUSGABE.0
+   If AUSGABE.I.TYPENAME = 'DECIMAL' Then do
+        Len = AUSGABE.I.LENGTH || "," AUSGABE.I.Scale
+    End
+   Else Do
+        Len = AUSGABE.I.LENGTH
+    End
+   LZEILE  = ''
+   LZEILE = LZEILE || Right(AUSGABE.i.ISOBID, 4, ' ')
+   LZEILE = LZEILE Right(AUSGABE.i.ColSeq, 3, ' ')
+   LZEILE = LZEILE SUBSTR(AUSGABE.i.ORDERING, 1)
+   LZEILE = LZEILE SUBSTR(AUSGABE.i.COLNAME, 1, 25)
+   LZEILE = LZEILE SUBSTR(AUSGABE.i.COLTYPE, 1, 10)
+   LZEILE = LZEILE RIGHT(LEN, 9, ' ')
+   LZEILE = LZEILE Right(AUSGABE.I.COLCARD,  9, ' ')
+   LZEILE = LZEILE SUBSTR(AUSGABE.I.NULLS  ,  1, 1)
+   LZEILE = LZEILE || SUBSTR(AUSGABE.I.DEFAULT,  1, 1)
+   CALL ADD_TABLE
+ END
+
+
+RETURN
+
+LIST_SR:
+
+WHERELIST    = ""
+
+CALL MAKE_WHERELIST "CHAR(OUTCCSID)", DB2_CREATOR1
+CALL MAKE_WHERELIST "CHAR(INCCSID)", DB2_NAME1
+
+EINGABE.0  = 1
+EINGABE.1  = "SELECT INCCSID              " ,
+             "     , OUTCCSID             " ,
+             "     , TRANSTYPE            " ,
+             "     , ERRORBYTE            " ,
+             "     , SUBBYTE              " ,
+             "     , TRANSPROC            " ,
+             "     , IBMREQD              " ,
+             "     , TRANSTAB             " ,
+             "FROM  "SYSIBMS".SYSSTRINGS T1 " ,
+             WHERELIST ,
+             "ORDER BY INCCSID, OUTCCSID " ,
+             ""
+
+CALL EXECUTE_SQL_DYNAMIC
+Call OPEN_COLTB
+
+DDLTEXT = DDLTEXT "*UZ*"
+DDLTEXT = DDLTEXT || SUBSTR("Source", 1, 6)
+DDLTEXT = DDLTEXT || SUBSTR("Target", 1, 6)
+DDLTEXT = DDLTEXT || SUBSTR("Ty", 1, 2)
+DDLTEXT = DDLTEXT || SUBSTR("E", 1, 1)
+DDLTEXT = DDLTEXT || SUBSTR("S", 1, 1)
+DDLTEXT = DDLTEXT || SUBSTR("Proc ", 1, 8)
+DDLTEXT = DDLTEXT || SUBSTR("Tab ", 1, 50)
+DDLTEXT = DDLTEXT "-NR"
+DO I = 1 TO AUSGABE.0
+   LZEILE  = ''
+   LZEILE = LZEILE || SUBSTR(Ausgabe.i.Inccsid, 1, 6)
+   LZEILE = LZEILE || SUBSTR(Ausgabe.i.Outccsid, 1, 6)
+   LZEILE = LZEILE || SUBSTR(AUSGABE.i.Transtype, 1, 2)
+   LZEILE = LZEILE || SUBSTR(AUSGABE.i.Errorbyte, 1, 1)
+   LZEILE = LZEILE || SUBSTR(AUSGABE.i.Subbyte, 1, 1)
+   LZEILE = LZEILE || SUBSTR(AUSGABE.i.Transproc, 1, 8)
+   LZEILE = LZEILE || RIGHT(AUSGABE.i.Transtab, 50, ' ')
+   CALL ADD_TABLE
+ END
+
+
+RETURN
+
+LIST_VW:
+
+WHERELIST    = ""
+CALL MAKE_WHERELIST "DCREATOR", DB2_CREATOR1
+CALL MAKE_WHERELIST "DNAME", DB2_NAME1
+CALL MAKE_WHERELIST "BCREATOR", DB2_CREATOR2
+CALL MAKE_WHERELIST "BNAME", DB2_NAME2
+/* CALL MAKE_WHERELIST "", "BTYPE = 'V'" */
+
+EINGABE.0  = 1
+EINGABE.1 =  "SELECT DCREATOR, DNAME, BTYPE, " ,
+                    "BCREATOR, BNAME " ,
+             "FROM "SYSIBMS".SYSVIEWDEP " ,
+             WHERELIST ,
+             "ORDER BY DCREATOR, DNAME" ,
+             ""
+
+CALL EXECUTE_SQL_DYNAMIC
+Call OPEN_COLTB
+
+DDLTEXT = DDLTEXT "*UZ*"
+DDLTEXT = DDLTEXT || SUBSTR("VIEW NAME", 1, 30)
+DDLTEXT = DDLTEXT SUBSTR("TY ", 1, 3)
+DDLTEXT = DDLTEXT || SUBSTR("BNAME", 1, 30)
+DDLTEXT = DDLTEXT "-NR"
+DO I = 1 TO AUSGABE.0
+   LZEILE  = ''
+   XTBNAME = STRIP(AUSGABE.I.DCREATOR) || '.' || ,
+             AUSGABE.I.DNAME
+   LZEILE = LZEILE || SUBSTR(XTBNAME, 1, 30)
+   LZEILE = LZEILE SUBSTR(AUSGABE.I.BTYPE, 1, 3)
+   XTBNAME = STRIP(AUSGABE.I.BCREATOR) || '.' || ,
+             AUSGABE.I.BNAME
+   LZEILE = LZEILE || SUBSTR(XTBNAME, 1, 30)
+   CALL ADD_TABLE
+ END
+
+RETURN
+
+
+LIST_TG:
+
+WHERELIST    = ""
+CALL MAKE_WHERELIST "SCHEMA", DB2_CREATOR1
+CALL MAKE_WHERELIST "NAME", DB2_NAME1
+CALL MAKE_WHERELIST "TBOWNER", DB2_CREATOR2
+CALL MAKE_WHERELIST "TBNAME", DB2_NAME2
+
+EINGABE.0  = 1
+EINGABE.1  = "SELECT  NAME, SCHEMA, TBNAME, TBOWNER " ,
+             "      , TRIGTIME, TRIGEVENT, TRIGNAME " ,
+             "      , GRANULARITY, CREATEDTS        " ,
+             "FROM  "SYSIBMS".SYSTRIGGERS " ,
+             WHERELIST ,
+             "ORDER BY SCHEMA, NAME" ,
+             ""
+
+CALL EXECUTE_SQL_DYNAMIC
+Call OPEN_COLTB
+
+DDLTEXT = DDLTEXT "*UZ*"
+DDLTEXT = DDLTEXT || SUBSTR("TRIGGER NAME ", 1, 27)
+DDLTEXT = DDLTEXT || SUBSTR("TABLE NAME", 1, 27)
+DDLTEXT = DDLTEXT SUBSTR("T", 1, 1)
+DDLTEXT = DDLTEXT SUBSTR("E", 1, 1)
+DDLTEXT = DDLTEXT SUBSTR("G", 1, 1)
+DDLTEXT = DDLTEXT SUBSTR("TS", 1, 20)
+DDLTEXT = DDLTEXT "-NR"
+
+DO I = 1 TO AUSGABE.0
+   LZEILE  = ''
+   XTBNAME = STRIP(AUSGABE.I.SCHEMA) || '.' || ,
+             AUSGABE.I.NAME
+   LZEILE = LZEILE || SUBSTR(XTBNAME, 1, 27)
+   XTBNAME = STRIP(AUSGABE.I.TBOWNER) || '.' || ,
+             AUSGABE.I.TBNAME
+   LZEILE = LZEILE || SUBSTR(XTBNAME, 1, 27)
+   LZEILE = LZEILE SUBSTR(AUSGABE.I.TRIGTIME, 1, 1)
+   LZEILE = LZEILE SUBSTR(AUSGABE.I.TRIGEVENT, 1, 1)
+   LZEILE = LZEILE SUBSTR(AUSGABE.I.GRANULARITY, 1, 1)
+   LZEILE = LZEILE SUBSTR(AUSGABE.I.CREATEDTS, 1, 20)
+   CALL ADD_TABLE
+ END
+
+RETURN
+
+LIST_FK:
+
+WHERELIST    = ""
+CALL MAKE_WHERELIST "T1.CREATOR", DB2_CREATOR1
+CALL MAKE_WHERELIST "T1.TBNAME", DB2_NAME1
+
+EINGABE.0  = 1
+EINGABE.1 =  "SELECT CREATOR            ",
+             "    ,  TBNAME             ",
+             "    ,  RELNAME            ",
+             "    ,  REFTBCREATOR       ",
+             "    , REFTBNAME           ",
+             "    , DELETERULE          ",
+             " FROM "SYSIBMS".SYSRELS T1 ",
+             WHERELIST  ,
+             " ORDER BY TIMESTAMP,RELOBID1,RELOBID2"
+
+CALL EXECUTE_SQL_DYNAMIC
+Call OPEN_COLTB
+
+DDLTEXT = DDLTEXT "*UZ*"
+DDLTEXT = DDLTEXT || LEFT("TABLE NAME", 27)
+DDLTEXT = DDLTEXT || LEFT("Foreign key", 18)
+DDLTEXT = DDLTEXT || LEFT("PARENT TABLE", 27)
+DDLTEXT = DDLTEXT LEFT("DEL", 3)
+DDLTEXT = DDLTEXT LEFT("UPD", 3)
+DDLTEXT = DDLTEXT "-NR"
+DO I = 1 TO AUSGABE.0
+   LZEILE  = ''
+   TEMP = STRIP(AUSGABE.I.CREATOR)'.'STRIP(AUSGABE.I.TBNAME)
+   LZEILE = LZEILE || LEFT(TEMP, 27)
+
+   LZEILE = LZEILE || LEFT(AUSGABE.I.RELNAME, 18)
+
+   TEMP = STRIP(AUSGABE.I.REFTBCREATOR)'.'STRIP(AUSGABE.I.REFTBNAME)
+   LZEILE = LZEILE || LEFT(TEMP, 27)
+
+   LZEILE = LZEILE LEFT(AUSGABE.I.DELETERULE, 3)
+   LZEILE = LZEILE LEFT(AUSGABE.I.UPDATERULE, 3)
+   CALL ADD_TABLE
+ END
+
+RETURN
+
+LIST_DT:
+
+WHERELIST    = ""
+CALL MAKE_WHERELIST "SCHEMA", DB2_CREATOR1
+CALL MAKE_WHERELIST "NAME", DB2_NAME1
+
+EINGABE.0  = 1
+EINGABE.1  = "SELECT  SCHEMA, NAME, CREATEDBY, SOURCESCHEMA" ,
+             "      , SOURCETYPE, METATYPE, DATATYPEID, SOURCETYPEID" ,
+             "      , LENGTH, SCALE, SUBTYPE " ,
+             "FROM  "SYSIBMS".SYSDATATYPES " ,
+             WHERELIST ,
+             "ORDER BY SCHEMA, NAME" ,
+             ""
+
+CALL EXECUTE_SQL_DYNAMIC
+Call OPEN_COLTB
+
+DDLTEXT = DDLTEXT "*UZ*"
+DDLTEXT = DDLTEXT || SUBSTR("TYPE NAME", 1, 27)
+DDLTEXT = DDLTEXT LEFT("CREA-BY", 8)
+DDLTEXT = DDLTEXT SUBSTR("M", 1, 1)
+DDLTEXT = DDLTEXT RIGHT("TYID",4,' ')
+DDLTEXT = DDLTEXT RIGHT("STID",4,' ')
+DDLTEXT = DDLTEXT RIGHT("LEN",9,' ')
+DDLTEXT = DDLTEXT RIGHT("SCALE",5,' ')
+DDLTEXT = DDLTEXT "-NR"
+DO I = 1 TO AUSGABE.0
+   LZEILE  = ''
+   XTBNAME = STRIP(AUSGABE.I.SCHEMA) || '.' || ,
+             AUSGABE.I.NAME
+   LZEILE = LZEILE || SUBSTR(XTBNAME, 1, 27)
+   LZEILE = LZEILE LEFT(AUSGABE.I.CREATEDBY, 8)
+   LZEILE = LZEILE SUBSTR(AUSGABE.I.METATYPE, 1, 1)
+   LZEILE = LZEILE RIGHT(AUSGABE.I.DATATYPEID,4,' ')
+   LZEILE = LZEILE RIGHT(AUSGABE.I.SOURCETYPEID,4,' ')
+   LZEILE = LZEILE RIGHT(AUSGABE.I.LENGTH,9,' ')
+   LZEILE = LZEILE RIGHT(AUSGABE.I.SCALE,5,' ')
+   CALL ADD_TABLE
+ END
+
+RETURN
+
+LIST_SY:
+
+WHERELIST    = ""
+CALL MAKE_WHERELIST "CREATOR", DB2_CREATOR1
+CALL MAKE_WHERELIST "NAME", DB2_NAME1
+CALL MAKE_WHERELIST "TBCREATOR", DB2_CREATOR2
+CALL MAKE_WHERELIST "TBNAME", DB2_NAME2
+
+EINGABE.0  = 1
+EINGABE.1 =  "SELECT CREATOR, NAME     "  ,
+             "     , TBCREATOR, TBNAME "  ,
+             "     , CREATEDTS         "  ,
+             "FROM "SYSIBMS".SYSSYNONYMS T2 ",
+             WHERELIST ,
+             "ORDER BY CREATOR, NAME" ,
+             ""
+
+CALL EXECUTE_SQL_DYNAMIC
+Call OPEN_COLTB
+
+DDLTEXT = DDLTEXT "*UZ*"
+DDLTEXT = DDLTEXT || SUBSTR("SYNONYM ", 1, 35)
+DDLTEXT = DDLTEXT || SUBSTR("TABLE", 1, 35)
+DDLTEXT = DDLTEXT "-NR"
+DO I = 1 TO AUSGABE.0
+   LZEILE  = ''
+   XTBNAME = STRIP(AUSGABE.I.CREATOR) || '.' || ,
+             AUSGABE.I.NAME
+   LZEILE = LZEILE || SUBSTR(XTBNAME, 1, 35)
+   XTBNAME = STRIP(AUSGABE.I.TBCREATOR) || '.' || ,
+             AUSGABE.I.TBNAME
+   LZEILE = LZEILE || SUBSTR(XTBNAME, 1, 35)
+   CALL ADD_TABLE
+ END
+
+
+RETURN
+
+LIST_UA:
+
+WHERELIST    = ""
+CALL MAKE_WHERELIST "TCREATOR", DB2_CREATOR1
+CALL MAKE_WHERELIST "TTNAME", DB2_NAME1
+
+EINGABE.0  = 1
+EINGABE.1  = "SELECT GRANTOR            " ,
+             "    ,  GRANTEE            " ,
+             "    ,  GRANTEETYPE        " ,
+             "    ,  DBNAME             " ,
+             "    ,  SCREATOR           " ,
+             "    ,  STNAME             " ,
+             "    ,  TCREATOR           " ,
+             "    ,  TTNAME             " ,
+             "    ,  AUTHHOWGOT         " ,
+             "    ,  TIMESTAMP          " ,
+             "    ,  UPDATECOLS         " ,
+             "    ,  ALTERAUTH          " ,
+             "    ,  DELETEAUTH         " ,
+             "    ,  INDEXAUTH          " ,
+             "    ,  INSERTAUTH         " ,
+             "    ,  SELECTAUTH         " ,
+             "    ,  UPDATEAUTH         " ,
+             "    ,  IBMREQD            " ,
+             "    ,  GRANTEELOCATION    " ,
+             "    ,  LOCATION           " ,
+             "    ,  COLLID             " ,
+             "    ,  CONTOKEN           " ,
+             "    ,  CAPTUREAUTH        " ,
+             "    ,  REFERENCESAUTH     " ,
+             "    ,  REFCOLS            " ,
+             "    ,  GRANTEDTS          " ,
+             "    ,  TRIGGERAUTH        " ,
+             "    ,  GRANTORTYPE        " ,
+             "FROM "SYSIBMS".SYSTABAUTH TA " ,
+             WHERELIST ,
+             "ORDER BY TCREATOR, TTNAME" ,
+             ""
+
+CALL EXECUTE_SQL_DYNAMIC
+Call OPEN_COLTB
+
+DDLTEXT = DDLTEXT "*UZ*"
+DDLTEXT = DDLTEXT || LEFT("NAME ", 27)
+DDLTEXT = DDLTEXT LEFT("GRANTOR", 8)
+DDLTEXT = DDLTEXT LEFT("GRANTEE", 8)
+DDLTEXT = DDLTEXT LEFT("GT", 2)
+DDLTEXT = DDLTEXT LEFT("SE", 2)
+DDLTEXT = DDLTEXT LEFT("IN", 2)
+DDLTEXT = DDLTEXT LEFT("UP", 2)
+DDLTEXT = DDLTEXT LEFT("DE", 2)
+DDLTEXT = DDLTEXT LEFT("CN", 2)
+DDLTEXT = DDLTEXT LEFT("AL", 2)
+DDLTEXT = DDLTEXT LEFT("IX", 2)
+DDLTEXT = DDLTEXT LEFT("RF", 2)
+DDLTEXT = DDLTEXT "-NR"
+DO I = 1 TO AUSGABE.0
+   LZEILE  = ''
+   XTBNAME = STRIP(AUSGABE.I.TCREATOR) || '.' || ,
+             AUSGABE.I.TTNAME
+   LZEILE = LZEILE || LEFT(XTBNAME, 27)
+   LZEILE = LZEILE LEFT(AUSGABE.I.GRANTOR, 8)
+   LZEILE = LZEILE LEFT(AUSGABE.I.GRANTEE, 8)
+   LZEILE = LZEILE LEFT(AUSGABE.I.GRANTEETYPE, 2)
+   LZEILE = LZEILE LEFT(AUSGABE.I.SELECTAUTH, 2)
+   LZEILE = LZEILE LEFT(AUSGABE.I.INSERTAUTH, 2)
+   LZEILE = LZEILE LEFT(AUSGABE.I.UPDATEAUTH, 2)
+   LZEILE = LZEILE LEFT(AUSGABE.I.DELETEAUTH, 2)
+   LZEILE = LZEILE LEFT(AUSGABE.I.CONTROLAUTH, 2)
+   LZEILE = LZEILE LEFT(AUSGABE.I.ALTERAUTH, 2)
+   LZEILE = LZEILE LEFT(AUSGABE.I.INDEXAUTH, 2)
+   LZEILE = LZEILE LEFT(AUSGABE.I.REFAUTH, 2)
+   CALL ADD_TABLE
+ END
+
+
+RETURN
+
+
+LIST_PL:
+
+WHERELIST = ""
+CALL MAKE_WHERELIST "CREATOR", DB2_CREATOR1
+CALL MAKE_WHERELIST "NAME", DB2_NAME1
+FROMLIST = FROMLIST "FROM "SYSIBMS".SYSPLAN T1" ,
+
+
+EINGABE.0   = 1
+EINGABE.1  = "SELECT  DISTINCT" ,
+             "        NAME" ,
+             "      , CREATOR" ,
+             "      , BINDDATE" ,
+             "      , VALIDATE  " ,
+             "      , ISOLATION " ,
+             "      , VALID" ,
+             "      , OPERATIVE" ,
+             "      , BINDTIME" ,
+             "      , PLSIZE" ,
+             "      , AVGSIZE" ,
+             "      , BOUNDBY" ,
+             "      , QUALIFIER" ,
+             "      , DEGREE" ,
+             "      , BOUNDTS" ,
+             "      , REOPTVAR" ,
+             "      , KEEPDYNAMIC" ,
+             FROMLIST ,
+             WHERELIST ,
+             "ORDER BY NAME, CREATOR " ,
+             ""
+
+CALL EXECUTE_SQL_DYNAMIC
+Call OPEN_COLTB
+
+DDLTEXT = DDLTEXT "*UZ*"
+DDLTEXT = DDLTEXT LEFT("PLNAME", 20, ' ')
+DDLTEXT = DDLTEXT LEFT("V", 1, ' ')
+DDLTEXT = DDLTEXT LEFT("O", 1, ' ')
+DDLTEXT = DDLTEXT LEFT("QALIF", 8, ' ')
+DDLTEXT = DDLTEXT LEFT("BINDDATE", 10, ' ')
+DO I = 1 TO AUSGABE.0
+
+   PLNAME = STRIP(AUSGABE.I.CREATOR) || '.' || ,
+            STRIP(AUSGABE.I.NAME)
+   LZEILE  = ''
+   LZEILE  = LZEILE  || LEFT(PLNAME, 20, ' ')
+   LZEILE  = LZEILE  LEFT(AUSGABE.I.VALID, 1, ' ')
+   LZEILE  = LZEILE  LEFT(AUSGABE.I.OPERATIVE,1, ' ')
+   LZEILE  = LZEILE  LEFT(AUSGABE.I.QUALIFIER,8, ' ')
+   LZEILE  = LZEILE  LEFT(AUSGABE.I.BINDDATE, 10, ' ')
+   CALL ADD_TABLE
+
+ END /* END DO I = 1 TO DDLTEXT */
+
+
+RETURN
+
+LIST_DBRM:
+
+WHERELIST = ""
+CALL MAKE_WHERELIST "NAME", DB2_NAME1
+CALL MAKE_WHERELIST "PLCREATOR", DB2_CREATOR2
+CALL MAKE_WHERELIST "PLNAME", DB2_NAME2
+
+
+EINGABE.0   = 1
+EINGABE.1  = "SELECT NAME            " ,
+             "    ,  TIMESTAMP       " ,
+             "    ,  PDSNAME         " ,
+             "    ,  PLNAME          " ,
+             "    ,  PLCREATOR       " ,
+             "    ,  PRECOMPTIME     " ,
+             "    ,  PRECOMPDATE     " ,
+             "    ,  QUOTE           " ,
+             "    ,  COMMA           " ,
+             "    ,  HOSTLANG        " ,
+             "    ,  IBMREQD         " ,
+             "    ,  CHARSET         " ,
+             "    ,  MIXED           " ,
+             "    ,  DEC31           " ,
+             "    ,  VERSION         " ,
+             "    ,  PRECOMPTS       " ,
+             "    ,  PLCREATORTYPE   " ,
+             "    ,  RELCREATED      " ,
+             "FROM "SYSIBMS".SYSDBRM " ,
+             WHERELIST ,
+             "ORDER BY NAME          " ,
+             ""
+
+CALL EXECUTE_SQL_DYNAMIC
+Call OPEN_COLTB
+
+DDLTEXT = DDLTEXT "*UZ*"
+DDLTEXT = DDLTEXT LEFT("NAME", 15, ' ')
+DDLTEXT = DDLTEXT LEFT("PCREATOR", 8, ' ')
+DDLTEXT = DDLTEXT LEFT("PNAME", 8, ' ')
+DDLTEXT = DDLTEXT LEFT("VERSION", 8, ' ')
+DDLTEXT = DDLTEXT LEFT("PCTIME", 8, ' ')
+DDLTEXT = DDLTEXT LEFT("PCDATE", 6, ' ')
+DO I = 1 TO AUSGABE.0
+
+   LZEILE  = ''
+   LZEILE  = LZEILE  || LEFT(AUSGABE.I.NAME, 15, ' ')
+   LZEILE  = LZEILE  LEFT(AUSGABE.I.PLCREATOR, 8, ' ')
+   LZEILE  = LZEILE  LEFT(AUSGABE.I.PLNAME,8, ' ')
+   LZEILE  = LZEILE  LEFT(AUSGABE.I.VERSION,8, ' ')
+   LZEILE  = LZEILE  LEFT(AUSGABE.I.PRECOMPTIME, 8, ' ')
+   LZEILE  = LZEILE  LEFT(AUSGABE.I.PRECOMPDATE, 6, ' ')
+   CALL ADD_TABLE
+
+ END /* END DO I = 1 TO DDLTEXT */
+
+
+RETURN
+
+
+LIST_PG:
+
+WHERELIST = ""
+FROMLIST  = ""
+CALL MAKE_WHERELIST "", "LOCATION = ''"
+CALL MAKE_WHERELIST "COLLID", DB2_CREATOR1
+CALL MAKE_WHERELIST "NAME", DB2_NAME1
+
+FROMLIST = FROMLIST "FROM  "SYSIBMS".SYSPACKAGE T1"
+IF LENGTH(STRIP(DB2_CREATOR2)) > 0 ,
+ | LENGTH(STRIP(DB2_NAME2)) > 0 ,
+ | LENGTH(STRIP(DB2_TABLESPACE)) > 0 ,
+ | LENGTH(STRIP(DB2_DATABASE)) > 0  THEN DO
+   FROMLIST = FROMLIST "    , "SYSIBMS".SYSPACKDEP T2"
+   CALL MAKE_WHERELIST "", "DCOLLID = COLLID"
+   CALL MAKE_WHERELIST "", "DNAME   = NAME"
+   IF LENGTH(DB2_CREATOR2) > 0 ,
+    | LENGTH(DB2_NAME2) > 0 THEN DO
+      CALL MAKE_WHERELIST "",  "BTYPE IN ('A', 'S', 'V', 'T', 'I')"
+      CALL MAKE_WHERELIST "BQUALIFIER", DB2_CREATOR2
+      CALL MAKE_WHERELIST "BNAME", DB2_NAME2
+    END
+   IF LENGTH(DB2_TABLESPACE) > 0 ,
+    | LENGTH(DB2_DATABASE) > 0 THEN DO
+      CALL MAKE_WHERELIST "", "BTYPE IN ('P', 'R')"
+      CALL MAKE_WHERELIST "BQUALIFIER", DB2_DATABASE
+      CALL MAKE_WHERELIST "BNAME", DB2_TABLESPACE
+    END
+
+ END
+
+EINGABE.0   = 1
+EINGABE.1  = "SELECT  LOCATION ",
+             "      , COLLID " ,
+             "      , NAME" ,
+             "      , VERSION" ,
+             "      , VALID  " ,
+             "      , TYPE   " ,
+             "      , BINDTIME",
+             "      , OPERATIVE ",
+             "      , OWNER" ,
+             "      , QUALIFIER" ,
+             "      , CONTOKEN " ,
+             "      , EXPLAIN  " ,
+              FROMLIST ,
+              WHERELIST ,
+             "ORDER BY COLLID, NAME" ,
+             ""
+
+CALL EXECUTE_SQL_DYNAMIC
+Call OPEN_COLTB
+
+DDLTEXT = " "
+DDLTEXT = DDLTEXT "*UZ*"
+DDLTEXT = DDLTEXT LEFT("PGNAME", 20, ' ')
+DDLTEXT = DDLTEXT LEFT("VERSION", 15, ' ')
+DDLTEXT = DDLTEXT LEFT("TY", 2, ' ')
+DDLTEXT = DDLTEXT LEFT("V", 1, ' ')
+DDLTEXT = DDLTEXT LEFT("O", 1, ' ')
+DDLTEXT = DDLTEXT LEFT("OWNER", 8, ' ')
+DDLTEXT = DDLTEXT LEFT("BINDDATE", 10, ' ')
+DDLTEXT = DDLTEXT LEFT("EXP", 3, ' ')
+DO I = 1 TO AUSGABE.0
+
+   PGNAME = STRIP(AUSGABE.I.LOCATION)
+   IF PGNAME <> '' THEN PGNAME = PGNAME || '.'
+   PGNAME = STRIP(PGNAME) || STRIP(AUSGABE.I.COLLID) || "." || ,
+                             STRIP(AUSGABE.I.NAME)
+   LZEILE  = ''
+   LZEILE  = LZEILE  || LEFT(PGNAME, 20, ' ')
+   LZEILE  = LZEILE  LEFT(AUSGABE.I.VERSION, 15, ' ')
+   LZEILE  = LZEILE  LEFT(AUSGABE.I.TYPE, 2, ' ')
+   LZEILE  = LZEILE  LEFT(AUSGABE.I.VALID, 1, ' ')
+   LZEILE  = LZEILE  LEFT(AUSGABE.I.OPERATIVE,1, ' ')
+   LZEILE  = LZEILE  LEFT(AUSGABE.I.OWNER,8, ' ')
+   LZEILE  = LZEILE  LEFT(AUSGABE.I.BINDTIME, 10, ' ')
+   LZEILE  = LZEILE  LEFT(AUSGABE.I.EXPLAIN, 3, ' ')
+   CALL ADD_TABLE
+
+ END /* END DO I = 1 TO DDLTEXT */
+
+RETURN
+
+LIST_COLS:
+
+WHERELIST = ""
+CALL MAKE_WHERELIST "NAME", DB2_NAME1
+CALL MAKE_WHERELIST "TBCREATOR", DB2_CREATOR2
+CALL MAKE_WHERELIST "TBNAME", DB2_NAME2
+
+EINGABE.0   = 1
+EINGABE.1  = "SELECT TBCREATOR       " ,
+             "     , TBNAME          " ,
+             "     , COLNO           " ,
+             "     , NAME            " ,
+             "     , COLTYPE         " ,
+             "     , LENGTH          " ,
+             "     , SCALE           " ,
+             "     , NULLS           " ,
+             "     , DEFAULT         " ,
+             "     , HIDDEN                    " ,
+             "     , INT(COLCARDF) AS COLCARD " ,
+             "     , KEYSEQ                    " ,
+             "     , PARTKEY_COLSEQ            " ,
+             "     , PARTKEY_ORDERING          " ,
+             "     , LENGTH2                   " ,
+             "FROM  "SYSIBMS".SYSCOLUMNS       " ,
+             WHERELIST ,
+             "ORDER BY TBCREATOR, TBNAME, COLNO" ,
+             ""
+
+CALL EXECUTE_SQL_DYNAMIC
+Call OPEN_COLTB
+
+DDLTEXT = " "
+DDLTEXT = DDLTEXT "*UZ*"
+DDLTEXT = DDLTEXT RIGHT("NR ", 3, ' ')
+DDLTEXT = DDLTEXT LEFT("COLNAME", 17, ' ')
+DDLTEXT = DDLTEXT LEFT("TYPE", 8, ' ')
+DDLTEXT = DDLTEXT RIGHT("LENG", 8, ' ')
+DDLTEXT = DDLTEXT SUBSTR("N", 1, 1)
+DDLTEXT = DDLTEXT SUBSTR("D", 1, 1)
+DDLTEXT = DDLTEXT SUBSTR("H", 1, 1)
+DDLTEXT = DDLTEXT SUBSTR("COLCARD", 1, 7)
+DDLTEXT = DDLTEXT SUBSTR("KSEQ", 1, 4)
+DDLTEXT = DDLTEXT SUBSTR("PARCO", 1, 5)
+DDLTEXT = DDLTEXT SUBSTR("PO", 1, 2)
+DDLTEXT = DDLTEXT "-NR"
+DO I = 1 TO AUSGABE.0
+   If Pos('LOB', AUSGABE.I.COLTYPE, 1) > 0 Then do
+      LEN = STRIP(AUSGABE.I.LENGTH2)
+    End
+   Else Do
+      LEN = STRIP(AUSGABE.I.LENGTH)
+      IF AUSGABE.I.COLTYPE = 'DECIMAL' THEN DO
+         LEN = STRIP(AUSGABE.I.LENGTH) || ,
+               ',' || ,
+               STRIP(AUSGABE.I.SCALE)
+       END
+    End
+   IF AUSGABE.I.DEFAULT = 'D' THEN AUSGABE.I.NULLS = 'D'
+
+   LZEILE = ''
+   LZEILE = LZEILE || RIGHT(AUSGABE.I.COLNO, 3, '0')
+   LZEILE = LZEILE LEFT(AUSGABE.I.NAME, 17)
+   LZEILE = LZEILE LEFT(AUSGABE.I.COLTYPE, 8)
+   LZEILE = LZEILE RIGHT(LEN, 8)
+   LZEILE = LZEILE STRIP(AUSGABE.I.NULLS)
+   LZEILE = LZEILE STRIP(AUSGABE.I.DEFAULT)
+   LZEILE = LZEILE STRIP(AUSGABE.I.HIDDEN)
+   LZEILE = LZEILE RIGHT(AUSGABE.I.COLCARD, 7, ' ')
+   LZEILE = LZEILE RIGHT(AUSGABE.I.KEYSEQ, 4, ' ')
+   LZEILE = LZEILE RIGHT(AUSGABE.I.PARTKEY_COLSEQ, 5, ' ')
+   LZEILE = LZEILE RIGHT(AUSGABE.I.PARTKEY_ORDERING, 2, ' ')
+   CALL ADD_TABLE
+ END /* END DO I = 1 TO DDLTEXT */
+RETURN
+
+LIST_LU:
+
+WHERELIST = ""
+CALL MAKE_WHERELIST "LU.LUNAME", DB2_NAME1
+
+EINGABE.0   = 1
+EINGABE.1  = "SELECT  LU.LUNAME        ",
+             "      , LU.SYSMODENAME   ",
+             "      , LU.SECURITY_IN   ",
+             "      , LU.SECURITY_OUT  ",
+             "      , LU.ENCRYPTPSWDS  ",
+             "      , LU.MODESELECT    ",
+             "      , LU.USERNAMES     ",
+             "      , LU.GENERIC       ",
+             "FROM "SYSIBMS".LUNAMES LU",
+              WHERELIST ,
+             "ORDER BY LU.LUNAME       " ,
+             ""
+
+CALL EXECUTE_SQL_DYNAMIC
+Call OPEN_COLTB
+
+DDLTEXT = " "
+DDLTEXT = DDLTEXT "*UZ*"
+DDLTEXT = DDLTEXT LEFT("LUNAME", 12, ' ')
+DDLTEXT = DDLTEXT LEFT("MODENAME", 12, ' ')
+DDLTEXT = DDLTEXT LEFT("SECI", 4, ' ')
+DDLTEXT = DDLTEXT LEFT("SECO", 4, ' ')
+DDLTEXT = DDLTEXT LEFT("ENCPWD", 6, ' ')
+DDLTEXT = DDLTEXT LEFT("MODE", 4, ' ')
+DDLTEXT = DDLTEXT LEFT("UNAME", 5, ' ')
+DDLTEXT = DDLTEXT LEFT("GEN", 3, ' ')
+DDLTEXT = DDLTEXT "-NR"
+DO I = 1 TO AUSGABE.0
+   LZEILE = ''
+   LZEILE = LZEILE || LEFT(AUSGABE.I.LUNAME, 12, ' ')
+   LZEILE = LZEILE LEFT(AUSGABE.I.SYSMODENAME, 12, ' ')
+   LZEILE = LZEILE LEFT(AUSGABE.I.SECURITY_IN, 4, ' ')
+   LZEILE = LZEILE LEFT(AUSGABE.I.SECURITY_OUT, 4, ' ')
+   LZEILE = LZEILE LEFT(AUSGABE.I.ENCRYPTPSWDS, 6, ' ')
+   LZEILE = LZEILE LEFT(AUSGABE.I.MODESELECT, 4, ' ')
+   LZEILE = LZEILE LEFT(AUSGABE.I.USERNAMES, 5, ' ')
+   LZEILE = LZEILE LEFT(AUSGABE.I.GENERIC, 3, ' ')
+   CALL ADD_TABLE
+ END /* END DO I = 1 TO DDLTEXT */
+RETURN
+
+LIST_LO:
+
+WHERELIST = ""
+CALL MAKE_WHERELIST "LO.LINKNAME", DB2_CREATOR1
+CALL MAKE_WHERELIST "LO.LOCATION", DB2_NAME1
+
+EINGABE.0   = 1
+EINGABE.1  = "SELECT  LO.LOCATION      ",
+             "      , LO.LINKNAME      ",
+             "      , LO.IBMREQD       ",
+             "      , LO.PORT          ",
+             "      , LO.TPN           ",
+             "      , LO.DBALIAS       ",
+             "      , LO.TRUSTED       ",
+             "      , LO.SECURE        ",
+             "      , IP.IPADDR        ",
+             "FROM "SYSIBMS".LOCATIONS LO",
+             "INNER JOIN "SYSIBMS".IPNAMES IP",
+             "  ON  LO.LINKNAME = IP.LINKNAME ",
+              WHERELIST ,
+             "ORDER BY LO.LOCATION     " ,
+             ""
+
+CALL EXECUTE_SQL_DYNAMIC
+Call OPEN_COLTB
+
+DDLTEXT = " "
+DDLTEXT = DDLTEXT "*UZ*"
+DDLTEXT = DDLTEXT LEFT("LOCATION", 12, ' ')
+DDLTEXT = DDLTEXT LEFT("LINKNAME", 12, ' ')
+DDLTEXT = DDLTEXT RIGHT("PORT", 5, ' ')
+DDLTEXT = DDLTEXT LEFT("TPN", 8, ' ')
+DDLTEXT = DDLTEXT LEFT("DBALIAS", 8, ' ')
+DDLTEXT = DDLTEXT LEFT("TR", 2, ' ')
+DDLTEXT = DDLTEXT LEFT("SC", 2, ' ')
+DDLTEXT = DDLTEXT LEFT("IPADDR", 15, ' ')
+DDLTEXT = DDLTEXT "-NR"
+DO I = 1 TO AUSGABE.0
+   LZEILE = ''
+   LZEILE = LZEILE || LEFT(AUSGABE.I.LOCATION, 12, ' ')
+   LZEILE = LZEILE LEFT(AUSGABE.I.LINKNAME, 12, ' ')
+   LZEILE = LZEILE RIGHT(AUSGABE.I.PORT, 5, '0')
+   LZEILE = LZEILE LEFT(AUSGABE.I.TPN, 8, ' ')
+   LZEILE = LZEILE LEFT(AUSGABE.I.DBALIAS, 8, ' ')
+   LZEILE = LZEILE LEFT(AUSGABE.I.TRUSTED, 2, ' ')
+   LZEILE = LZEILE LEFT(AUSGABE.I.SECURE, 2, ' ')
+   LZEILE = LZEILE LEFT(AUSGABE.I.IPADDR, 15, ' ')
+   CALL ADD_TABLE
+ END /* END DO I = 1 TO DDLTEXT */
+RETURN
+
+LIST_IPN:
+
+WHERELIST = ""
+CALL MAKE_WHERELIST "IP.IPADDR", DB2_CREATOR1
+CALL MAKE_WHERELIST "IP.LINKNAME", DB2_NAME1
+
+EINGABE.0   = 1
+EINGABE.1  = "SELECT  IP.LINKNAME      ",
+             "      , IP.SECURITY_OUT  ",
+             "      , IP.USERNAMES     ",
+             "      , IP.IPADDR        ",
+             "FROM "SYSIBMS".IPNAMES IP",
+              WHERELIST ,
+             "ORDER BY IP.LINKNAME     " ,
+             ""
+
+CALL EXECUTE_SQL_DYNAMIC
+Call OPEN_COLTB
+
+DDLTEXT = " "
+DDLTEXT = DDLTEXT "*UZ*"
+DDLTEXT = DDLTEXT LEFT("LINKNAME", 20, ' ')
+DDLTEXT = DDLTEXT LEFT("IPADDR", 30, ' ')
+DDLTEXT = DDLTEXT LEFT("SECOUT", 6, ' ')
+DDLTEXT = DDLTEXT LEFT("USERNAMES", 9, ' ')
+DDLTEXT = DDLTEXT "-NR"
+DO I = 1 TO AUSGABE.0
+   LZEILE = ''
+   LZEILE = LZEILE || LEFT(AUSGABE.I.LINKNAME, 20, ' ')
+   LZEILE = LZEILE LEFT(AUSGABE.I.IPADDR, 30, ' ')
+   LZEILE = LZEILE LEFT(AUSGABE.I.SECURITY_OUT, 6, ' ')
+   LZEILE = LZEILE LEFT(AUSGABE.I.USERNAMES, 9, ' ')
+   CALL ADD_TABLE
+ END /* END DO I = 1 TO DDLTEXT */
+RETURN
+
+LIST_UN:
+
+WHERELIST = ""
+CALL MAKE_WHERELIST "UN.AUTHID", DB2_CREATOR1
+CALL MAKE_WHERELIST "UN.LINKNAME", DB2_NAME1
+
+EINGABE.0   = 1
+EINGABE.1  = "SELECT  UN.TYPE          ",
+             "      , UN.AUTHID        ",
+             "      , UN.LINKNAME      ",
+             "      , UN.NEWAUTHID     ",
+             "      , UN.PASSWORD      ",
+             "FROM "SYSIBMS".USERNAMES UN",
+              WHERELIST ,
+             "ORDER BY UN.LINKNAME     " ,
+             ""
+
+CALL EXECUTE_SQL_DYNAMIC
+Call OPEN_COLTB
+
+DDLTEXT = " "
+DDLTEXT = DDLTEXT "*UZ*"
+DDLTEXT = DDLTEXT LEFT("T", 1, ' ')
+DDLTEXT = DDLTEXT LEFT("AUTHID", 12, ' ')
+DDLTEXT = DDLTEXT LEFT("LINKNAME", 15, ' ')
+DDLTEXT = DDLTEXT LEFT("NEWAUTHID ", 15, ' ')
+DDLTEXT = DDLTEXT LEFT("PASSWORD ", 20, ' ')
+DDLTEXT = DDLTEXT "-NR"
+DO I = 1 TO AUSGABE.0
+   LZEILE = ''
+   LZEILE = LZEILE || LEFT(AUSGABE.I.TYPE, 1, ' ')
+   LZEILE = LZEILE LEFT(AUSGABE.I.AUTHID, 12, ' ')
+   LZEILE = LZEILE LEFT(AUSGABE.I.LINKNAME, 15, ' ')
+   LZEILE = LZEILE LEFT(AUSGABE.I.NEWAUTHID, 15, ' ')
+   LZEILE = LZEILE LEFT(AUSGABE.I.PASSWORD, 20, ' ')
+   CALL ADD_TABLE
+ END /* END DO I = 1 TO DDLTEXT */
+RETURN
+
+LIST_IC:
+
+WHERELIST = ""
+CALL MAKE_WHERELIST "IC.DBNAME", DB2_CREATOR1
+CALL MAKE_WHERELIST "iC.TSNAME", DB2_NAME1
+
+EINGABE.0   = 1
+EINGABE.1  = "SELECT  DBNAME        ",
+             "      , TSNAME        ",
+             "      , TIMESTAMP     ",
+             "      , DSNUM         ",
+             "      , ICTYPE        ",
+             "      , ICDATE        ",
+             "      , START_RBA     ",
+             "      , FILESEQNO     ",
+             "      , DEVTYPE       ",
+             "      , IBMREQD       ",
+             "      , DSNAME        ",
+             "      , ICTIME        ",
+             "      , SHRLEVEL      ",
+             "      , DSVOLSER      ",
+             "      , ICBACKUP      ",
+             "      , ICUNIT        ",
+             "      , STYPE         ",
+             "      , PIT_RBA       ",
+             "      , GROUP_MEMBER  ",
+             "      , OTYPE         ",
+             "      , LOWDSNUM      ",
+             "      , HIGHDSNUM     ",
+             "      , COPYPAGESF    ",
+             "      , NPAGESF       ",
+             "      , CPAGESF       ",
+             "      , JOBNAME       ",
+             "      , AUTHID        ",
+             "      , OLDEST_VERSION",
+             "      , LOGICAL_PART  ",
+             "      , LOGGED        ",
+             "      , TTYPE         ",
+             "      , INSTANCE      ",
+             "      , RELCREATED    ",
+             "FROM "SYSIBMS".SYSCOPY IC" ,
+              WHERELIST ,
+             "ORDER BY IC.DBNAME, IC.TSNAME, IC.TIMESTAMP DESC",
+             ""
+
+CALL EXECUTE_SQL_DYNAMIC
+Call OPEN_COLTB
+
+DDLTEXT = " "
+DDLTEXT = DDLTEXT "*UZ*"
+DDLTEXT = DDLTEXT LEFT("TY", 2, ' ')
+DDLTEXT = DDLTEXT LEFT("DBNAME", 8, ' ')
+DDLTEXT = DDLTEXT LEFT("TSNAME", 8, ' ')
+DDLTEXT = DDLTEXT LEFT("T", 1, ' ')
+DDLTEXT = DDLTEXT LEFT("ST", 2, ' ')
+DDLTEXT = DDLTEXT LEFT("TIMESTAMP", 19, ' ')
+DDLTEXT = DDLTEXT LEFT("VOLSER", 6, ' ')
+DDLTEXT = DDLTEXT RIGHT("SEQ", 4, ' ')
+DDLTEXT = DDLTEXT RIGHT("DSNU", 4, ' ')
+DDLTEXT = DDLTEXT LEFT("JOBNAME", 8, ' ')
+DDLTEXT = DDLTEXT "-NR"
+DO I = 1 TO AUSGABE.0
+   Select
+     When AUSGABE.I.OTYPE  = "I" THEN  AUSGABE.I.OTYPE = "IX"
+     Otherwise                         AUSGABE.I.OTYPE = "TS"
+    End
+
+   LZEILE = ''
+   LZEILE = LZEILE || LEFT(AUSGABE.I.OTYPE, 2, ' ')
+   LZEILE = LZEILE LEFT(AUSGABE.I.DBNAME, 8, ' ')
+   LZEILE = LZEILE LEFT(AUSGABE.I.TSNAME, 8, ' ')
+   LZEILE = LZEILE LEFT(AUSGABE.I.ICTYPE, 1, ' ')
+   LZEILE = LZEILE LEFT(AUSGABE.I.STYPE, 2, ' ')
+   LZEILE = LZEILE LEFT(AUSGABE.I.TIMESTAMP, 19, ' ')
+   LZEILE = LZEILE LEFT(AUSGABE.I.DSVOLSER, 6, ' ')
+   LZEILE = LZEILE RIGHT(AUSGABE.I.FILESEQNO, 4, ' ')
+   LZEILE = LZEILE RIGHT(AUSGABE.I.DSNUM, 4, ' ')
+   LZEILE = LZEILE RIGHT(AUSGABE.I.JOBNAME, 8, ' ')
+   CALL ADD_TABLE
+ END /* END DO I = 1 TO DDLTEXT */
+RETURN
+
+LIST_RO:
+
+WHERELIST = ""
+CALL MAKE_WHERELIST "RO.DEFINER", DB2_CREATOR1
+CALL MAKE_WHERELIST "RO.NAME", DB2_NAME1
+
+EINGABE.0   = 1
+EINGABE.1  = "SELECT   NAME         ",
+             "      ,  DEFINER      ",
+             "      ,  DEFINERTYPE  ",
+             "      ,  CREATEDTS    ",
+             "      ,  RELCREATED   ",
+             "      ,  REMARKS      ",
+             "FROM "SYSIBMS".SYSROLES RO" ,
+              WHERELIST ,
+             "ORDER BY RO.NAME       " ,
+             ""
+
+CALL EXECUTE_SQL_DYNAMIC
+Call OPEN_COLTB
+
+DDLTEXT = " "
+DDLTEXT = DDLTEXT "*UZ*"
+DDLTEXT = DDLTEXT LEFT("DEFINER", 8, ' ')
+DDLTEXT = DDLTEXT LEFT("NAME  ", 30, ' ')
+DDLTEXT = DDLTEXT LEFT("T", 1, ' ')
+DDLTEXT = DDLTEXT "-NR"
+DO I = 1 TO AUSGABE.0
+
+   LZEILE = ''
+   LZEILE = LZEILE || LEFT(AUSGABE.I.DEFINER, 8, ' ')
+   LZEILE = LZEILE LEFT(AUSGABE.I.NAME, 30, ' ')
+   LZEILE = LZEILE LEFT(AUSGABE.I.ICTYPE, 1, ' ')
+   LZEILE = LZEILE LEFT(AUSGABE.I.DEFINERTYPE, 1, ' ')
+   CALL ADD_TABLE
+ END /* END DO I = 1 TO DDLTEXT */
+RETURN
+
+LIST_STMT:
+
+WHERELIST = ""
+CALL MAKE_WHERELIST "PLCREATOR", DB2_CREATOR1
+CALL MAKE_WHERELIST "PLNAME", DB2_NAME1
+CALL MAKE_WHERELIST "VERSION", SUCH2
+
+EINGABE.0   = 1
+EINGABE.1  = "SELECT PLCREATOR, PLNAME " ,
+                  ", STMTNO, SECTNO, SEQNO, TEXT" ,
+             "FROM  "SYSIBMS".SYSSTMT " ,
+             WHERELIST ,
+             "ORDER BY 1, 2, 3, 4 " ,
+             ""
+
+CALL EXECUTE_SQL_DYNAMIC
+Call OPEN_COLTB
+
+DDLTEXT = " "
+DDLTEXT = DDLTEXT "*UZ*"
+DDLTEXT = DDLTEXT SUBSTR("PKG NAME", 1, 18)
+DDLTEXT = DDLTEXT SUBSTR("STMTNO", 1, 6)
+DDLTEXT = DDLTEXT SUBSTR("STMT", 1, 44)
+DDLTEXT = DDLTEXT "-NR"
+DO I = 1 TO AUSGABE.0
+   LZEILE  = ''
+   TEMP = STRIP(AUSGABE.I.PLCREATOR)||'.'||STRIP(AUSGABE.I.PLNAME)
+   LZEILE = LZEILE || LEFT(TEMP, 18)
+   LZEILE = LZEILE LEFT(AUSGABE.I.STMTNO, 6)
+   LZEILE = LZEILE LEFT(AUSGABE.I.TEXT, LENGTH(AUSGABE.I.TEXT))
+   CALL ADD_TABLE
+ END /* END DO I = 1 TO DDLTEXT */
+RETURN
+
+LIST_BP:
+
+AUSGABE.0 = 0
+DB2_NAME1  = Strip(TRANSLATE(DB2_NAME1, '*', '%'))
+SQLSTMT    = "",
+             " CALL "SYSPROCA".ADMIN_COMMAND_DB2 ( " ,
+             " '-DISPLAY BUFFERPOOL (" || DB2_NAME1 || ") ' " ,
+             " ,   200                           " ,
+             " ,   'BP'                          " ,
+             " ,   '"DB2_SSID"'                  " ,
+             " ,   200                           " ,
+             " ,   0                             " ,
+             " ,   0                             " ,
+             " ,   0                             " ,
+             " ,   0                             " ,
+             " ,   0                             " ,
+             " ,   0                             " ,
+             " ,   ''                            " ,
+             " )                                 " ,
+             " ;                                 " ,
+             ""
+
+CALL Stored_Procedure
+Call OPEN_COLTB
+
+DDLTEXT = " "
+DDLTEXT = DDLTEXT "*UZ*"
+DDLTEXT = DDLTEXT SUBSTR("ROWN", 1, 3)
+DDLTEXT = DDLTEXT SUBSTR("BPNAME", 1, 7)
+DDLTEXT = DDLTEXT SUBSTR("VPSZ", 1, 7)
+DDLTEXT = DDLTEXT SUBSTR("VPSQ", 1, 4)
+DDLTEXT = DDLTEXT SUBSTR("VPPS", 1, 4)
+DDLTEXT = DDLTEXT SUBSTR("VPXP", 1, 4)
+DDLTEXT = DDLTEXT SUBSTR("DWQT   ", 1, 4)
+DDLTEXT = DDLTEXT SUBSTR("PCTV", 1, 4)
+DDLTEXT = DDLTEXT SUBSTR("ABSV", 1, 4)
+DDLTEXT = DDLTEXT SUBSTR("PGST", 1, 5)
+DDLTEXT = DDLTEXT SUBSTR("ID     ", 1, 3)
+DDLTEXT = DDLTEXT SUBSTR("UCNT   ", 1, 4)
+DDLTEXT = DDLTEXT SUBSTR("PGF", 1, 3)
+DDLTEXT = DDLTEXT SUBSTR("AR", 1, 3)
+DDLTEXT = DDLTEXT "-NR"
+DO I = 1 TO AUSGABE.0
+   LZEILE  = ''
+   LZEILE = LZEILE || LEFT(AUSGABE.I.ROWNUM, 3)
+   LZEILE = LZEILE LEFT(AUSGABE.I.BPNAME,  7)
+   LZEILE = LZEILE LEFT(AUSGABE.I.VPSIZE,  7)
+   LZEILE = LZEILE RIGHT(AUSGABE.I.VPSEQT,  4, ' ')
+   LZEILE = LZEILE RIGHT(AUSGABE.I.VPPSEQT, 4)
+   LZEILE = LZEILE RIGHT(AUSGABE.I.VPXPSEQT  , 4, ' ')
+   LZEILE = LZEILE RIGHT(AUSGABE.I.DWQT      , 4, ' ')
+   LZEILE = LZEILE RIGHT(AUSGABE.I.PCT_VDWQT , 4, ' ')
+   LZEILE = LZEILE RIGHT(AUSGABE.I.ABS_VDWQT , 4, ' ')
+   LZEILE = LZEILE LEFT(AUSGABE.I.PGSTEAL   , 5)
+   LZEILE = LZEILE RIGHT(AUSGABE.I.ID        , 3, ' ')
+   LZEILE = LZEILE RIGHT(AUSGABE.I.USE_COUNT , 4, ' ')
+   LZEILE = LZEILE LEFT(AUSGABE.I.PGFIX     , 3)
+   LZEILE = LZEILE LEFT(AUSGABE.I.AUTOSIZE  , 3)
+   CALL ADD_TABLE
+ END /* END DO I = 1 TO DDLTEXT */
+RETURN
+
+LIST_SSI:
+
+AUSGABE.0 = 0
+SQLSTMT    = "",
+             "CALL "SYSPROCA".ADMIN_INFO_HOST(   " ,
+             "   "INR"                           " ,
+             ",   ''                             " ,
+             ",   0                              " ,
+             ",   ''                             " ,
+             "    )                              " ,
+             ";                                  " ,
+             ""
+
+CALL Stored_Procedure
+Call OPEN_COLTB
+
+DDLTEXT = " "
+DDLTEXT = DDLTEXT "*UZ*"
+DDLTEXT = DDLTEXT SUBSTR("ROWNUM", 1, 6)
+DDLTEXT = DDLTEXT SUBSTR("DB2_MEMBER", 1, 10)
+DDLTEXT = DDLTEXT SUBSTR("HOSTNAME", 1, 20)
+DDLTEXT = DDLTEXT "-NR"
+DO I = 1 TO AUSGABE.0
+   LZEILE  = ''
+   LZEILE = LZEILE || LEFT(AUSGABE.I.ROWNUM, 6)
+   LZEILE = LZEILE substr(AUSGABE.I.DB2_MEMBER, 1, 10)
+   LZEILE = LZEILE substr(AUSGABE.I.HOSTNAME, 1, 20)
+   CALL ADD_TABLE
+ END /* END DO I = 1 TO DDLTEXT */
+RETURN
+
+
+EXECUTE_SQL_DYNAMIC:
+
+If datatype(CNR) <> "NUM" Then CNR = 1
+If datatype(SNR) <> "NUM" Then SNR = CNR
+
+DO STI = 1 TO EINGABE.0
+   SQLSTMT = EINGABE.STI
+   SQLSTMT = SPACE(SQLSTMT, 1)
+   SQLSTMT = SQLSTMT MaxFetch "FOR FETCH ONLY WITH UR "
+
+   IF WORD(SQLSTMT, 1) = "CONNECT" & WORD(SQLSTMT, 2) = "TO" THEN DO
+      SQLTEXT =  " "SQLSTMT
+      Call EXECUTE_SQL_TEXT
+      IF SQLCODE <> 0 THEN DO
+         SAY "ERROR IN"SQLSTMT "SQLCODE: " SQLCODE
+       END
+      ITERATE
+    END
+
+   If DB2_EDITSQL = "Y" | DB2_EDITSQL = "J" Then do
+      SQLSTMT = Edit_SQL(SQLSTMT)
+      DB2_EDITSQL = 'N'
+    End
+
+   SQLTEXT =         " CLOSE C"CNR" "
+   Call EXECUTE_SQL_TEXT
+   SQLTEXT =  " DECLARE              C"CNR" CURSOR FOR S"SNR
+   Call EXECUTE_SQL_TEXT
+   IF SQLCODE <> 0 THEN DO
+      SAY "A3 DECLARE     SQLCODE="SQLCODE
+      SAY SQLSTMT
+    END
+   SQLTEXT =  " PREPARE              S"SNR" FROM :SQLSTMT"
+   Call EXECUTE_SQL_TEXT
+   IF SQLCODE <> 0 THEN DO
+      SAY "A3 PREPARE     SQLCODE="SQLCODE
+      SAY SQLSTMT
+    END
+   SQLTEXT =  " DESCRIBE S"SNR" INTO :OUTSQLDA"
+   Call EXECUTE_SQL_TEXT
+   IF SQLCODE <> 0 THEN DO
+      SAY "A3 DESCRIBE    SQLCODE="SQLCODE
+      SAY SQLSTMT
+    END
+
+   COLS   = ""
+   RXCOLS = ""
+   if datatype(OUTSQLDA.SQLD) = NUM THEN DO CI = 1 TO OUTSQLDA.SQLD
+      cols   = cols OUTSQLDA.CI.SQLNAME
+      rxcols = rxcols  SPACE(RXDB2_PUTSTEM, 0) || I || "." ||  ,
+                       SPACE(OUTSQLDA.CI.SQLNAME, 0)
+    End
+
+   SQLTEXT =  " OPEN C"CNR""
+   Call EXECUTE_SQL_TEXT
+   IF SQLCODE <> 0 THEN DO
+      SAY "A3 OPEN        SQLCODE="SQLCODE
+      SAY SQLSTMT
+    END
+   IVAL = VALUE(SPACE(RXDB2_PUTSTEM, 0) || 0) "= 0"
+   INTERPRET  IVAL
+   call Fetch_Dynamic_data
+ END
+
+RETURN
+
+Fetch_Dynamic_data:
+
+   DO WHILE SQLCODE = 0
+      SQLTEXT =  " FETCH C"CNR" USING DESCRIPTOR :OUTSQLDA"
+      Call EXECUTE_SQL_TEXT
+      IF SQLCODE <> 0 THEN LEAVE
+      IVAL = "IVAL_I = " VALUE(SPACE(RXDB2_PUTSTEM, 0) || 0) "+ 1"
+      INTERPRET  IVAL
+      IVAL = SPACE(RXDB2_PUTSTEM, 0) || 0  " = IVAL_I"
+      INTERPRET  IVAL
+      DO CI = 1 TO OUTSQLDA.SQLD
+         /* AUSGABE.1.DBNAME = "DSNDB07"   */
+         IVAL = VALUE(SPACE(RXDB2_PUTSTEM, 0) || IVAL_I) || "." ||  ,
+                SPACE(OUTSQLDA.CI.SQLNAME, 0)
+         INTERPRET IVAL"=OUTSQLDA.CI.SQLDATA"
+
+         IVAL = value(SPACE(OUTSQLDA.CI.SQLNAME, 0))
+       END
+    END
+
+Return
+
+Stored_Procedure:
+
+rexx_sqltype.0   = 27
+REXX_SQLTYPE.1   = "384 DATE               10 "
+REXX_SQLTYPE.2   = "388 TIME                8 "
+REXX_SQLTYPE.3   = "392 TIMESTAMP          26 "
+REXX_SQLTYPE.4   = "396 DATALINK              "
+REXX_SQLTYPE.5   = "404 BLOB                  "
+REXX_SQLTYPE.6   = "408 CLOB                  "
+REXX_SQLTYPE.7   = "412 DBCLOB                "
+REXX_SQLTYPE.8   = "448 VARCHAR               "
+REXX_SQLTYPE.9   = "452 CHAR                  "
+REXX_SQLTYPE.10  = "456 LONGVARCHAR           "
+REXX_SQLTYPE.11  = "464 VARGRAPHIC            "
+REXX_SQLTYPE.12  = "468 GRAPHIC               "
+REXX_SQLTYPE.13  = "472 LONGVARGRAPHIC        "
+REXX_SQLTYPE.14  = "480 FLOAT                 "
+REXX_SQLTYPE.15  = "484 DECIMAL               "
+REXX_SQLTYPE.16  = "492 BIGINT             19 "
+REXX_SQLTYPE.17  = "496 INTEGER            10 "
+REXX_SQLTYPE.18  = "500 SMALLINT            5 "
+REXX_SQLTYPE.19  = "904 ROWID                 "
+REXX_SQLTYPE.20  = "908 VARBINARY             "
+REXX_SQLTYPE.21  = "912 BINARY                "
+REXX_SQLTYPE.22  = "916 BLOB                  "
+REXX_SQLTYPE.23  = "924 DBCLOB                "
+REXX_SQLTYPE.24  = "996 DECFLOAD              "
+REXX_SQLTYPE.25  = "988 XML                   "
+REXX_SQLTYPE.26  = "412 DBCLOB                "
+REXX_SQLTYPE.27  = "468 GRAPHIC               "
+DROP OU.
+OU.0 = 0
+
+maxrc         = 0
+COLDEL        = ';'
+CHARDEL       = '"'
+SQLTERM       = ';'
+SPROCPARSER   = ','
+END_SQL_TERM  = SPACE(SQLTERM SQLTERM, 0)
+
+
+    SQLSTMT = STRIP(SQLSTMT)
+
+     parse value sqlstmt with proc "(" command
+     command = reverse(command)
+     command = Strip(command, 'L')
+     command = Strip(command, 'L', ')' )
+     command = reverse(command)
+
+     callstmt  = sqlstmt
+
+     parse value PROC WITH cl PROC_CREATOR '.' PROC_NAME
+     PROC_CREATOR  = Strip(Translate(PROC_CREATOR))
+     PROC_NAME     = Strip(Translate(PROC_NAME))
+
+     CNR     = 10
+     SNR     = 10
+     If DB_ENV = "SQL" Then Do  /* DB2 LUW */
+        SQLSTMT = "SELECT    DISTINCT                            ",
+                  "        P.ROUTINENAME                         ",
+                  "     ,  P.ROUTINESCHEMA                       ",
+                  "     ,  P.SPECIFICNAME                        ",
+                  "     ,  P.ROWTYPE                             ",
+                  "     ,  P.PARMNAME                            ",
+                  "     ,  P.LOCATOR                             ",
+                  "     ,  P.ORDINAL                             ",
+                  "     ,  P.TYPENAME                            ",
+                  "     ,  P.LENGTH                              ",
+                  "     ,  P.SCALE                               ",
+                  "     ,  P.ROUTINETYPE                         ",
+                  "     ,  R.RESULT_SETS                         ",
+                  "FROM "SYSIBMS".SYSROUTINEPARMS P              ",
+                  "INNER JOIN "SYSIBMS".SYSROUTINES R            ",
+                  "  ON  P.ROUTINESCHEMA = R.ROUTINESCHEMA       ",
+                  "  AND P.ROUTINENAME   = R.ROUTINENAME         ",
+                  "  AND P.SPECIFICNAME  = R.SPECIFICNAME        ",
+                  "WHERE P.ROUTINESCHEMA = '"PROC_CREATOR"'      ",
+                  "AND   P.ROUTINENAME   = '"PROC_NAME"'         ",
+                  "ORDER BY ORDINAL                              ",
+                  ""
+      End
+     Else Do                    /* DB2 zOS */
+        SQLSTMT = "SELECT    DISTINCT                            ",
+                  "        P.SCHEMA       AS ROUTINENAME         ",
+                  "     ,  P.NAME         AS ROUTINESCHEMA       ",
+                  "     ,  P.SPECIFICNAME AS SPECIFICNAME        ",
+                  "     ,  P.ROWTYPE      AS ROWTYPE             ",
+                  "     ,  P.PARMNAME     AS PARMNAME            ",
+                  "     ,  P.LOCATOR      AS LOCATOR             ",
+                  "     ,  P.ORDINAL      AS ORDINAL             ",
+                  "     ,  P.TYPENAME     AS TYPENAME            ",
+                  "     ,  P.LENGTH       AS LENGTH              ",
+                  "     ,  P.SCALE        AS SCALE               ",
+                  "     ,  P.ROUTINETYPE  AS ROUTINETYPE         ",
+                  "     ,  R.RESULT_SETS                         ",
+                  "FROM "SYSIBMS".SYSPARMS P                     ",
+                  "INNER JOIN "SYSIBMS".SYSROUTINES R            ",
+                  "  ON  P.SCHEMA       = R.SCHEMA               ",
+                  "  AND P.NAME         = R.NAME                 ",
+                  "  AND P.SPECIFICNAME = R.SPECIFICNAME         ",
+                  "WHERE P.SCHEMA        = '"PROC_CREATOR"'      ",
+                  "AND   P.NAME          = '"PROC_NAME"'         ",
+                  "ORDER BY ORDINAL                              ",
+                  ""
+      End
+     SQLSTMT = SPACE(SQLSTMT, 1)
+
+     Call Open_CURSOR
+     OUTSQLDA.SQLD = 0
+     cmd          = command
+     cmdi         = 0
+     cmdstring    = ""
+     komma        = ""
+     DO WHILE SQLCODE = 0
+        SQLTEXT = " FETCH C"CNR "INTO                            ",
+                  "          :ROUTINENAME                        ",
+                  "        , :ROUTINESCHEMA                      ",
+                  "        , :SPECIFICNAME                       ",
+                  "        , :ROWTYPE                            ",
+                  "        , :PARMNAME                           ",
+                  "        , :LOCATOR                            ",
+                  "        , :ORDINAL                            ",
+                  "        , :TYPENAME                           ",
+                  "        , :LENGTH                             ",
+                  "        , :SCALE                              ",
+                  "        , :ROUTINETYPE                        ",
+                  "        , :RESULT_SETS                        ",
+                  ""
+          Call EXECUTE_SQL_TEXT
+          IF SQLCODE = 100 THEN LEAVE
+          IF SQLCODE <   0 THEN LEAVE
+
+
+          cmdi         = cmdi + 1
+          Do sqlti = 1 to rexx_sqltype.0
+             If TYPENAME <>  WORD(rexx_sqltype.sqlti, 2) Then Iterate
+             sqltype = WORD(rexx_sqltype.sqlti, 1)
+             sqltype = sqltype + 1
+             LEAVE
+           End
+
+          If Words(rexx_sqltype.sqlti) > 2 Then Do
+             Length = Word(rexx_sqltype.sqlti, 3)
+           End
+
+          SPROCPARSER = Strip(SPROCPARSER)
+          I1    =   "parse value cmd with DATA '"SPROCPARSER"' cmd"
+          INTERPRET I1
+
+          Data = Strip(Data)
+          If Strip(Data) = "?" Then DATA = ""
+          If Strip(Data) = "''"  Then DATA = ""
+          Ind = 0
+          If Length(data) = 0 Then Do
+             Ind = -1
+             Select
+               When TYPENAME = "BIGINT"   THEN Do
+                    DATA = Right(DATA, LENGTH, '0')
+                End
+               When TYPENAME = "INTEGER"  THEN Do
+                    DATA = Right(DATA, LENGTH, '0')
+                End
+               When TYPENAME = "SMALLINT" THEN Do
+                    DATA = Right(DATA, LENGTH, '0')
+                End
+               When TYPENAME = "DECIMAL"  THEN Do
+                    DATA = Right(DATA, LENGTH, '0')
+                    DATA = "0.0"
+                End
+               Otherwise Do
+                    If length > 32000 Then Length = 32000
+                    DATA = "'" || Left(DATA, LENGTH, ' ') || "'"
+                End
+              End
+           End
+
+
+/*        INTERPRET "CM"cmdi "= DATA"                              */
+/*        cmdstring = cmdstring || komma ":" || "CM" || cmdi       */
+          PARMNAME  = Translate(PARMNAME, '_', '-')
+          INTERPRET PARMNAME "= DATA"
+          cmdstring = cmdstring || komma ":" || PARMNAME
+
+          Interpret PARMNAME || "_I" || CMDI "= "IND
+          cmdstring = cmdstring ":" || PARMNAME || "_I" || CMDI
+
+          komma     = ","
+
+          OUTSQLDA.SQLD          = OUTSQLDA.SQLD + 1
+          SQLDI                  = OUTSQLDA.SQLD
+          OUTSQLDA.SQLDI.SQLTYPE = sqltype
+          OUTSQLDA.SQLDI.SQLLEN  = LENGTH
+          OUTSQLDA.SQLDI.SQLIND  = 0
+          OUTSQLDA.SQLDI.SQLDATA = DATA
+      END
+
+     Call Close_CURSOR
+     Proc = Subword(Proc, 2)
+     If Length(Strip(cmdstring)) = 0 Then do
+        cmdstring = cmd
+        cmdstring = ":CM1"
+        CM1       = Strip(cmd)
+        cm1 = strip(cm1)
+      End
+
+     SQLTEXT = " Call " Proc "(" || cmdstring ||")"
+     Call EXECUTE_SQL_TEXT
+
+     If SQLCODE = 0   ,
+      | SQLCODE = 466 Then do
+        Ausgabe = cmdstring
+        Do while length(Ausgabe) > 0
+           Parse value Ausgabe With parm "," Ausgabe
+           ausi = 0
+           If Words(Parm) > 1 Then Parm = Word(Parm, 1)
+           If Words(Parm) > 1 Then IND  = Word(Parm, 2)
+           Parm = Translate(Parm, ' ', ':')
+           Interpret "Ausx = "Parm
+           Interpret "Ausi = "ind
+/*
+           If ausi < 0 Then Ausx = ""
+*/
+           ou.0 = ou.0 + 1 ; oui = ou.0;
+           ou.oui = parm "=" Ausx
+         End
+           ou.0 = ou.0 + 1 ; oui = ou.0;
+           ou.oui = "RESULTS =" RESULTS
+      End
+
+     If sqlcode = 466 Then do
+        Call Lesen_SProc_Data
+      End
+
+
+
+return
+
+Lesen_SProc_Data:
+  SQLTEXT = "DESCRIBE PROCEDURE :PROC INTO :OUTSQLDA"
+  Call EXECUTE_SQL_TEXT
+  if sqlcode <> 0 Then do
+     say SQLCODE  sqltext
+     If sqlcode < 0 Then return 8
+   End
+
+
+  /* Allocatte RESULT SET                                         */
+  Loc_GES = ":RS_LoC"CNR""
+  Loc_GES = ":RS_LoC1"
+  if RESULT_SETS > 1 Then do
+     Loc_GES = ""
+     Komma = ''
+     do loci = 1 to RESULT_SETS
+        Loc_GES = Loc_Ges || Komma || ":" || "RS_Loc" || Loci" "
+        Komma = ','
+      End
+   End
+  Else Do
+   End
+
+  SQLTEXT = "ASSOCIATE LOCATORS ("Loc_Ges") WITH PROCEDURE "Proc
+  Call EXECUTE_SQL_TEXT
+  if sqlcode <> 0 Then do
+     say SQLCODE  sqltext
+     If sqlcode < 0 Then return 8
+   End
+
+  CNR    = "100"
+  Do RESI = 1 to RESULT_SETS  /* Anzahl Resut_Sets (Anzahl Tables) */
+     Loc     = ":" || "RS_Loc" || RESI
+     CNR     = CNR + 1
+     cursor  = "C"CNR
+     SQLTEXT = "ALLOCATE C"CNR" CURSOR FOR RESULT SET "Loc
+     Call EXECUTE_SQL_TEXT
+     if sqlcode <> 0 Then do
+        say SQLCODE  sqltext
+        If sqlcode < 0 Then return 8
+      End
+
+  /* Describe the Cursor                                          */
+     SQLTEXT = "DESCRIBE CURSOR :CURSOR INTO :OUTSQLDA"
+     Call EXECUTE_SQL_TEXT
+     If sqlcode <> 0 Then do
+        say SQLCODE  sqltext
+        If sqlcode < 0 Then return 8
+      End
+
+   COLS   = ""
+   RXCOLS = ""
+   if datatype(OUTSQLDA.SQLD) = NUM THEN DO CI = 1 TO OUTSQLDA.SQLD
+      cols   = cols OUTSQLDA.CI.SQLNAME
+      rxcols = rxcols  SPACE(RXDB2_PUTSTEM, 0) || I || "." ||  ,
+                       SPACE(OUTSQLDA.CI.SQLNAME, 0)
+    End
+
+  /* Fetch Data                                                   */
+     call Fetch_Dynamic_data
+   End /* END DO */
+
+Return 0
+
+OPEN_CURSOR:
+
+   SQLSTMT = SQLSTMT MaxFetch "FOR FETCH ONLY WITH UR "
+   If DB2_EDITSQL = "Y" | DB2_EDITSQL = "J" Then do
+      SQLSTMT = Edit_SQL(SQLSTMT)
+      DB2_EDITSQL = 'N'
+    End
+
+    IF DATATYPE(CNR) <> 'NUM' THEN CNR = 1
+    IF DATATYPE(SNR) <> 'NUM' THEN SNR = 1
+    SQLTEXT =         " CLOSE C"CNR
+    Call EXECUTE_SQL_TEXT
+    SQLTEXT =         " DECLARE C"CNR" CURSOR FOR S"SNR
+    Call EXECUTE_SQL_TEXT
+    IF SQLCODE <> 0 THEN DO
+       SAY "ERROR ON DECLARE, RC="RC ,
+           "SQLCODE="SQLCODE         ,
+           "SQLERRMC="SQLERRMC       ,
+           ""
+    END
+    SQLTEXT =         " PREPARE S"SNR" FROM :SQLSTMT"
+    Call EXECUTE_SQL_TEXT
+    IF SQLCODE <> 0 THEN DO
+       SAY "ERROR ON PREPARE S"SNR"RC="RC ,
+           "SQLCODE="SQLCODE         ,
+           "SQLERRMC="SQLERRMC       ,
+           ""
+    END
+
+   SQLTEXT =  " DESCRIBE S"SNR" INTO :OUTSQLDA"
+   Call EXECUTE_SQL_TEXT
+   COLS   = ""
+   RXCOLS = ""
+   SQL_FETCH = ""
+   KOMMA     = ""
+   if datatype(OUTSQLDA.SQLD) = NUM THEN DO CI = 1 TO OUTSQLDA.SQLD
+      cols   = cols OUTSQLDA.CI.SQLNAME
+      rxcols = cols OUTSQLDA.CI.SQLNAME
+      SQL_FETCH = SQL_FETCH || komma || ":" || OUTSQLDA.CI.SQLNAME
+      If OUTSQLDA.CI.SQLTYPE // 2 = 1 THEN Do
+         SQL_FETCH = SQL_FETCH ":I" || OUTSQLDA.CI.SQLNAME
+       END
+      KOMMA = ","
+    End
+
+    SQLTEXT =         " OPEN C"CNR
+    Call EXECUTE_SQL_TEXT
+    IF SQLCODE <> 0 THEN DO
+       SAY "ERROR ON OPEN C"CNR" , RC="RC ,
+           "SQLCODE="SQLCODE         ,
+           "SQLERRMC="SQLERRMC       ,
+           ""
+    END
+
+RETURN
+
+CLOSE_CURSOR:
+
+    IF DATATYPE(CNR) <> 'NUM' THEN CNR = 1
+    SQLTEXT =         " CLOSE C"CNR
+    Call EXECUTE_SQL_TEXT
+
+RETURN
+
+CONNECT_LOCATION:
+   If Length(SYSUID) > 0 & Length(SYSPWD) > 0 Then do
+       SQLTEXT = " CONNECT TO "ARG(1) ,
+                 "USER :SYSUID USING :SYSPWD "
+    End
+   ELSE Do
+       SQLTEXT = " CONNECT TO "ARG(1)
+    End
+   Call EXECUTE_SQL_TEXT
+   IF SQLCODE <> 0 THEN DO
+      SAY "ERROR IN CONNECT TO "ARG(1) "SQLCODE: " SQLCODE
+      RETURN 8
+      END
+RETURN 0
+
+DISCONNECT_LOCATION:
+   SQLTEXT =  "RELEASE " ARG(1)
+   Call EXECUTE_SQL_TEXT
+   SQLTEXT =  "COMMIT  "
+   Call EXECUTE_SQL_TEXT
+   SQLTEXT =  " CONNECT RESET"
+   Call EXECUTE_SQL_TEXT
+RETURN 0
+
+EXECUTE_SQL_TEXT:
+ Select
+    When ENV = 'TSO' Then Do
+         ADDRESS DSNREXX "EXECSQL "SQLTEXT
+     End
+    When ENV = 'WIN' Then Do
+         CALL SQLEXEC SQLTEXT
+         SQLCODE    = SQLCA.SQLCODE
+         SQLERRMC   = SqlMsg
+     End
+    Otherwise NOP
+  End
+Return
+
+SQLERROR:
+/* VERARBEITEN SQLERROR WENN NOETIG */
+
+  SAY 'SQLCODE        ='SQLCODE
+  SAY 'SQLERRM        ='SQLERRM
+  SAY 'SQLCA.SQLCAID  ='SQLCA.SQLCAID
+  SAY 'SQLCA.SQLCABC  ='SQLCA.SQLCABC
+  SAY 'SQLCA.SQLCODE  ='SQLCA.SQLCODE
+  SAY 'SQLCA.SQLERRM  ='SQLCA.SQLERRM
+  SAY 'SQLCA.SQLERRP  ='SQLCA.SQLERRP
+  SAY 'SQLCA.SQLERRD.1='SQLCA.SQLERRD.1
+  SAY 'SQLCA.SQLERRD.2='SQLCA.SQLERRD.2
+  SAY 'SQLCA.SQLERRD.3='SQLCA.SQLERRD.3
+  SAY 'SQLCA.SQLERRD.4='SQLCA.SQLERRD.4
+  SAY 'SQLCA.SQLERRD.5='SQLCA.SQLERRD.5
+  SAY 'SQLCA.SQLERRD.6='SQLCA.SQLERRD.6
+  SAY 'SQLCA.SQLWARN0 ='SQLCA.SQLWARN0
+  SAY 'SQLCA.SQLWARN1 ='SQLCA.SQLWARN1
+  SAY 'SQLCA.SQLWARN2 ='SQLCA.SQLWARN2
+  SAY 'SQLCA.SQLWARN3 ='SQLCA.SQLWARN3
+  SAY 'SQLCA.SQLWARN4 ='SQLCA.SQLWARN4
+  SAY 'SQLCA.SQLWARN5 ='SQLCA.SQLWARN5
+  SAY 'SQLCA.SQLWARN6 ='SQLCA.SQLWARN6
+  SAY 'SQLCA.SQLWARN7 ='SQLCA.SQLWARN7
+  SAY 'SQLCA.SQLWARN8 ='SQLCA.SQLWARN8
+  SAY 'SQLCA.SQLWARN9 ='SQLCA.SQLWARN9
+  SAY 'SQLCA.SQLWARNA ='SQLCA.SQLWARNA
+  SAY 'SQLCA.SQLSTATE ='SQLCA.SQLSTATE
+
+RETURN
+
+
+MAKE_WHERELIST: PROCEDURE EXPOSE WHERELIST
+
+COLUMNNAME = ARG(1)
+ARGUMENT   = ARG(2)
+ARGTYPE    = ARG(3)
+
+IF LENGTH(STRIP(ARGUMENT)) = 0 THEN RETURN
+ARGUMENT   = TRANSLATE(ARGUMENT, '%', '*')
+
+IF TRANSLATE(WORD(WHERELIST, 1) ) = "WHERE" THEN ANDKZ = "AND"
+ ELSE ANDKZ = "WHERE"
+
+IF LENGTH(STRIP(COLUMNNAME)) = 0 ,
+ & LENGTH(STRIP(ARGUMENT)) > 0 THEN DO
+   WHERELIST = WHERELIST ANDKZ ARGUMENT
+   RETURN
+ END
+
+IF LENGTH(STRIP(ARGUMENT)) = 0 THEN RETURN
+
+If ARGTYPE = "NUM" Then do
+   IF POS('%', ARGUMENT) > 0 THEN DO
+      WHERELIST = WHERELIST ANDKZ COLUMNNAME "LIKE "ARGUMENT
+    END
+   Else Do
+      WHERELIST = WHERELIST ANDKZ COLUMNNAME "= "ARGUMENT
+    END
+ End
+Else Do
+   IF POS('%', ARGUMENT) > 0 ,
+    | POS('_', ARGUMENT) > 0 THEN DO
+      WHERELIST = WHERELIST ANDKZ COLUMNNAME "LIKE '"ARGUMENT"'"
+    END
+   Else Do
+      WHERELIST = WHERELIST ANDKZ COLUMNNAME "= '"ARGUMENT"'"
+    END
+ End
+
+RETURN
+
+OPEN_TABLE:
+
+ADDRESS ISPEXEC  'TBCLOSE 'LUWTABLE
+ADDRESS ISPEXEC  'TBERASE 'LUWTABLE
+ADDRESS ISPEXEC  'TBOPEN  'LUWTABLE
+IF RC <> 0 THEN Do
+   ADDRESS ISPEXEC 'TBCREATE 'LUWTABLE' NAMES(LZEILE)'
+   If rc <> 0 Then say "TBCREATE RC="RC
+ End
+
+RETURN
+
+OPEN_COLTB:
+
+ADDRESS ISPEXEC  'TBCLOSE 'COLTAB
+ADDRESS ISPEXEC  'TBERASE 'COLTAB
+ADDRESS ISPEXEC  'TBOPEN  'COLTAB
+IF RC <> 0 THEN Do
+   ADDRESS ISPEXEC 'TBCREATE 'COLTAB' NAMES(CZEILE)'
+   If rc <> 0 Then say "TBCREATE COLTAB RC="RC
+ End
+
+RETURN
+
+ADD_TABLE_LUWTABLE:
+
+LZEILE = "       " || LZEILE
+ADDRESS ISPEXEC 'TBADD 'LUWTABLE
+ANZAHL_ROWS = ANZAHL_ROWS + 1
+
+RETURN
+
+ADD_TABLE:
+
+LZEILE = "       " || LZEILE
+ADDRESS ISPEXEC 'TBADD 'LUWTABLE
+ANZAHL_ROWS = ANZAHL_ROWS + 1
+
+CZeile = ""
+Do czi = 1 to words(cols)
+   ColValue = word(RXCols, czi)
+   CZeile = CZeile || value(ColValue) || "0a0d"x
+ End
+
+ADDRESS ISPEXEC 'TBADD 'COLTAB
+
+RETURN
+
+CLOSE_TABLE:
+
+ADDRESS ISPEXEC 'TBCLOSE 'LUWTABLE
+ADDRESS ISPEXEC 'TBCLOSE 'COLTAB
+
+RETURN
+
+Edit_SQL:
+
+EDIT_STMT = LUWEDSQL(ARG(1), LNR)
+
+RETURN EDIT_STMT
+
+Load_DSNREXX:
+ADDRESS TSO "SUBCOM DSNREXX"
+IF RC THEN   S_RC = RXSUBCOM('ADD','DSNREXX','DSNREXX')
+
+ADDRESS DSNREXX "CONNECT "DB2_SSID
+IF SQLCODE <  0 THEN SAY "CONNECT     SQLCODE="SQLCODE "<"DB2_SSID">"
+
+Return
+
+UNLoad_DSNREXX:
+
+ADDRESS DSNREXX "DISCONNECT"
+S_RC = RXSUBCOM('DELETE','DSNREXX','DSNREXX')
+
+Return
+
+Automatic_Header:
+
+LOBVAL        = "404 405 408 409 412 413 988 989"
+FNumeric      = "480 481 484 485 492 493 496 497 500 501 "
+
+ADDRESS ISPEXEC  "VGET (ZSCREENW,ZSCREEND)"
+/* LAENGENFELD AN HEADER ANPASSEN */
+if datatype(OUTSQLDA.SQLD) = NUM THEN DO CI = 1 TO OUTSQLDA.SQLD
+   IF Length(Strip(OUTSQLDA.CI.SQLNAME)) > OUTSQLDA.ci.SQLLEN Then Do
+      OUTSQLDA.ci.SQLLEN = Length(Strip(OUTSQLDA.CI.SQLNAME))
+    End
+/*    SAY OUTSQLDA.CI.SQLNAME OUTSQLDA.ci.SQLLEN */
+ END
+
+/* LAENGENFELD AUF ZSCREENW AUSRICHTEN */
+If length(ddltext) = 5 Then Col_Start = 8
+else Col_Start = 2
+
+if datatype(OUTSQLDA.SQLD) = NUM THEN DO CI = 1 TO OUTSQLDA.SQLD
+   NI = CI + 1
+   IF NI > OUTSQLDA.SQLD THEN NI = OUTSQLDA.SQLD
+   Test = Col_Start + OUTSQLDA.CI.SQLLEN + OUTSQLDA.NI.SQLLEN
+
+   If Test > ZSCREENW Then Do
+      STest = ZSCREENW - Col_Start
+      OUTSQLDA.CI.SQLLEN = OUTSQLDA.CI.SQLLEN + STest
+      OUTSQLDA.CI.SQLLEN = STest
+      Col_Start = 2 + OUTSQLDA.ci.SQLLEN
+      Col_Start = 2
+    End
+   Else Do
+      Col_Start = Col_Start + OUTSQLDA.ci.SQLLEN + 1
+    End
+
+ END
+
+if datatype(OUTSQLDA.SQLD) = NUM THEN DO CI = 1 TO OUTSQLDA.SQLD
+   If pos(OUTSQLDA.CI.SQLTYPE, LOBVAL) > 0 then OUTSQLDA.CI.SQLLEN = 128
+   coln = Strip(OUTSQLDA.CI.SQLNAME)
+   If OUTSQLDA.ci.SQLLEN < length(coln) Then cl =  length(coln)
+   Else                                      cl =  OUTSQLDA.ci.SQLLEN
+
+   Schift = 'L'
+   Fill   = ' '
+   if Wordpos(OUTSQLDA.CI.SQLTYPE, FNumeric, 1) > 0 Then  Do
+      Schift = 'R'
+      Fill   = ' '
+    End
+
+   If CI = 1 Then
+      DDLTEXT = DDLTEXT || ANZ_Daten(coln , '', Schift, cl, Fill)
+   Else
+      DDLTEXT = DDLTEXT ANZ_Daten(coln, '', Schift, cl, Fill)
+ End
+Return
+
+Automatic_Data:
+LOBVAL        = "404 405 408 409 412 413 988 989"
+FNumeric      = "480 481 484 485 492 493 496 497 500 501 "
+if datatype(OUTSQLDA.SQLD) = NUM THEN DO CI = 1 TO OUTSQLDA.SQLD
+   If pos(OUTSQLDA.CI.SQLTYPE, LOBVAL) > 0 then OUTSQLDA.CI.SQLLEN = 128
+
+   Schift = 'L'
+   Fill   = ' '
+   if Wordpos(OUTSQLDA.CI.SQLTYPE, FNumeric, 1) > 0 Then  Do
+      Schift = 'R'
+      Fill   = ' '
+    End
+
+   coln  = Strip(OUTSQLDA.CI.SQLNAME)
+   If Datatype(Ausgabe.0) = "NUM" & Ausgabe.0 > 0 Then Do
+      IVAL = "SData = AUSGABE.i." ||  COLN
+      INTERPRET IVAL
+    end
+   else do
+      SData = Value(OUTSQLDA.CI.SQLNAME)
+    End
+   If OUTSQLDA.ci.SQLLEN < length(coln)  Then cl =  length(coln)
+   Else                                       cl =  OUTSQLDA.ci.SQLLEN
+
+   If CI = 1 Then
+      LZEILE  = LZEILE || ANZ_Daten('', SData, Schift, cl, Fill)
+   Else
+      LZEILE  = LZEILE ANZ_Daten(   '', SData, Schift, cl, Fill)
+ End
+
+Return
+
+ANZ_Daten:
+
+AUZeile = Arg(1)
+ADaten  = Arg(2)
+ASchift = Arg(3)
+ALen    = Arg(4)
+AFiller = Arg(5)
+
+Select
+  When Datatype(ALen) = "NUM" THEN NOP
+  When Length(AUZeile) > Length(ADaten)  Then Alen = Length(AUZeile)
+  When Length(ADaten)  > Length(AUZeile) Then Alen = Length(ADaten)
+  Otherwise                                   Alen = Length(ADaten)
+ End
+
+If Length(Strip(Arg(1) )) > 0 Then do
+   Select
+     when ASchift = 'L'  Then RText = Left(AUZeile, ALen, AFiller)
+     when ASchift = 'R'  Then RText = Right(AUZeile, ALen, AFiller )
+     Otherwise                RText = Substr(Auzeile, 1, ALen)
+    End
+ End
+Else Do
+   Select
+     when ASchift = 'L'  Then RText = Left(ADaten   , ALen, AFiller)
+     when ASchift = 'R'  Then RText = Right(ADaten  , ALen, AFiller)
+     Otherwise                RText = Substr(ADaten , 1, ALen)
+    End
+ End
+
+Return RText

@@ -1,0 +1,487 @@
+/* REXX */
+/*******************************************************************/
+/*                                                                 */
+/* ProgramNAME      : LUWB1935                                     */
+/* AUSRUF           : Procedure  x=LUWB1935(ssid,loc,ausw,obj)     */
+/* AUTHER           : ULRICH BRAEUER                               */
+/* FUNKTION         : AG : Performance SQL's anzeigen, ausfuehren  */
+/*                                                                 */
+/*******************************************************************/
+
+SIGNAL ON ERROR
+SIGNAL OFF FAILURE
+SIGNAL OFF ERROR
+
+PARSE SOURCE SRC.1  , /* ENVIRONMENT  (TSO)            */
+             SRC.2  , /* AUFRUF ALS (COMMAND)          */
+             SRC.3  , /* Program NAME (LUWB1000)       */
+             SRC.4  , /* SYS00186 (TEMP FILE)          */
+             SRC.5  , /* AUFRUF AUS LIB (X.X.CLISTUDB) */
+             SRC.6  , /* ?                             */
+             SRC.7  , /* TSO                           */
+             SRC.8  , /* ISPF                          */
+             SRC.9  , /* ?                             */
+
+
+ENV        = "TSO"
+X          = MSG('OFF')
+USER       = USERID()
+SYSCATS    = "SYSCAT"
+SYSIBMS    = "SYSIBM"
+SYSIBMA    = "SYSIBMADM"
+SYSPROCA   = "SYSPROC"
+RECLEN     = 4096
+TRACKS     = 60
+DSNRECON   = "N"
+
+ADDRESS ISPEXEC 'VGET (DSNRECON) PROFILE'
+ADDRESS ISPEXEC 'VGET (TRACKS) PROFILE'
+ADDRESS ISPEXEC 'VGET (RECLEN) PROFILE'
+ADDRESS ISPEXEC 'VGET (SYSIBMS) PROFILE'
+ADDRESS ISPEXEC 'VGET (SYSCATS) PROFILE'
+ADDRESS ISPEXEC 'VGET (SYSIBMA) PROFILE'
+ADDRESS ISPEXEC 'VGET (SYSPROCA) PROFILE'
+
+ADDRESS ISPEXEC 'VGET (UDBTRACE) PROFILE'
+IF UDBTRACE = 'ON' THEN TRACE I
+ELSE                    TRACE
+
+ssid        = arg(1)
+location    = arg(2)
+auswkz      = arg(3)
+lnr         = arg(4)
+tabnr       = arg(5)
+Do_All      = arg(6)
+eingabe     = arg(7)
+eingabe2    = arg(8)
+statement   = arg(9)
+object1     = arg(10)
+object2     = arg(11)
+object3     = arg(12)
+object4     = arg(13)
+object5     = arg(14)
+EDIT        = arg(15)
+Object_list = arg(16)
+DB2Vers     = arg(17)
+proclib     = arg(18)
+curnr       = arg(19)
+obj         = ""
+tablespace  = ""
+DBNAME      = ""
+STGROUP     = ""
+DB2_SSID    = SSID
+
+ANZAHL_ROWS       = 0
+
+parse value DB2Vers with DBENV 4 DBVers 6 DBRel 8 DBMod
+parse value Object1 with DB2_CREATOR1 '.' DB2_NAME1
+parse value Object2 with DB2_CREATOR2 '.' DB2_NAME2
+parse value Object3 with DB2_CREATOR3 '.' DB2_NAME3
+parse value Object4 with DB2_CREATOR4 '.' DB2_NAME4
+parse value Object5 with DB2_CREATOR5 '.' DB2_NAME5
+
+ADDRESS ISPEXEC 'VGET (CURSQLID) PROFILE'
+ADDRESS ISPEXEC 'VGET ('STRIP(SSID)'SQID) PROFILE'
+
+
+red   = '01'x                              /* Assign colors to       */
+blue  = '02'x                              /*   Attribute bytes      */
+green = '03'x                              /*   found in the data    */
+white = '04'x
+in1   = '05'x
+in2   = '06'x
+in3   = '07'x
+uid   = '08'x
+pwd   = '09'x
+endin = '3a'x
+keyw  = '3b'x
+keytab.0 = 5
+keytab.1 = in1
+keytab.2 = in2
+keytab.3 = in3
+keytab.4 = uid
+keytab.5 = pwd
+maxlines = 0                               /* set max number of lines*/
+dyndata  = ''                              /* initialize data        */
+cmddata  = ''                              /* initialize data        */
+curline = 1                                /* set current line #     */
+
+call Anzeige_Uebersicht
+
+Return 0
+
+Anzeige_Uebersicht:
+
+anzcols = 0
+Drop  SL.
+Sl.0    = 0
+
+
+EnterBack = "Y"
+InitArea  = "Y"
+Do Forever
+   Auswahl          = "     "
+   Auswahl_Val      = ""
+   area.0  = 10
+   area.1  = white"Performance SQL :   "
+   area.2  = white" "
+   area.3  = white" "keyw"Auswahl    :  "in1 ||Auswahl ||endin
+   area.4  = white"      1.)  Foreignkeys ohne Indexes             "
+   area.5  = white"  "
+   area.6  = white"  "
+   area.7  = white"  "
+   area.8  = white"  "
+   area.9  = white"  "
+   area.10 = white"  "
+
+   Call Anzeige_Dyn_Panel
+
+   If PF   = 'PF03'               THEN LEAVE
+   If PF   = 'PF04'               THEN EXIT 4
+   If RESP = "ENTER"              Then NOP
+
+   EDIT     = "Y"
+   select
+       when Auswahl_Val   = 1 Then Call Auswahl_1
+       otherwise EDIT     = "N"
+    End
+
+   IF EDIT ="Y"  THEN Do
+      Call Edit_Stmt
+    End
+End
+
+Return
+
+Auswahl_1:     /*  Foreignkeys ohne Indexes   */
+
+OPF   = PF
+ORESP = RESP
+
+Schema = Left(' ', 30, ' '   )
+
+area.0  = 4
+area.2  = white"Foreignkeys ohne Indexes  : "
+area.3  = white" "keyw"Schema     :  "in1 ||Schema ||endin
+area.4  = white"  "
+
+Call Anzeige_Dyn_Panel
+
+If PF   = 'PF03'  | PF = 'PF04' Then do
+   PF   = OPF
+   RESP = ORESP
+   return
+ End
+
+RESP = "ENTER"              Then NOP
+
+PF   = OPF
+RESP = ORESP
+
+Schema_val  = Strip(Schema_val)
+ok = NSL("WITH                                                        ")
+ok = NSL("  CREATOR_TAB ( CREATOR                                     ")
+ok = NSL("              ) AS                                          ")
+ok = NSL("              ( SELECT '"Schema_val"' FROM SYSIBM.SYSDUMMY1 ")
+ok = NSL("              )                                             ")
+ok = NSL("  , FKTAB     (  AUSWAHL                                    ")
+ok = NSL("               , TBCREATOR                                  ")
+ok = NSL("               , TBNAME                                     ")
+ok = NSL("               , RELNAME                                    ")
+ok = NSL("               , COLSEQ                                     ")
+ok = NSL("               , COLNAME                                    ")
+ok = NSL("               , REFTBCREATOR                               ")
+ok = NSL("               , REFTBNAME                                  ")
+ok = NSL("               , IXCREATOR                                  ")
+ok = NSL("               , IXNAME                                     ")
+ok = NSL("               ) AS                                         ")
+ok = NSL("               ( SELECT DISTINCT 'FK  '                     ")
+ok = NSL("                      , FK.CREATOR                          ")
+ok = NSL("                      , FK.TBNAME                           ")
+ok = NSL("                      , FK.RELNAME                          ")
+ok = NSL("                      , FK.COLSEQ                           ")
+ok = NSL("                      , FK.COLNAME                          ")
+ok = NSL("                      , RL.REFTBCREATOR                     ")
+ok = NSL("                      , RL.REFTBNAME                        ")
+ok = NSL("                      , IX.CREATOR                          ")
+ok = NSL("                      , IX.NAME                             ")
+ok = NSL("                  FROM SYSIBM.SYSFOREIGNKEYS        FK      ")
+ok = NSL("                  INNER JOIN      SYSIBM.SYSRELS    RL      ")
+ok = NSL("                  ON  FK.CREATOR      =  RL.CREATOR         ")
+ok = NSL("                  AND FK.TBNAME       =  RL.TBNAME          ")
+ok = NSL("                  AND FK.RELNAME      =  RL.RELNAME         ")
+ok = NSL("                  LEFT OUTER JOIN SYSIBM.SYSINDEXES IX      ")
+ok = NSL("                  ON  RL.CREATOR      =  IX.TBCREATOR       ")
+ok = NSL("                  AND RL.TBNAME       =  IX.TBNAME          ")
+ok = NSL("                  LEFT OUTER JOIN SYSIBM.SYSKEYS    KY      ")
+ok = NSL("                  ON   KY.IXCREATOR    =  IX.CREATOR        ")
+ok = NSL("                  AND  KY.IXNAME       =  IX.NAME           ")
+ok = NSL("                  AND KY.COLSEQ        =  FK.COLSEQ         ")
+ok = NSL("                  AND KY.COLNAME       =  FK.COLNAME        ")
+ok = NSL("           WHERE FK.CREATOR IN (SELECT DISTINCT CREATOR     ")
+ok = NSL("                                FROM   CREATOR_TAB          ")
+ok = NSL("                               )                            ")
+ok = NSL("                  AND   IX.TBCREATOR IS NOT NULL            ")
+ok = NSL("                  AND   KY.COLSEQ    IS NOT NULL            ")
+ok = NSL("                  ORDER BY FK.CREATOR                       ")
+ok = NSL("                         , FK.TBNAME                        ")
+ok = NSL("                         , FK.RELNAME                       ")
+ok = NSL("                         , FK.COLSEQ                        ")
+ok = NSL("                         , RL.REFTBCREATOR                  ")
+ok = NSL("                         , RL.REFTBNAME                     ")
+ok = NSL("               )                                            ")
+ok = NSL("  , RELTAB     ( AUSWAHL                                    ")
+ok = NSL("               , TBCREATOR                                  ")
+ok = NSL("               , TBNAME                                     ")
+ok = NSL("               , RELNAME                                    ")
+ok = NSL("               , COLSEQ                                     ")
+ok = NSL("               , COLNAME                                    ")
+ok = NSL("               , REFTBCREATOR                               ")
+ok = NSL("               , REFTBNAME                                  ")
+ok = NSL("               , IXCREATOR                                  ")
+ok = NSL("               , IXNAME                                     ")
+ok = NSL("               ) AS                                         ")
+ok = NSL("               ( SELECT DISTINCT 'REL '                     ")
+ok = NSL("                      , FK.CREATOR                          ")
+ok = NSL("                      , FK.TBNAME                           ")
+ok = NSL("                      , FK.RELNAME                          ")
+ok = NSL("                      , FK.COLSEQ                           ")
+ok = NSL("                      , FK.COLNAME                          ")
+ok = NSL("                      , RL.REFTBCREATOR                     ")
+ok = NSL("                      , RL.REFTBNAME                        ")
+ok = NSL("                      , IX.CREATOR                          ")
+ok = NSL("                      , IX.NAME                             ")
+ok = NSL("                  FROM SYSIBM.SYSFOREIGNKEYS        FK      ")
+ok = NSL("                  INNER JOIN      SYSIBM.SYSRELS    RL      ")
+ok = NSL("                  ON  FK.CREATOR      =  RL.CREATOR         ")
+ok = NSL("                  AND FK.TBNAME       =  RL.TBNAME          ")
+ok = NSL("                  AND FK.RELNAME      =  RL.RELNAME         ")
+ok = NSL("                  LEFT OUTER JOIN SYSIBM.SYSINDEXES IX      ")
+ok = NSL("                  ON  RL.REFTBCREATOR =  IX.TBCREATOR       ")
+ok = NSL("                  AND RL.REFTBNAME    =  IX.TBNAME          ")
+ok = NSL("                  LEFT OUTER JOIN SYSIBM.SYSKEYS    KY      ")
+ok = NSL("                  ON   KY.IXCREATOR    =  IX.CREATOR        ")
+ok = NSL("                  AND  KY.IXNAME       =  IX.NAME           ")
+ok = NSL("                  AND KY.COLSEQ        =  FK.COLSEQ         ")
+ok = NSL("                  AND KY.COLNAME       =  FK.COLNAME        ")
+ok = NSL("              WHERE FK.CREATOR IN (SELECT DISTINCT CREATOR  ")
+ok = NSL("                                    FROM   CREATOR_TAB      ")
+ok = NSL("                                   )                        ")
+ok = NSL("                  AND   IX.TBCREATOR IS NOT NULL            ")
+ok = NSL("                  AND   KY.COLSEQ    IS NOT NULL            ")
+ok = NSL("                  ORDER BY FK.CREATOR                       ")
+ok = NSL("                         , FK.TBNAME                        ")
+ok = NSL("                         , FK.RELNAME                       ")
+ok = NSL("                         , FK.COLSEQ                        ")
+ok = NSL("                         , RL.REFTBCREATOR                  ")
+ok = NSL("                         , RL.REFTBNAME                     ")
+ok = NSL("               )                                            ")
+ok = NSL("                                                            ")
+ok = NSL("SELECT FK.CREATOR                                           ")
+ok = NSL("     , FK.TBNAME                                            ")
+ok = NSL("     , FK.RELNAME                                           ")
+ok = NSL("     , FKT.TBNAME                                           ")
+ok = NSL("     , RELT.TBNAME                                          ")
+ok = NSL("FROM SYSIBM.SYSFOREIGNKEYS        FK                        ")
+ok = NSL("                                                            ")
+ok = NSL("LEFT OUTER JOIN FKTAB             FKT                       ")
+ok = NSL("ON  FK.CREATOR    = FKT.TBCREATOR                           ")
+ok = NSL("AND FK.TBNAME     = FKT.TBNAME                              ")
+ok = NSL("AND FK.RELNAME    = FKT.RELNAME                             ")
+ok = NSL("                                                            ")
+ok = NSL("LEFT OUTER JOIN RELTAB            RELT                      ")
+ok = NSL("ON  FK.CREATOR    = RELT.TBCREATOR                          ")
+ok = NSL("AND FK.TBNAME     = RELT.TBNAME                             ")
+ok = NSL("AND FK.RELNAME    = RELT.RELNAME                            ")
+ok = NSL("WHERE FK.CREATOR    IN (SELECT DISTINCT CREATOR             ")
+ok = NSL("                        FROM   CREATOR_TAB                  ")
+ok = NSL("                       )                                    ")
+ok = NSL("AND (    FKT.TBCREATOR   IS NULL                            ")
+ok = NSL("     OR  RELT.TBCREATOR  IS NULL                            ")
+ok = NSL("    )                                                       ")
+ok = NSL("ORDER BY FK.CREATOR                                         ")
+ok = NSL("       , FK.TBNAME                                          ")
+ok = NSL("       , FK.RELNAME                                         ")
+ok = NSL(" ;                                                          ")
+
+Return
+
+Anzeige_Dyn_Panel:
+
+If InitArea <> "N" Then do
+   Zeile = 0
+   DROP ausgabe.
+   ausgabe.0 = 0
+   MaxLines = area.0
+   curline = 1                        /* set current line #     */
+   dyndata  = ""
+   ADDRESS ISPEXEC  "VGET (ZSCREENW,ZSCREEND)"
+   Do ai = 1 to area.0
+      dyndata = dyndata || Left(area.ai, ZSCREENW, ' ')
+    end
+   dyndata = dyndata || endin
+   dynarea = substr(dyndata,1+(curline-1)*ZSCREENW) /*set dyn var  */
+   dynarea = dyndata
+
+   MaxScreenLines = ZSCREEND-5
+   dyndata_len = Length(dyndata)
+   trenner = in1
+   START   = Pos(keyw, dyndata, 1)
+   If START  < 1 Then START = 1
+   DYNPOS  = START + 1
+   Do ki = 1 to keytab.0
+      Found    = Pos(keytab.ki, dyndata, START )
+      If Found > 0  Then Do
+         SELECT
+           When  DYNPOS =  START + 1   Then dynpos = Found + 1
+           When  Found  <  DYNPOS      Then dynpos = Found + 1
+           Otherwise NOP
+          END
+       End
+    End
+   znr     = 1
+ End
+
+
+NNCount = 0
+If EnterBack = "Y"  Then PFTASTEN = " ENTER=GO PF03=Return PF04=Cancel "
+ELSE                     PFTASTEN  = "         PF03=GO    PF04=Cancel "
+
+Do Until disprc > 0
+
+  start   = 1+(curline-1)*ZSCREENW
+  dynarea = substr(dyndata, Start)
+  size = length(dynarea)                   /* Set a scalar variable  */
+  ADDRESS ISPEXEC "DISPLAY PANEL(PDYNPNL1)"
+
+  MaxScreenLines = DYNDPTH
+  DynArea_len = MaxScreenLines*ZSCREENW
+  dyndata1= Substr(dyndata, 1,  1+(curline-1)*ZSCREENW-1)
+  start   = Length(dyndata1) + Length(dynarea) + 1
+  Dyndata = Dyndata1 || dynarea || Substr(Dyndata, start)
+  Eingabe = dynarea
+  Eingabe = dyndata
+
+  disprc = rc                              /* save return code       */
+  ADDRESS ISPEXEC "VGET (ZVERB,ZSCROLLA,ZSCROLLN, ZSCROLLD) "
+  ADDRESS ISPEXEC "VGET (ZXSMAX, ZXSMIN) "
+  dynrc = rc
+  SELECT                                   /* Process scrolling      */
+    When(zverb  = 'UP')   Then Do          /* Scroll up              */
+     If zscrolla = 'MAX' Then Do           /*  if scroll was max     */
+        curline = 1                       /*    scroll to top       */
+      End
+     Else Do                               /*  else a number is known*/
+      curline = curline - MaxScreenLines        /* (max is bottom)   */
+      if curline < 1 then Curline = 1
+      End
+     End
+    When(zverb  = 'DOWN') Then Do          /* Scroll down            */
+     If zscrolla = 'MAX' Then Do           /*  if scroll was max     */
+      curline = maxlines                   /*    scroll to bottom    */
+     end
+     Else do                               /*  else a number is known*/
+      curline = curline + MaxScreenLines        /* (max is bottom)   */
+      If curline > maxlines Then Curline = maxlines
+      if DynArea_len >= dyndata_len Then Do  /* NUR EINE SEITE */
+         curline = 1
+       End
+      end
+     end
+    Otherwise;                      /* could use left & right too    */
+  End
+  if dynrc > 8 then Do
+     say "Display RC="RC
+     say "ZEDSMSG="ZEDSMSG
+     say "ZERRLM="ZERRLM
+     say "ZERRMSG="ZERRMSG
+     say "ZERRSM="ZERRSM
+     say rc object1
+   End
+
+  DO While Length(eingabe) > 0
+     Zeile = zeile + 1
+     trenner = in1
+     FoundL = 0
+     Do ki = 1 to keytab.0
+        Found    = Pos(keytab.ki, eingabe, 1)
+        If Found = 0 Then Iterate
+        Select
+          When FoundL = 0 Then Do
+               Trenner = keytab.KI
+               FoundL  = Found
+           End
+          When FoundL > 0 & Found < FoundL Then Do
+               Trenner = keytab.KI
+               FoundL  = Found
+           End
+          Otherwise NOP
+         End
+      End
+
+     /*    Keyword Finden   */
+     epos     = Pos(keyw, eingabe, 1)
+     xpos     = Pos(Trenner, eingabe, epos+1)
+     elen     = xpos - epos -1
+     If    elen < 0 Then Leave
+     Keyword  =  Substr(eingabe, epos+1, elen  )
+     Keyword  =  Word(Keyword, 1)
+     If Length(Keyword) < 1 Then Do
+        NNCount = NNCount + 1
+        KeyWord = "Col" || NNCount
+      End
+
+     /*    EINGABE Finden   */
+     epos     = Pos(Trenner, eingabe, 1)
+     if epos  < 1 then leave
+     xpos     = Pos(endin, eingabe, epos+1)
+     elen     = xpos - epos -1
+     evalue   = Substr(eingabe, epos+1, elen  )
+     eingabe  = Substr(eingabe, xpos+ 1)
+
+     Interpret Strip(Keyword) || "_VAL" "= evalue"
+   End
+   If PF = 'PF03'               THEN LEAVE
+   If PF = 'PF04'               THEN EXIT 4
+   If RESP = "ENTER" & EnterBack = "Y" Then return
+End                                        /* End of display loop    */
+
+Return
+
+
+NSL: Procedure Expose sl.
+ sl.0   = sl.0 + 1
+ sli    = sl.0
+ sl.sli = Arg(1)
+return 0
+
+Edit_Stmt:
+
+DSNAME = LUWB1900("LUWB1","DSNAME", "STMT", LNR)
+LRECL   = RECLEN
+
+IF LISTDSI(DSNAME) = 0 THEN do
+    ADDRESS "TSO" "ALLOC F(SELDD) DA("DSNAME") SHR"
+ end
+else do
+    ADDRESS "TSO" "ALLOC F(SELDD) DA("DSNAME") NEW CATALOG ,
+          SPACE("TRACKS","TRACKS") TRACKS REUSE,
+          LRECL("RECLEN") UNIT(SYSDA)"
+ end
+
+
+ADDRESS "TSO" "EXECIO * DISKW SELDD ( STEM SL. FINIS"
+ADDRESS "TSO" "FREE FI(SELDD)"
+
+ok   = LUWB1911(SSID,     ,
+                LOCATION,  ,
+                EINGABE,   ,
+                OBJ,       ,
+                DSNAME,    ,
+                LNR   )
+
+return
+
+
+error: failure: syntax: novalue:
+return

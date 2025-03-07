@@ -1,0 +1,150 @@
+//BIMS64QG JOB (40208,F16),'UBRAEUER',MSGLEVEL=(1,1),
+//         MSGCLASS=S,CLASS=B158,
+//*        TYPRUN=HOLD,
+//*        RESTART=STEPNAME, <== FOR RESTART ENTER STEP NAME
+//         TIME=NOLIMIT,
+//         REGION=0M,NOTIFY=&SYSUID
+//*
+/*JOBPARM L=999999,S=B158
+//*
+//* COMPILDE VERSION ZOSB192B
+//*
+//DELETE   EXEC PGM=IDCAMS
+//SYSPRINT DD SYSOUT=*
+//SYSIN    DD *
+  DELETE BIMS64.TSO.DDLOUT
+  IF LASTCC LE 8 THEN SET MAXCC = 00
+/*
+//ZOSB192B EXEC PGM=ZOSB192B
+//STEPLIB  DD DISP=SHR,DSN=BIMS64.TSO.BATCH.LOADLIB
+//         DD DISP=SHR,DSN=DB2.DB0I.SDSNLOAD
+//SYSPROC  DD DISP=SHR,DSN=BIMS64.TSO.CLISTUDB
+//ISPLOG   DD  SYSOUT=T,DCB=(LRECL=125,BLKSIZE=129,RECFM=VA)
+//ISPLIST  DD  SYSOUT=T,DCB=(LRECL=121,BLKSIZE=12100,RECFM=FBA)
+//*
+//ISPPROF  DD  DISP=(,DELETE),DSN=&&PROFILE,SPACE=(CYL,(5,10,60)),
+//             UNIT=SYSDA,DCB=(RECFM=FB,LRECL=80,BLKSIZE=3120)
+//ISPSPROF DD  DISP=(,DELETE),DSN=&&SPROFILE,SPACE=(CYL,(5,10,60)),
+//             UNIT=SYSDA,DCB=(RECFM=FB,LRECL=80,BLKSIZE=3120)
+//ISPLLIB  DD  DISP=SHR,DSN=BIMS64.TSO.BATCH.LOADLIB
+//ISPPLIB  DD  DISP=SHR,DSN=ISP.SISPPENU
+//ISPMLIB  DD  DISP=SHR,DSN=ISP.SISPMENU
+//ISPTLIB  DD  DISP=SHR,DSN=ISP.SISPTENU
+//ISPTABL  DD  DISP=SHR,DSN=ISP.SISPMENU
+//ISPSLIB  DD  DISP=SHR,DSN=ISP.SISPMENU
+//ISPFILE  DD  DISP=(,DELETE),DSN=&&FILE,SPACE=(CYL,(5,10,60)),
+//             UNIT=SYSDA,DCB=(RECFM=FB,LRECL=80,BLKSIZE=3120)
+//ISPLOG   DD  SYSOUT=T,DCB=(LRECL=125,BLKSIZE=129,RECFM=VA)
+//ISPLIST  DD  SYSOUT=T,DCB=(LRECL=121,BLKSIZE=12100,RECFM=FBA)
+//ISPWRK1  DD UNIT=SYSDA,
+//            LRECL=80,BLKSIZE=0,RECFM=FB,SPACE=(TRK,(100,,1))
+//OUTDD  DD DSN=BIMS64.TSO.DDLOUT,
+//            DISP=(MOD,CATLG,CATLG),
+//            SPACE=(CYL,(10,20),RLSE),
+//            DCB=(RECFM=FB,LRECL=100,BLKSIZE=0,DSORG=PS)
+//RXPARM   DD *
+SSID              = "DB0I"            /* DB2 SSID            */
+LOCATION          = ""                /* LOCATION TO CONNECT */
+AUSWAHL           = "DB"              /* DB, SC, TS,TB, ...  */
+OBJECT            = "DHEDB"           /* NAME DES OBJECTES   */
+lcmd              = "HDDL"            /* Command DDL oder HDDL */
+CURSQLID          = "DB2SW"           /* Current SQLID         */
+trace             = "OFF"             /* Set trace ON or OFF */
+
+                                /* Generate Statements           */
+                                /* Generate Statements           */
+G_DATABASE        =  "Y"        /*  DB /        Y/N              */
+G_TABLESPACE      =  "Y"        /*  DB / SC     Y/N              */
+G_TABLE           =  "Y"        /*  DB / SC     Y/N              */
+G_INDEX           =  "Y"        /*  DB / SC     Y/N              */
+G_COMMENT         =  "Y"        /*  DB / SC     Y/N              */
+G_AUXTABLE        =  "Y"        /*  DB / SC     Y/N              */
+G_PRIMARYKEY      =  "Y"        /*  DB / SC     Y/N              */
+G_FOREIGNKEY      =  "Y"        /*  DB / SC     Y/N              */
+
+G_VIEW            =  "N"        /*  DB / SC     Y/N              */
+G_TRIGGER         =  "N"        /*  DB / SC     Y/N              */
+G_SPROC           =  "N"        /*  DB / SC     Y/N              */
+G_SYNONYM         =  "N"        /*  DB / SC     Y/N              */
+G_PERMISSION      =  "N"        /*  DB / SC     Y/N              */
+G_SEQUENCE        =  "N"        /*     / SC     Y/N              */
+G_ALIAS           =  "N"        /*     / SC     Y/N              */
+G_VARIABLE        =  "N"        /*     / SC     Y/N              */
+G_DATATYPE        =  "N"        /*     / SC     Y/N              */
+
+G_GRANTTABLE      =  "N"        /*  DB / SC     Y/N              */
+G_GRANTVIEW       =  "N"        /*  DB / SC     Y/N              */
+G_GRANTSQ         =  "N"        /*  DB / SC     Y/N              */
+G_GRANTRT         =  "N"        /*  DB / SC     Y/N              */
+
+/*
+//SYSPRINT DD SYSOUT=*
+//SYSTSPRT DD SYSOUT=*
+//SYSTSIN  DD DUMMY
+/*
+//ZOSB192B EXEC PGM=ZOSB192B
+//STEPLIB  DD DISP=SHR,DSN=BIMS64.TSO.BATCH.LOADLIB
+//         DD DISP=SHR,DSN=DB2.DB0I.SDSNLOAD
+//SYSPROC  DD DISP=SHR,DSN=BIMS64.TSO.CLISTUDB
+//ISPLOG   DD  SYSOUT=T,DCB=(LRECL=125,BLKSIZE=129,RECFM=VA)
+//ISPLIST  DD  SYSOUT=T,DCB=(LRECL=121,BLKSIZE=12100,RECFM=FBA)
+//*
+//ISPPROF  DD  DISP=(,DELETE),DSN=&&PROFILE,SPACE=(CYL,(5,10,60)),
+//             UNIT=SYSDA,DCB=(RECFM=FB,LRECL=80,BLKSIZE=3120)
+//ISPSPROF DD  DISP=(,DELETE),DSN=&&SPROFILE,SPACE=(CYL,(5,10,60)),
+//             UNIT=SYSDA,DCB=(RECFM=FB,LRECL=80,BLKSIZE=3120)
+//ISPLLIB  DD  DISP=SHR,DSN=BIMS64.TSO.BATCH.LOADLIB
+//ISPPLIB  DD  DISP=SHR,DSN=ISP.SISPPENU
+//ISPMLIB  DD  DISP=SHR,DSN=ISP.SISPMENU
+//ISPTLIB  DD  DISP=SHR,DSN=ISP.SISPTENU
+//ISPTABL  DD  DISP=SHR,DSN=ISP.SISPMENU
+//ISPSLIB  DD  DISP=SHR,DSN=ISP.SISPMENU
+//ISPFILE  DD  DISP=(,DELETE),DSN=&&FILE,SPACE=(CYL,(5,10,60)),
+//             UNIT=SYSDA,DCB=(RECFM=FB,LRECL=80,BLKSIZE=3120)
+//ISPLOG   DD  SYSOUT=T,DCB=(LRECL=125,BLKSIZE=129,RECFM=VA)
+//ISPLIST  DD  SYSOUT=T,DCB=(LRECL=121,BLKSIZE=12100,RECFM=FBA)
+//ISPWRK1  DD UNIT=SYSDA,
+//            LRECL=80,BLKSIZE=0,RECFM=FB,SPACE=(TRK,(100,,1))
+//OUTDD  DD DSN=BIMS64.TSO.DDLOUT,
+//            DISP=(MOD,CATLG,CATLG),
+//            SPACE=(CYL,(10,20),RLSE),
+//            DCB=(RECFM=FB,LRECL=100,BLKSIZE=0,DSORG=PS)
+//RXPARM   DD *
+SSID              = "DB0I"            /* DB2 SSID            */
+LOCATION          = ""                /* LOCATION TO CONNECT */
+AUSWAHL           = "SC"              /* DB, SC, TS,TB, ...  */
+OBJECT            = "HHEEOWNR"        /* NAME DES OBJECTES   */
+lcmd              = "HDDL"            /* Command DDL oder HDDL */
+CURSQLID          = "DB2SW"           /* Current SQLID         */
+trace             = "OFF"             /* Set trace ON or OFF */
+
+                                /* Generate Statements           */
+                                /* Generate Statements           */
+G_DATABASE        =  "N"        /*  DB /        Y/N              */
+G_TABLESPACE      =  "N"        /*  DB / SC     Y/N              */
+G_TABLE           =  "N"        /*  DB / SC     Y/N              */
+G_INDEX           =  "N"        /*  DB / SC     Y/N              */
+G_COMMENT         =  "N"        /*  DB / SC     Y/N              */
+G_AUXTABLE        =  "N"        /*  DB / SC     Y/N              */
+G_PRIMARYKEY      =  "N"        /*  DB / SC     Y/N              */
+G_FOREIGNKEY      =  "N"        /*  DB / SC     Y/N              */
+
+G_View            =  "Y"        /*  DB / SC     Y/N              */
+G_Trigger         =  "Y"        /*  DB / SC     Y/N              */
+G_SProc           =  "Y"        /*  DB / SC     Y/N              */
+G_Synonym         =  "Y"        /*  DB / SC     Y/N              */
+G_Permission      =  "Y"        /*  DB / SC     Y/N              */
+G_Sequence        =  "Y"        /*     / SC     Y/N              */
+G_Alias           =  "Y"        /*     / SC     Y/N              */
+G_Variable        =  "Y"        /*     / SC     Y/N              */
+G_Datatype        =  "Y"        /*     / SC     Y/N              */
+
+G_GRANTTABLE      =  "N"        /*  DB / SC     Y/N              */
+G_GRANTVIEW       =  "N"        /*  DB / SC     Y/N              */
+G_GRANTSQ         =  "N"        /*  DB / SC     Y/N              */
+G_GRANTRT         =  "N"        /*  DB / SC     Y/N              */
+
+/*
+//SYSPRINT DD SYSOUT=*
+//SYSTSPRT DD SYSOUT=*
+//SYSTSIN  DD DUMMY

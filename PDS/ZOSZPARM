@@ -1,0 +1,262 @@
+/* --------------------------*  REXX  *----------------------------- */
+/*                                                                   */
+/*  Aufruf von DSNWZP um die aktuelle ZPARM zu lesen und auszugeben */
+/*                                                                   */
+/* --------------------------*  REXX  *----------------------------- */
+
+ENV = "TSO"
+X = MSG('OFF')
+"DELSTACK"
+USER        = USERID()
+USERID      = USER
+PARSE SOURCE SRC.1 SRC.2 SRC.3 SRC.4 SRC.5 SRC.6 SRC.7 SRC.8 SRC.9
+db2_ssid = arg(1)
+lnr      = arg(2)
+
+RECLEN  = 4096
+STMTLEN = 4096
+ADDRESS ISPEXEC 'VGET (RECLEN)   PROFILE'
+ADDRESS ISPEXEC 'VGET (STMTLEN)  PROFILE'
+TRACKS     = 60
+ADDRESS ISPEXEC 'VGET (TRACKS)   PROFILE'
+DSNRECON   = "N"
+ADDRESS ISPEXEC 'VGET (DSNRECON) PROFILE'
+If DSNRECON = "Y" Then Do
+   Call Load_DSNREXX
+ End
+
+CALL GET_ZPARM
+call PrintZparms
+call EditZparms
+
+If DSNRECON = "Y" Then Do
+   Call UNLoad_DSNREXX
+ End
+
+RETURN 0
+
+/******************************************************************/
+EditZparms:
+   OUTDSN = ZOSA1900("ZOSA1","DSNAME", "LISTE", LNR)
+   LRECL   = RECLEN
+   IF LISTDSI(OUTDSN) = 0 THEN ADDRESS "TSO"   "DELETE "OUTDSN
+   ADDRESS "TSO" "ALLOC F(TMP1) DA("OUTDSN") NEW CATALOG ,
+            SPACE("TRACKS","TRACKS") TRACKS REUSE,
+            LRECL("lrecl") UNIT(SYSDA)"
+   ADDRESS "TSO" "EXECIO 0 DISKW "TMP1""
+   ADDRESS TSO "EXECIO * DISKW TMP1  (STEM OUT. FINIS"
+   ADDRESS TSO "EXECIO * DISKW TMP1 (STEM "Arg(1)" FINIS"
+   ADDRESS ISPEXEC "EDIT DATASET("OUTDSN") PANEL(ISREFR01)"
+   ADDRESS TSO "FREE FILE(TMP1) NOHOLD"
+   IF LISTDSI(OUTDSN) = 0 THEN ADDRESS "TSO"   "DELETE "OUTDSN
+
+return
+
+/******************************************************************/
+PrintZparms:
+drop out.
+Out.0 = 0
+  /* parse out output values for printing.  */
+  do i = 1 to parm.0
+     parse value parm.i with sysf      '/' ,
+                             macro     '/' ,
+                             zparm     '/' ,
+                             panel     '/' ,
+                             somen     '/' ,
+                             desc      '/' ,
+                             value     '/' ,
+                             rest
+
+     y = i + 1
+     parse value parm.y with nsysf      '/' ,
+                             nmacro     '/' ,
+                             nzparm     '/' ,
+                             npanel     '/' ,
+                             nsomen     '/' ,
+                             ndesc      '/' ,
+                             nvalue     '/' ,
+                             nrest
+
+
+     select
+        When zParm = "AUDITST" Then value = ZPARM_Options(value)
+        When zParm = "SMFACCT" Then value = ZPARM_Options(value)
+        When zParm = "ROUTCDE" Then value = ZPARM_Options(value)
+        When zParm = "ARCWRTC" Then value = ZPARM_Options(value)
+        when zParm = "SMFSTAT" Then do
+             value = ZPARM_Options(value)
+             If value = "()" Then value = "NO"
+         End
+        when zParm = "TRACSTR" Then do
+             value = ZPARM_Options(value)
+             If value = "()" Then value = "NO"
+         End
+        when zParm = "TWOBSDS" Then do
+             If value = 2 THEN value = "YES"
+             ELSE             value = "NO"
+         End
+        when zParm = "TWOARCH" Then do
+             If value = 2 THEN value = "YES"
+             ELSE             value = "NO"
+         End
+        when zParm = "TWOACTV" Then do
+             If value = 2 THEN value = "YES"
+             ELSE             value = "NO"
+         End
+        when zParm = "MON"     Then do
+             If value = 0 THEN value = "NO"
+             ELSE             value = "YES"
+         End
+        Otherwise NOP
+       End  /* END SELECT */
+
+     If datatype(value) = "NUM" Then Do
+         value = value * 1
+      end
+
+     if datatype(value) <> 'CHAR' then value = format(value)
+
+     SMacro = ""
+     Komma  = ","
+     Next   = "X"
+     If OMacro <> Macro Then do
+        OMacro =  Macro
+        SMacro =  Macro
+      End
+
+     If NMacro <> Macro Then do
+        KOMMA = ""
+        NEXT  = ""
+      End
+
+     Out.0 = Out.0 + 1
+     Oi    = Out.0
+     out.oi = left(Smacro,8),
+              left(Strip(zparm) || "=" || Strip(Value) || Komma, 30) ,
+              left(desc,30),
+              ""
+     OUT.oi = Substr(OUT.OI, 1, 70) || ' ' || NEXT
+
+  end /*do*/
+return /*printzparms*/
+
+
+/******************************************************************/
+
+Get_ZParm:
+version = 11
+If version = 12 Then do
+
+   SQLDA.SQLD = 3
+   SQLDA.1.SQLTYPE = 449
+   SQLDA.1.SQLLEN = 8
+   SQLDA.1.SQLDATA = LEFT(' ',8,' ')
+   SQLDA.1.SQLIND = 0
+
+   SQLDA.2.SQLTYPE = 497
+   SQLDA.2.SQLLEN = 4
+   SQLDA.2.SQLDATA = 0
+   SQLDA.2.SQLIND = 0
+
+   SQLDA.3.SQLTYPE = 449
+   SQLDA.3.SQLLEN = 1331
+   SQLDA.3.SQLDATA = LEFT(' ',1331,' ')
+   SQLDA.3.SQLIND = 0
+   PROC           = "SYSPROC.ADMIN_INFO_SYSPARM"
+   PROC           = "ADMIN_INFO_SYSPARM"
+ end
+else do
+   SQLDA.SQLD = 1
+   SQLDA.1.SQLTYPE = 449
+   SQLDA.1.SQLLEN = 8000
+   SQLDA.1.SQLDATA = LEFT(' ',8000,' ')
+   SQLDA.1.SQLIND = 0
+   PROC           = "DSNWZP"
+ End
+ADDRESS DSNREXX  "EXECSQL CALL "PROC" USING DESCRIPTOR :SQLDA"
+Call ReadSQLCA
+return
+
+
+/****************************************************************/
+/* break out the zparms from the SQLCA                          */
+/****************************************************************/
+ReadSQLCA:
+If SQLCODE <> 0 Then do
+   say ' '
+   say '**--------  Stored Proc "PROC" call parms & retrun  -------'||,
+       '-------------**'
+   say '  SQLCODE  ='SQLCODE
+   say '  SQLERRMC ='SQLERRMC
+   say '  SQLERRP  ='SQLERRP
+   say '  SQLERRD  ='SQLERRD.1',',
+   || SQLERRD.2',',
+   || SQLERRD.3',',
+   || SQLERRD.4',',
+   || SQLERRD.5',',
+   || SQLERRD.6
+   say '  SQLWARN  ='SQLWARN.0',',
+   || SQLWARN.1',',
+   || SQLWARN.2',',
+   || SQLWARN.3',',
+   || SQLWARN.4',',
+   || SQLWARN.5',',
+   || SQLWARN.6',',
+   || SQLWARN.7',',
+   || SQLWARN.8',',
+   || SQLWARN.9',',
+   || SQLWARN.10
+   say '  SQLSTATE ='SQLSTATE
+   say '  SQLCODE  ='SQLCODE
+   say '  SQLTYPE  ='SQLDA.1.SQLTYPE
+   say '  SQLLEN   ='SQLDA.1.SQLLEN
+ End
+sqldata = SQLDA.1.SQLDATA
+maxloop = SQLDA.1.SQLLEN
+/*  say sqldata maxloop  sqlda.sqld */
+start = 4
+p = 0
+parm.0 = 1
+do i = 4 to maxloop
+  if c2x(substr(sqldata,i,3)) =  '404025' then do
+    p = p + 1
+    len = i - start
+    parm.p = substr(sqldata,start,len)
+    parm.0 = p
+    start = i + 3
+  end
+end
+/*
+say '  PARM CNT='parm.0
+say ' '
+*/
+return
+
+
+ZPARM_Options:
+ ZOPT_STRG = "("
+ komma = ""
+ do zoi = 1 to length(Arg(1) )
+    if Substr(arg(1), zoi, 1) = 1 Then do
+    ZOPT_STRG = ZOPT_STRG komma zoi
+    komma = ","
+  End
+  end
+ ZOPT_STRG = ZOPT_STRG ")"
+ return space(ZOPT_STRG, 0)
+
+Load_DSNREXX:
+ADDRESS TSO "SUBCOM DSNREXX"
+IF RC THEN   S_RC = RXSUBCOM('ADD','DSNREXX','DSNREXX')
+
+ADDRESS DSNREXX "CONNECT "DB2_SSID
+IF SQLCODE <  0 THEN SAY "CONNECT     SQLCODE="SQLCODE "<"DB2_SSID">"
+
+Return
+
+UNLoad_DSNREXX:
+
+ADDRESS DSNREXX "DISCONNECT"
+S_RC = RXSUBCOM('DELETE','DSNREXX','DSNREXX')
+
+Return

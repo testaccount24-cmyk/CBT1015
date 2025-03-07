@@ -1,0 +1,325 @@
+/* REXX */
+/*******************************************************************/
+/*                                                                 */
+/* ProgramNAME      : ZOSC1906                                     */
+/* AUTHER           : ULRICH BRAEUER                               */
+/* FUNKTION         : ANZEIGE Dynamic PANEL                        */
+/*                                                                 */
+/*                                                                 */
+/*******************************************************************/
+
+SIGNAL ON FAILURE
+SIGNAL ON ERROR
+SIGNAL OFF FAILURE
+SIGNAL OFF ERROR
+
+PARSE SOURCE SRC.1  , /* ENVIRONMENT  (TSO)            */
+             SRC.2  , /* AUFRUF ALS (COMMAND)          */
+             SRC.3  , /* Program NAME (LUW97000)       */
+             SRC.4  , /* SYS00186 (TEMP FILE)          */
+             SRC.5  , /* AUFRUF AUS LIB (X.X.CLISTUDB) */
+             SRC.6  , /* ?                             */
+             SRC.7  , /* TSO                           */
+             SRC.8  , /* ISPF                          */
+             SRC.9  , /* ?                             */
+
+
+ENV        = "TSO"
+X          = MSG('OFF')
+USER       = USERID()
+SYSCATS    = "SYSCAT"
+SYSIBMS    = "SYSIBM"
+SYSIBMA    = "SYSIBMADM"
+SYSPROCA   = "SYSPROC"
+RECLEN     = 4096
+STMTLEN    = 4096
+TRACKS     = 60
+DSNRECON   = "N"
+SYSUID  = ""
+SYSPWD  = ""
+ADDRESS ISPEXEC 'VGET (ALTERJOB) PROFILE'
+ADDRESS ISPEXEC 'VGET (DSNRECON) PROFILE'
+ADDRESS ISPEXEC 'VGET (TRACKS)   PROFILE'
+ADDRESS ISPEXEC 'VGET (RECLEN)   PROFILE'
+ADDRESS ISPEXEC 'VGET (STMTLEN)  PROFILE'
+ADDRESS ISPEXEC 'VGET (SYSIBMS)  PROFILE'
+ADDRESS ISPEXEC 'VGET (SYSCATS)  PROFILE'
+ADDRESS ISPEXEC 'VGET (SYSIBMA)  PROFILE'
+ADDRESS ISPEXEC 'VGET (SYSPROCA) PROFILE'
+ADDRESS ISPEXEC 'VGET (SYSUID)   PROFILE'
+ADDRESS ISPEXEC 'VGET (SYSPWD)   PROFILE'
+
+ADDRESS ISPEXEC 'VGET (UDBTRACE) PROFILE'
+IF UDBTRACE = 'ON' THEN TRACE R
+ELSE                    TRACE
+
+red   = '01'x                              /* Assign colors to       */
+blue  = '02'x                              /*   Attribute bytes      */
+green = '03'x                              /*   found in the data    */
+white = '04'x
+in1   = '05'x
+in2   = '06'x
+in3   = '07'x
+uid   = '08'x
+pwd   = '09'x
+endin = '3a'x
+keyw  = '3b'x
+maxlines = 0                               /* set max number of lines*/
+dyndata  = ''                              /* initialize data        */
+cmddata  = ''                              /* initialize data        */
+curline = 1                                /* set current line #     */
+zeile   = 0                                /* set current line #     */
+
+keytab.0 = 5
+keytab.1 = in1
+keytab.2 = in2
+keytab.3 = in3
+keytab.4 = uid
+keytab.5 = pwd
+
+
+MAP         = arg(1)
+EnterBack   = arg(2)
+InitArea    = arg(3)
+
+ADDRESS ISPEXEC  "VGET (ZSCREENW,ZSCREEND)"
+
+Drop Area.
+Area.0 = 0
+
+Drop Uebergabe.
+Uebergabe.0 = 0
+Do while Length(MAP) > 0
+   Area.0  = Area.0 + 1
+   ai = Area.0
+   Area.ai = Substr(MAP, 1, ZSCREENW)
+   Map = Substr(MAP, ZSCREENW + 1 )
+ End
+
+Call Init_Values
+
+Call Anzeige_Dyn_Panel
+
+Do ui = 1 to Uebergabe.0
+   Queue Uebergabe.ui
+ End
+
+Return PF
+
+
+Anzeige_Dyn_Panel:
+
+If InitArea <> "N" Then do
+   Zeile = 0
+   DROP ausgabe.
+   ausgabe.0 = 0
+   MaxLines = area.0
+   curline = 1                        /* set current line #     */
+   dyndata  = ""
+   ADDRESS ISPEXEC  "VGET (ZSCREENW,ZSCREEND)"
+   Do ai = 1 to area.0
+      dyndata = dyndata || Left(area.ai, ZSCREENW, ' ')
+    end
+   dyndata = dyndata || endin
+   dynarea = substr(dyndata,1+(curline-1)*ZSCREENW) /*set dyn var  */
+   dynarea = dyndata
+
+   MaxScreenLines = ZSCREEND-5
+   dyndata_len = Length(dyndata)
+   trenner = in1
+   START   = Pos(keyw, dyndata, 1)
+   If START  < 1 Then START = 1
+   DYNPOS  = START + 1
+   Do ki = 1 to keytab.0
+      Found    = Pos(keytab.ki, dyndata, START )
+      If Found > 0  Then Do
+         SELECT
+           When  DYNPOS =  START + 1   Then dynpos = Found + 1
+           When  Found  <  DYNPOS      Then dynpos = Found + 1
+           Otherwise NOP
+          END
+       End
+    End
+   znr     = 1
+ End
+
+
+NNCount = 0
+If EnterBack = "Y" Then PFTASTEN = "ENTER=GO PF03=RETURN PF04=Cancel"
+else                    PFTASTEN = "      PF03=GO    PF04=Cancel"
+
+IF area.0 > ZSCREEND - 8       Then Do
+   PFTASTEN = PFTASTEN " PF7=BACK PF8=NEXT  "
+ END
+
+Do Until disprc > 0
+
+   NNCount = 0
+   start   = 1+(curline-1)*ZSCREENW
+   dynarea = substr(dyndata, Start)
+   size = length(dynarea)                   /* Set a scalar variable  */
+   ADDRESS ISPEXEC "DISPLAY PANEL(PDYNPNL1)"
+
+   MaxScreenLines = DYNDPTH
+   DynArea_len = MaxScreenLines*ZSCREENW
+   dyndata1= Substr(dyndata, 1,  1+(curline-1)*ZSCREENW-1)
+   start   = Length(dyndata1) + Length(dynarea) + 1
+   Dyndata = Dyndata1 || dynarea || Substr(Dyndata, start)
+   Eingabe = dynarea
+
+   disprc = rc                              /* save return code       */
+   ADDRESS ISPEXEC "VGET (ZVERB,ZSCROLLA,ZSCROLLN, ZSCROLLD) "
+   ADDRESS ISPEXEC "VGET (ZXSMAX, ZXSMIN) "
+   dynrc = rc
+   SELECT                                   /* Process scrolling      */
+     When(zverb  = 'UP')   Then Do          /* Scroll up              */
+      If zscrolla = 'MAX' Then Do           /*  if scroll was max     */
+         curline = 1                       /*    scroll to top       */
+       End
+      Else Do                               /*  else a number is known*/
+       curline = curline - MaxScreenLines        /* (max is bottom)   */
+       if curline < 1 then Curline = 1
+       End
+      End
+     When(zverb  = 'DOWN') Then Do          /* Scroll down            */
+      If zscrolla = 'MAX' Then Do           /*  if scroll was max     */
+       curline = maxlines                   /*    scroll to bottom    */
+      end
+      Else do                               /*  else a number is known*/
+       curline = curline + MaxScreenLines        /* (max is bottom)   */
+       If curline > maxlines Then Curline = maxlines
+       if DynArea_len >= dyndata_len Then Do  /* NUR EINE SEITE */
+          curline = 1
+        End
+       end
+      end
+     Otherwise;                      /* could use left & right too    */
+   End
+   if dynrc > 8 then Do
+      say "Display RC="RC
+      say "ZEDSMSG="ZEDSMSG
+      say "ZERRLM="ZERRLM
+      say "ZERRMSG="ZERRMSG
+      say "ZERRSM="ZERRSM
+      say rc object1
+      EXIT   "PF4"
+    End
+
+   DO While Length(eingabe) > 0
+      Zeile = zeile + 1
+      trenner = in1
+      FoundL = 0
+      Call Einabe_lesen
+      If Result = 1 Then Leave
+   End  /* End Do While */
+
+    If PF   = 'PF03'                    THEN LEAVE
+    If PF   = 'PF04'                    THEN LEAVE
+    If RESP = "ENTER" & EnterBack = "Y" Then Do
+       PF   = "ENTER"
+       return
+     End
+End                                        /* End of display loop    */
+
+Return
+
+Init_Values:
+
+NNCount = 0
+Do ai = 1 to Area.0
+   eingabe = area.ai
+   FoundL = 0
+   Call Einabe_lesen
+ End
+
+Return
+
+Einabe_lesen:
+
+/* Keyword und values aus der eingabe auslesen */
+
+FoundL = 0
+Do ki = 1 to keytab.0
+   Found    = Pos(keytab.ki, eingabe, 1)
+   If Found = 0 Then Iterate
+   Select
+    When FoundL = 0 Then Do
+         Trenner = keytab.KI
+         FoundL  = Found
+     End
+    When FoundL > 0 & Found < FoundL Then Do
+         Trenner = keytab.KI
+         FoundL  = Found
+     End
+    Otherwise NOP
+   End
+ End
+
+/*    Keyword Finden   */
+epos     = Pos(keyw, eingabe, 1)
+xpos     = Pos(Trenner, eingabe, epos+1)
+elen     = xpos - epos -1
+If    elen < 0 Then Return 1
+Keyword  =  Substr(eingabe, epos+1, elen  )
+Keyword  =  Word(Keyword, 1)
+
+If Length(Keyword) < 1 Then Do
+   NNCount = NNCount + 1
+   KeyWord = "Col" || NNCount
+ End
+
+/*    EINGABE Finden   */
+epos     = Pos(Trenner, eingabe, 1)
+if epos  < 1 then return 1
+xpos     = Pos(endin, eingabe, epos+1)
+elen     = xpos - epos -1
+if elen < 1 then Do
+   If Length(KeyWord) > 0 Then evalue = ""
+ End
+Else evalue   = Substr(eingabe, epos+1, elen  )
+eingabe  = Substr(eingabe, xpos+ 1)
+
+Update_found = "N"
+Do ui1 = 1 To Uebergabe.0
+   If word(Uebergabe.ui1, 1) = Strip(Keyword) || '_VAL' Then do
+      Uebergabe.ui1 = Strip(Keyword) || '_VAL = '  || ,
+                      '"' || Strip(evalue, "T") || '"'
+      Update_found = "Y"
+      LEAVE
+    End
+ End
+If Update_found = "N" Then Do
+   Uebergabe.0  = Uebergabe.0 + 1
+   ui = uebergabe.0
+   Uebergabe.ui = Strip(Keyword) || '_VAL = "' ||  ,
+                  Strip(evalue, "T")'"'
+ End
+
+Return 0
+
+error: failure: syntax: novalue: halt:
+say SRC.3":"
+cstr = CONDITION('Condition')         /* Name of trapped condition*/
+istr = CONDITION('Instruction')       /* CALL or SIGNAL           */
+dstr = CONDITION('Description')       /* Description or null      */
+sstr = CONDITION('Status')            /* ON, OFF, or DELAY        */
+Say  'Condition  :'cstr
+say  'Instruction:'istr
+say  'Description:'dstr
+say  'Status     :'sstr
+
+If condition = 'HALT' Then do
+   Say SRC.3 "manually abort " condition condition('C')
+ End
+ Else Do
+   Say SRC.3 condition
+   condition = condition('C')
+   source = strip(sourceline(sigl),"B")
+   say copies('*',79)
+   say left('* 'condition' CONDITION ON LINE 'sigl' OF REXX 'rexx,78)'*'
+   say left('* 'source,78)'*'
+   say left('* RETURN CODE 'rc,78)'*'
+   say left('* 'errortext(rc),78)'*'
+   say copies('*',79)
+ End
+exit 100

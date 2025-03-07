@@ -1,0 +1,254 @@
+/* REXX */
+/*******************************************************************/
+/*                                                                 */
+/* ProgramNAME      : ZOSC1911  (fuer ZOS V12 Nr 911)              */
+/* AUSRUF           : Procedure  x=ZOSC1911(ssid,loc,ausw,INDSN)   */
+/* AUTHER           : ULRICH BRAEUER                               */
+/* FUNKTION         : AG : Edit / Execute stmt in Dataset          */
+/*                                                                 */
+/*                                                                 */
+/*******************************************************************/
+
+ENV        = "TSO"
+X          = MSG('OFF')
+USER       = USERID()
+DDLSPUFI = "N"
+ADDRESS ISPEXEC 'VGET (UDBTRACE) PROFILE'
+ADDRESS ISPEXEC 'VGET (DDLSPUFI) PROFILE'
+ADDRESS ISPEXEC 'VGET (ACOMMIT)  PROFILE'
+
+If DDLSPUFI = "Y" THEN SPUFIIN = "Y"
+ ELSE                  SPUFIIN = "N"
+IF UDBTRACE = 'ON' THEN TRACE R
+ELSE                    TRACE
+RECLEN  = 4096
+STMTLEN = 4096
+ADDRESS ISPEXEC 'VGET (RECLEN)  PROFILE'
+ADDRESS ISPEXEC 'VGET (STMTLEN) PROFILE'
+TRACKS  = 60
+ADDRESS ISPEXEC 'VGET (TRACKS)  PROFILE'
+ADDRESS ISPEXEC "(CAPS)=CAPS"
+ADDRESS ISPEXEC "caps off"       /*for DDL     */
+
+
+ssid       = arg(1)
+location   = arg(2)
+auswahl1   = arg(3)
+object     = arg(4)
+INDSN      = arg(5)
+LNR        = arg(6)
+DB2_SSID = SSID
+
+EDSTMT        = 'Y'
+EXSTMT        = 'N'
+EDListe       = 'N'
+If ACOMMIT    = 'N' Then ACOMMIT = 'N'
+Else                     ACOMMIT = 'Y'
+SQLTERM       = ';'
+COLDEL        = ';'
+CHARDEL       = '"'
+COLDELX       = C2X(COLDEL)
+CHARDELX      = C2X(CHARDEL)
+COLDEL_SAVE   = COLDEL
+CHARDEL_SAVE  = CHARDEL
+COLDELX_SAVE  = COLDELX
+CHARDELX_SAVE = CHARDELX
+OUTFORM       = 'FIX'
+SPUFI_FORMAT  =  "N"
+IGNSQLER      =  "N"
+
+AWOK = "FIX FNH VAR CSV CSH WWR WWD XML HTM INS JSO"
+If POS(auswahl1, AWOK, 1) > 0 Then OUTFORM = auswahl1
+
+do forever
+   If object  = "EDIT_DIREKT" then do
+      EDSTMT  = "Y"
+      object  = ""
+      command = ""
+      zcmd    = ""
+    End
+   else Do
+     ADDRESS ISPEXEC "DISPLAY PANEL(PZO97911)"
+     If RC > 8 Then do
+        say "ZEDSMSG="ZEDSMSG
+        say "ZERRLM="ZERRLM
+        say "ZERRMSG="ZERRMSG
+        say "ZERRSM="ZERRSM
+        say "RC="rc
+        return ""
+      End
+     COMMAND = ZCMD
+    End
+
+   /* PF Tasten Pruefen  */
+   Select
+      When SUBSTR(COMMAND,1,3) = "CAN"  THEN LEAVE
+      WHEN WORD(COMMAND,1) = "TRACE" then do
+           IF WORD(COMMAND, 2) = "ON"  Then trace('R')
+           IF WORD(COMMAND, 2) = "OFF" Then trace('O')
+           UDBTRACE = word(COMMAND, 2)
+           ADDRESS ISPEXEC 'VPUT (UDBTRACE) PROFILE'
+           ZCMD = ''
+       end
+      When PF                  = 'PF03' THEN LEAVE
+      When AUSWAHL             =  99    THEN LEAVE
+      Otherwise NOP
+     End
+
+   IF COLDEL   <> COLDEL_SAVE   THEN Do
+      COLDEL_SAVE   = COLDEL
+      COLDELX       = C2X(COLDEL)
+      COLDELX_SAVE  = COLDELX
+    End
+   IF COLDELX  <> COLDELX_SAVE  THEN Do
+      COLDELX_SAVE  = COLDELX
+      COLDEL        = X2C(COLDELX)
+      COLDEL_SAVE   = COLDEL
+    End
+   IF CHARDEL  <> CHARDEL_SAVE  THEN Do
+      CHARDEL_SAVE  = CHARDEL
+      CHARDELX      = C2X(CHARDEL)
+      COLDELX_SAVE  = CHARDELX
+    End
+   IF CHARDELX <> CHARDELX_SAVE THEN Do
+      CHARDELX_SAVE = CHARDELX
+      CHARDEL       = X2C(CHARDELX)
+      COLDEL_SAVE   = CHARDEL
+    End
+
+   IF EDSTMT = 'Y' Then do
+      ADDRESS ISPEXEC "EDIT DATASET("INDSN")"
+      EDSTMT = '*'
+    end
+   if EXSTMT = 'Y' then do
+      EDListe = 'Y'
+      call Execute_stmt
+      EXSTMT = '*'
+    end
+   if EDListe= 'Y' then do
+      EDListe = '*'
+      call Edit_Liste
+      EXSTMT = '*'
+    end
+
+   ADDRESS ISPEXEC 'VGET (UDBTRACE) PROFILE'
+   IF UDBTRACE = 'ON' THEN TRACE R
+   ELSE                    TRACE
+
+ end
+
+ADDRESS ISPEXEC "caps "caps  /*restore Caps */
+return 0
+
+Execute_stmt:
+
+OUTDSN = ZOSC1900("ZOSC1","DSNAME", "LISTE", LNR)
+LRECL   = RECLEN
+
+/* Lesen DSN mit statements */
+ADDRESS "TSO" "FREE FI(SYSIN)"
+ADDRESS "TSO" "FREE FI(RXPARM)"
+ADDRESS "TSO" "FREE FI(OUTDD)"
+RXPARM  = "'" || Space(Translate(INDSN, " ", "'") || ".RXP", 0) || "'"
+
+ADDRESS "TSO" "ALLOC F(SYSIN) DA("INDSN") SHR"
+IF LISTDSI(RXPARM) = 0 THEN ADDRESS "TSO"   "DELETE "RXPARM
+ADDRESS "TSO" "ALLOC F(RXPARM) DA("RXPARM") NEW CATALOG ,
+          SPACE(1,1) TRACKS REUSE,
+          LRECL(80) UNIT(SYSDA)"
+
+HK            = '"'
+RXPARMS.0    = 13
+RXPARMS.1    = "SSID          = "ssid
+If Length(location) = 0 Then do
+   RXPARMS.2    = "LOCATION      = ''"
+ End
+Else Do
+   RXPARMS.2    = "LOCATION      = '"Location"'"
+ End
+
+RXPARMS.3    = "SQLTERM       = '"SQLTERM"'"
+
+IF COLDEL    = "'" THEN Do
+   RXPARMS.4    = 'COLDEL        = "'COLDEL'"'
+ End
+ELSE do
+   RXPARMS.4    = "COLDEL        = '"COLDEL"'"
+ End
+
+IF CHARDEL   = "'" THEN Do
+   RXPARMS.5    = 'CHARDEL       = "'CHARDEL'"'
+ End
+ELSE do
+   RXPARMS.5    = "CHARDEL       = '"CHARDEL"'"
+ End
+IF SPUFIIN   = "Y" THEN Do
+   RXPARMS.6    = 'SPUFI_FORMAT  =  "Y"'
+ End
+ELSE do
+   RXPARMS.6    = 'SPUFI_FORMAT  =  "N"'
+ End
+
+RXPARMS.7    = "OUTPUT_FORMAT = 'CSV' "
+RXPARMS.8    = "OUTPUT_FORMAT = 'CSH' "
+RXPARMS.9    = "OUTPUT_FORMAT = 'VARIABLE' "
+RXPARMS.10   = "OUTPUT_FORMAT = 'WORDWRAP' "
+
+Select
+  When OUTFORM = 'FIX' Then RXPARMS.10 = "OUTPUT_FORMAT = 'FIXED'"
+  When OUTFORM = 'FNH' Then RXPARMS.10 = "OUTPUT_FORMAT = 'FIXEDNOHEAD'"
+  When OUTFORM = 'VAR' Then RXPARMS.10 = "OUTPUT_FORMAT = 'VARIABLE'"
+  When OUTFORM = 'CSV' Then RXPARMS.10 = "OUTPUT_FORMAT = 'CSV'    "
+  When OUTFORM = 'CSH' Then RXPARMS.10 = "OUTPUT_FORMAT = 'CSVH'    "
+  When OUTFORM = 'WWR' Then RXPARMS.10 = "OUTPUT_FORMAT = 'WORDWRAP'"
+  When OUTFORM = 'WWD' Then RXPARMS.10 = "OUTPUT_FORMAT = 'WORDWRAPDET'"
+  When OUTFORM = 'XML' Then RXPARMS.10 = "OUTPUT_FORMAT = 'XML'"
+  When OUTFORM = 'HTM' Then RXPARMS.10 = "OUTPUT_FORMAT = 'HTML'"
+  When OUTFORM = 'INS' Then RXPARMS.10 = "OUTPUT_FORMAT = 'INSERT'"
+  When OUTFORM = 'JSO' Then RXPARMS.10 = "OUTPUT_FORMAT = 'JSON'"
+  Otherwise RXPARMS.10 = "OUTPUT_FORMAT = 'FIXED' "
+ End
+
+if acommit = 'N' Then Do
+   RXPARMS.11   = "AUTO_COMMIT   = 'NO'   "
+ end
+else do
+   RXPARMS.11   = "AUTO_COMMIT   = 'YES'   "
+ end
+
+if IGNSQLER <> 'Y' Then Do
+   RXPARMS.12   = "IGNORE_SQL_ERROR = 'NO'  "
+ end
+else do
+   RXPARMS.12   = "IGNORE_SQL_ERROR = 'YES'  "
+ end
+
+RXPARMS.13   = "NULLWert = '"STRIP(NULLVAL)"'"
+
+ADDRESS "TSO" "EXECIO * DISKW RXPARM ( STEM RXPARMS. FINIS"
+ADDRESS "TSO" "FREE FI(RXPARM)"
+ADDRESS "TSO" "ALLOC F(RXPARM) DA("RXPARM") SHR"
+
+
+IF LISTDSI(OUTDSN) = 0 THEN ADDRESS "TSO"   "DELETE "OUTDSN
+ADDRESS "TSO" "ALLOC F(OUTDD) DA("OUTDSN") NEW CATALOG ,
+          SPACE("TRACKS","TRACKS") TRACKS REUSE,
+          RECFM(V B) ,
+          LRECL("lrecl") UNIT(SYSDA)"
+
+Call DYNAMSQL
+
+if result = 100 then exit 100
+
+ADDRESS "TSO" "FREE FI(SYSIN)"
+ADDRESS "TSO" "FREE FI(OUTDD)"
+ADDRESS "TSO" "FREE FI(RXPARM)"
+IF LISTDSI(RXPARM) = 0 THEN ADDRESS "TSO"   "DELETE "RXPARM
+
+Return
+
+Edit_liste:
+
+ADDRESS ISPEXEC "BROWSE DATASET("OUTDSN")"
+
+Return

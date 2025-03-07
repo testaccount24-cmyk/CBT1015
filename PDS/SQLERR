@@ -1,0 +1,37 @@
+/* REXX */
+PARSE UPPER ARG SQLCODE
+If Arg() = 0 Then do
+   sqlcode = -805
+ end
+
+msglen = 72
+
+
+do until PFInhalt = "END"
+   If Space(SQLCODE, 0) = '' Then Do
+      sqlcode = 0
+      Iterate
+    end
+   SQLC = D2X(SQLCODE,8)
+   SQLC = X2C(SQLC)
+   SQLCA = 'SQLCA   '
+   SQLCA = SQLCA ||  X2C(00000088)
+   SQLCA = SQLCA ||  SQLC
+   SQLCA = SQLCA ||  X2C(0000)
+   SQLCA = SQLCA ||  COPIES(' ',78)
+   SQLCA = SQLCA ||  COPIES(X2C(00),24)
+   SQLCA = SQLCA ||  COPIES(' ',16)
+   TIAR_MSG = X2C(0190)COPIES(' ',400)
+   TEXT_LEN = x2c(RIGHT(msglen, 7, '0'))
+   ADDRESS ATTCHPGM 'DSNTIAR SQLCA TIAR_MSG TEXT_LEN'
+   msg = SUBSTR(TIAR_MSG,4,400);
+   msg400     = space(msg, 1)
+   parse value msg400 with text1 ':' text2 'DSNT415I' text3
+   text1  = substr(text1, 1, 80)
+   text2  = strip(text2)
+   text2l = (length(text2) % 80 + 1) * 80
+   text2  = substr(Text2, 1, Text2L)
+   text3  = 'DSNT415I' Strip(Text3)
+   msg400 = text1 || text2 || Text3
+    address ispexec "DISPLAY PANEL (PSQLERR)"
+  end

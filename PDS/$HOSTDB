@@ -1,0 +1,26 @@
+
+--Locations
+
+INSERT INTO SYSIBM.LOCATIONS          (
+     LOCATION
+   , LINKNAME
+   , PORT
+   , TPN
+   , DBALIAS
+   , TRUSTED
+   , SECURE
+   ) VALUES (
+'DB2VBLOC','DB2B','451','','','N','N'
+ ) ;
+
+--
+-- IPNAMES
+--
+INSERT INTO SYSIBM.IPNAMES (
+     LINKNAME
+   , SECURITY_OUT
+   , USERNAMES
+   , IPADDR
+ ) VALUES (
+'DB2B','A','','192.168.178.150'
+)  ;

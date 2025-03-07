@@ -1,0 +1,5182 @@
+/* REXX */
+/*******************************************************************/
+/*                                                                 */
+/* ProgramNAME      : ZOSB1AC2                                     */
+/* AUSRUF           : AUS Program                                  */
+/* AUTHER           : ULRICH BRAEUER  08.09.2013                   */
+/* FUNKTION         : ERSTELLEN DDL FUER OBJEKTE /DB2 ZOS V11      */
+/* AUFRUF           : ZOSB1AC2 ARG1 ARG2 ARG3 ARG4 ARG5 ARG6       */
+/*                    ARG1 MUSS SEIN : SSID                        */
+/*                    ARG2 KANN SEIN : DB, TS, TB, IX, VW,         */
+/*                                     SY, AL, PG, TR, ....        */
+/*                    ARG3 KANN SEIN : CREATOR.NAME DES OBJEJCT    */
+/*                    ARG4 KANN SEIN : TBCREATOR.TABNAME           */
+/*                    ARG5 KANN SEIN : TABLESPACE NAME             */
+/*                    ARG6 KANN SEIN : DATABASE NAME               */
+/*   ERKLAERUNG ZU ARG4, ARG5, ARG6 |||                            */
+/*   ES IST MOEGLICH Z.B BEI DER FUNKTION IX ZU SAGEN, ICH WILL    */
+/*   ALLE INDEXES ZU EINER TABLE, ODER ZU EINEM TABLESPACE ODER    */
+/*   ZU EINER DATENBANK.                                           */
+/*   SINNFOLL IST ES AUCH ZU SAGEN, ICH WILL WISSEN, WELCHE PLAENE */
+/*   ODER PACKAGES AUF EINEN TABLESPCE GEHEN, Z.B. FUER REORGS     */
+/*   MIT ANSCHLIESENDEM REBIND. ||                                 */
+/*                                                                 */
+/*   Aufpassen auf rexx_Win mus | in ] geaendert werden            */
+/*                                                                 */
+/*******************************************************************/
+
+SIGNAL ON SYNTAX          /* TURN ON SYNTAX TRAP */
+SIGNAL ON HALT            /* TRAP THIS ONLY ON LUW */
+SIGNAL OFF FAILURE
+SIGNAL OFF ERROR
+
+PARSE SOURCE SRC.1 SRC.2 SRC.3 SRC.4 SRC.5 SRC.6 SRC.7 SRC.8 SRC.9
+
+IF SRC.2 = "SUBROUTINE" Then SUBROUTINE    = 'Y'
+ Else                        SUBROUTINE    = 'N'
+ispf_env = SRC.8
+parse Upper version rexxType level date
+ENV = "WIN"
+ENV = "TSO"
+IF SRC.1 <> "TSO" & Substr(rexxType, 1, 11) = "REXX-OOREXX" Then Do
+   ENV = "WIN"
+ End
+
+USER = USERID()
+SYSCATS    = "SYSCAT"
+SYSIBMS    = "SYSIBM"
+SYSIBMA    = "SYSIBMADM"
+SYSPROCA   = "SYSPROC"
+DSNRECON   = "N"
+CURSQLID   = ""
+DDLTEXT    = ""
+SYSUID     = ""
+SYSPWD     = ""
+DDLSPUFI   = ""
+ALPHA      = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+
+Select
+   When Env = 'TSO' & ispf_env = "ISPF" Then do
+        X = MSG('OFF')
+        ADDRESS ISPEXEC 'VGET (DSNRECON) PROFILE'
+        ADDRESS ISPEXEC 'VGET (UDBTRACE) PROFILE'
+        ADDRESS ISPEXEC 'VGET (SYSIBMS) PROFILE'
+        ADDRESS ISPEXEC 'VGET (SYSCATS) PROFILE'
+        ADDRESS ISPEXEC 'VGET (SYSIBMA) PROFILE'
+        ADDRESS ISPEXEC 'VGET (SYSPROCA) PROFILE'
+        ADDRESS ISPEXEC 'VGET (SYSUID)   PROFILE'
+        ADDRESS ISPEXEC 'VGET (SYSPWD)   PROFILE'
+        ADDRESS ISPEXEC 'VGET (DDLSPUFI) PROFILE'
+        IF UDBTRACE = 'ON' THEN TRACE R
+        ELSE                    TRACE
+    End
+   When Env = "WIN" Then Do
+        oq = RXQUEUE('Set',"ZOSB1AC2U")
+        Do QUEUED()
+           Parse PULL ZEILE
+           INTERPRET  ZEILE
+         End
+        oq = RXQUEUE('Set',"SESSION")
+     END
+    Otherwise NOP
+ End
+
+Select
+   WHEN ispf_env = 'ISPF' THEN Do
+        ADDRESS TSO
+     End
+   WHEN ispf_env = 'MVS' THEN Do
+        ADDRESS MVS
+     End
+   OTHERWISE NOP
+ END
+
+DB2_SSID       = ARG(1)  /* SSID      */
+DB2_LOC        = ARG(2)  /* LOCATION  */
+DB2_FUNKTION   = ARG(3)  /* FUNKTION  */
+SUCH1          = ARG(4)  /* OBJECT CREATOR/NAME */
+SUCH2          = ARG(5)  /* TABLE  CREATOR/NAME */
+SUCH3          = ARG(6)  /* TABLE  CREATOR/NAME */
+SUCH4          = ARG(7)  /* TABLE  CREATOR/NAME */
+SUCH5          = ARG(8)  /* TABLE  CREATOR/NAME */
+DB2_TABLESPACE = ARG(9)
+DB2_DATABASE   = ARG(10)
+DB2_GRANT      = ARG(11)
+DB2_CALLTYPE   = ARG(12)
+DB2_CREATOR1   = ""
+DB2_NAME1      = ""
+DB2_CREATOR2   = ""
+DB2_NAME2      = ""
+DB2_CREATOR3   = ""
+DB2_NAME3      = ""
+DB2_CREATOR4   = ""
+DB2_NAME4      = ""
+DB2_CREATOR5   = ""
+DB2_NAME5      = ""
+DB2_TYPE       = ""
+TB_NAME        = ""
+TB_CREATOR     = ""
+
+/* DB2_CALLTYPE KANN SEIN HDDL TB  (HDDL FUER TB) */
+PARSE VALUE DB2_CALLTYPE WITH CALLAS CALLTYPE
+
+IF DB2_FUNKTION = "RECONNECT" Then do
+   say reconnect
+   ssid = DB2_SSID
+   call UNLoad_DSNREXX_AC2
+   Call Load_DSNREXX_AC2
+   RETURN ""
+ End
+
+
+IF POS('.', SUCH1) > 0 THEN
+   PARSE VALUE SUCH1 WITH DB2_CREATOR1 '.' DB2_NAME1
+ ELSE DB2_NAME1 = SUCH1
+
+IF POS('.', SUCH2) > 0 THEN
+   PARSE VALUE SUCH2 WITH DB2_CREATOR2 '.' DB2_NAME2
+ ELSE DB2_NAME2 = SUCH2
+
+IF POS('.', SUCH3) > 0 THEN
+   PARSE VALUE SUCH3 WITH DB2_CREATOR3 '.' DB2_NAME3
+ ELSE DB2_NAME3 = SUCH3
+
+IF POS('.', SUCH4) > 0 THEN
+   PARSE VALUE SUCH4 WITH DB2_CREATOR4 '.' DB2_NAME4
+ ELSE DB2_NAME4 = SUCH4
+
+IF POS('.', SUCH5) > 0 THEN
+   PARSE VALUE SUCH5 WITH DB2_CREATOR5 '.' DB2_NAME5
+ ELSE DB2_NAME5 = SUCH5
+
+If DSNRECON = "Y" Then Do
+   Call Load_DSNREXX_AC2
+ End
+RXDB2_SSID        = DB2_SSID
+RXDB2_GETSTEM     = 'EINGABE.'
+RXDB2_PUTSTEM     = 'AUSGABE.'
+RXDB2_MAXROWS     = 0
+RXDB2_IGNORE_SQLERR = 'N'
+SQL_BIGINT        = "492 493"
+
+If Length(DB2_LOC) > 0 Then  OK = CONNECT_LOCATION_AC2(DB2_LOC)
+
+DROP EINGABE.
+DROP AUSGABE.
+DROP OUTSQLDA.
+
+SELECT
+   WHEN DB2_FUNKTION = "SG"  THEN CALL CREATE_SG  /* DATABASE     */
+   WHEN DB2_FUNKTION = "DB"  THEN CALL CREATE_DB  /* DATABASE     */
+   WHEN DB2_FUNKTION = "TS"  THEN CALL CREATE_TS  /* TABLESPACE   */
+   WHEN DB2_FUNKTION = "TB"  THEN DO              /* TABLE        */
+        CALL CREATE_TB
+    END
+   WHEN DB2_FUNKTION = "TC"  THEN DO              /* TABLE COMMENT*/
+        DB2_TYPE = 'T'
+        CALL CREATE_KOMMENT
+    END
+   WHEN DB2_FUNKTION = "TBALTER" THEN CALL CREATE_TBALTER
+   WHEN DB2_FUNKTION = "IX"  THEN CALL CREATE_IX  /* INDEX        */
+   WHEN DB2_FUNKTION = "VW"  THEN CALL CREATE_VW  /* VIEW         */
+   WHEN DB2_FUNKTION = "MQT" THEN CALL CREATE_VW  /* VIEW   MQT   */
+   WHEN DB2_FUNKTION = "VC"  THEN DO              /* VIEW COMMENT */
+        DB2_TYPE = 'V'
+        CALL CREATE_KOMMENT
+    END
+   WHEN DB2_FUNKTION = "PK"  THEN DO
+        TB_CREATOR    = DB2_CREATOR1
+        TB_NAME       = DB2_NAME1
+        TB_IXCREATOR  = DB2_CREATOR2
+        TB_IXNAME     = DB2_NAME2
+        CALL CHECK_UNIQUE_CONSTRAINT
+    END
+   WHEN DB2_FUNKTION = "FK"   THEN CALL CREATE_FK  /* FORAIN KEY   */
+   WHEN DB2_FUNKTION = "SY"   THEN CALL CREATE_SY  /* SYNONYM      */
+   WHEN DB2_FUNKTION = "AL"   THEN CALL CREATE_AL  /* ALIAS        */
+   WHEN DB2_FUNKTION = "PG"   THEN CALL CREATE_PG  /* PACKAGES     */
+
+
+   WHEN DB2_FUNKTION = "TG"   THEN CALL CREATE_TG  /* TRIGGER      */
+   WHEN DB2_FUNKTION = "SE"   THEN CALL CREATE_SE  /* SEQUENCE     */
+   WHEN DB2_FUNKTION = "SEA"  THEN CALL CREATE_SEA /* SEQUENCE AUTH*/
+   WHEN DB2_FUNKTION = "RO"   THEN CALL CREATE_RO  /* ROLE         */
+   WHEN DB2_FUNKTION = "RT"   THEN CALL CREATE_RT  /* ROUTINE (SPROC)*/
+   WHEN DB2_FUNKTION = "TBA"  THEN CALL Create_TABAUTH   /*TB AUTH */
+   WHEN DB2_FUNKTION = "TCO"  THEN CALL Create_TCO /* Trusted Context */
+   WHEN DB2_FUNKTION = "PERM" THEN CALL Create_PERM /*Perm/MASK     */
+   WHEN DB2_FUNKTION = "VAR"  THEN CALL Create_VAR  /*VARIABLE      */
+   WHEN DB2_FUNKTION = "DT"   THEN CALL Create_DT   /*Datatype      */
+   WHEN DB2_FUNKTION = "CK"   THEN CALL Create_CK   /*CHECKS        */
+   WHEN DB2_FUNKTION = "RTA"  THEN CALL CREATE_RTA  /*Routine Auth  */
+   OTHERWISE NOP
+ END
+
+If Length(DB2_LOC) > 0 Then  OK = DISCONNECT_LOCATION_AC2(DB2_LOC)
+If DSNRECON = "Y" Then Do
+   Call UNLoad_DSNREXX_AC2
+ End
+
+RETURN DDLTEXT
+
+CREATE_SG:
+
+WHERELIST = ""
+CALL MAKE_WHERELIST "NAME", DB2_NAME1
+
+EINGABE.0  = 1
+SQLSTMT    = "SELECT  SG.NAME                     " ,
+             "      , SG.VCATNAME                 " ,
+             "      , SG.VPASSWORD                " ,
+             "      , VO.VOLID                    " ,
+             "FROM  "SYSIBMS".SYSSTOGROUP SG      " ,
+             "INNER JOIN "SYSIBMS".SYSVOLUMES VO  " ,
+             "ON SG.NAME = VO.SGNAME              " ,
+             WHERELIST                              ,
+             "ORDER BY SG.NAME                    " ,
+             "FOR FETCH ONLY                      " ,
+             ""
+
+CNR = 1
+CALL OPEN_CURSOR_AC2
+
+SQL_FETCH_SAVE =  SQL_FETCH
+DO WHILE SQLCODE = 0
+   CNR = 1
+   SQL_FETCH   = SQL_FETCH_SAVE
+   SQLTEXT = " FETCH C"CNR" INTO "   SQL_FETCH
+   Call EXECUTE_SQL_TEXT_AC2
+
+    Select
+        When SQLCODE = 100 THEN DO
+             CALL CLOSE_CURSOR_AC2 /* CLOSE CURSOR */
+             LEAVE
+          End
+        When SQLCODE <> 0  THEN DO
+             SAY "ERROR ON FETCH C"CNR", RC="RC ,
+                 "SQLCODE="SQLCODE         ,
+                 "SQLERRMC="SQLERRMC       ,
+                 ""
+             Exit 8
+          End
+        Otherwise NOP
+     End
+   DDLTEXT = DDLTEXT || "CREATE STOGROUP "  STRIP(NAME) "-NL"
+
+   Call CREATE_SG_VOLUMES
+
+   IF VOLLIST <> '' THEN
+      DDLTEXT = DDLTEXT "VOLUMES ("VOLLIST")  -NL"
+
+   DDLTEXT = DDLTEXT "VCAT "STRIP(VCATNAME) "-NL"
+
+   IF VPASSWORD <> '' THEN
+      DDLTEXT = DDLTEXT || "PASSWORD "VPASSWORD "-NL"
+
+   DDLTEXT = DDLTEXT "-NR"
+ END /* END DO SGRI = 1 TO AUSGABE.0 */
+
+RETURN
+
+CREATE_SG_VOLUMES:
+
+CNR = 2
+SQLSTMT    = "SELECT  VO.VOLID                    " ,
+             "FROM "SYSIBMS".SYSVOLUMES VO  " ,
+             "WHERE VO.SGNAME  = '"NAME"'         " ,
+             "FOR FETCH ONLY                      " ,
+             ""
+
+CALL OPEN_CURSOR_AC2
+
+KOMMA = ""
+VOLLIST = ''
+DO WHILE SQLCODE = 0
+   SQLTEXT = " FETCH C"CNR" INTO :VOLID"
+   Call EXECUTE_SQL_TEXT_AC2
+    Select
+        When SQLCODE = 100 THEN DO
+             CALL CLOSE_CURSOR_AC2 /* CLOSE CURSOR */
+             SQLCODE = 0  /* WEGEN VERSCHACHTELUNG  */
+             RETURN
+          End
+        When SQLCODE <> 0  THEN DO
+             SAY "ERROR ON FETCH C"CNR", RC="RC ,
+                 "SQLCODE="SQLCODE         ,
+                 "SQLERRMC="SQLERRMC       ,
+                 ""
+             Exit 8
+          End
+        Otherwise NOP
+     End
+
+    VOLLIST = VOLLIST || KOMMA || "'"STRIP(VOLID)"'" "-NL"
+    KOMMA = ", "
+ END
+
+RETURN
+
+CREATE_DB:
+
+WHERELIST    = ""
+CALL MAKE_WHERELIST "DB.CREATOR", DB2_CREATOR1
+CALL MAKE_WHERELIST "DB.NAME", DB2_NAME1
+
+EINGABE.0  = 1
+SQLSTMT   =  "" ,
+             "SELECT DB.CREATOR, DB.NAME     " ,
+             "     , DB.STGROUP, DB.BPOOL    " ,
+             "     , DB.INDEXBP, DB.TYPE     " ,
+             "     , DB.GROUP_MEMBER         " ,
+             "     , CASE WHEN DB.ENCODING_SCHEME = 'E' THEN 'EBCDIC' ",
+             "            WHEN DB.ENCODING_SCHEME = 'A' THEN 'ASCII' ",
+             "            WHEN DB.ENCODING_SCHEME = 'U' THEN 'UNICODE'",
+             "            ELSE                                '' ",
+             "        END AS ENCODING_SCHEME                     ",
+             " FROM "SYSIBMS".SYSDATABASE DB " ,
+             WHERELIST                         ,
+             ""
+
+CNR = 1
+CALL OPEN_CURSOR_AC2
+
+DO WHILE SQLCODE = 0
+   CNR = 1
+   SQLTEXT = " FETCH C"CNR" INTO "   SQL_FETCH
+   Call EXECUTE_SQL_TEXT_AC2
+
+    Select
+        When SQLCODE = 100 THEN DO
+             CALL CLOSE_CURSOR_AC2 /* CLOSE CURSOR */
+             LEAVE
+          End
+        When SQLCODE <> 0  THEN DO
+             SAY "ERROR ON FETCH C"CNR", RC="RC ,
+                 "SQLCODE="SQLCODE         ,
+                 "SQLERRMC="SQLERRMC       ,
+                 ""
+             Exit 8
+          End
+        Otherwise NOP
+     End
+
+   DDLTEXT = "CREATE DATABASE   " NAME "-NL"
+   DDLTEXT = DDLTEXT "         BUFFERPOOL " BPOOL" -NL"
+   DDLTEXT = DDLTEXT "         INDEXBP    " INDEXBP " -NL"
+   if Length(Strip(GROUP_MEMBER)) > 0 then do
+      DDLTEXT = DDLTEXT "         AS WORKFILE FOR " || ,
+                        GROUP_MEMBER " -NL"
+    End
+   DDLTEXT = DDLTEXT "         STOGROUP   " STGROUP " -NL"
+   IF ENCODING_SCHEME <> "" THEN DO
+      DDLTEXT = DDLTEXT "         CCSID " ENCODING_SCHEME
+      DDLTEXT = DDLTEXT || " -NL"
+    END
+   DDLTEXT = DDLTEXT " -NR "
+ END
+
+
+RETURN
+
+
+CREATE_TS:
+WHERELIST    = ""
+CALL MAKE_WHERELIST "TS.DBNAME", DB2_CREATOR1
+CALL MAKE_WHERELIST "TS.NAME", DB2_NAME1
+
+EINGABE.0  = 1
+SQLSTMT    = "SELECT STRIP(TS.NAME)   AS NAME, ",
+             "       STRIP(TS.DBNAME) AS DBNAME, ",
+             "TS.BPOOL, ",
+             "TS.PARTITIONS,    ",
+             "CASE WHEN TS.LOCKRULE = 'A' THEN 'ANY'        ",
+             "     WHEN TS.LOCKRULE = 'P' THEN 'PAGE'       ",
+             "     WHEN TS.LOCKRULE = 'R' THEN 'ROW'        ",
+             "     WHEN TS.LOCKRULE = 'S' THEN 'TABLESPACE' ",
+             "     WHEN TS.LOCKRULE = 'T' THEN 'TABLE'      ",
+             "     WHEN TS.LOCKRULE = 'L' THEN 'LOB'        ",
+             "     ELSE ''                                  ",
+             "END AS LOCKRULE ,                             ",
+             "CASE WHEN TS.ERASERULE = 'N' THEN 'NO'        ",
+             "     ELSE 'YES' END AS ERASERULE, " ,
+             "CASE WHEN TS.CLOSERULE = 'N' THEN 'NO' ",
+             "     ELSE                         'YES'",
+             " END AS CLOSERULE ,             ",
+             "TS.SEGSIZE,",
+             "TS.LOCKMAX ,                             ",
+             "CASE WHEN TS.TYPE = 'O' THEN 'LOB'  ",
+             "     WHEN TS.TYPE = 'L' THEN 'LARGE' ",
+             "     ELSE '' END AS STYPE ,          ",
+             "TS.TYPE ,                            ",
+             "TS.ENCODING_SCHEME, TS.SBCS_CCSID,",
+             "TS.DBCS_CCSID, TS.MIXED_CCSID,",
+             "TS.MAXROWS, TS.LOCKPART, TS.LOG,           ",
+             "CASE WHEN  TS.LOG = 'Y'  THEN 'LOGGED'     ",
+             "     ELSE                     'NOT LOGGED' ",
+             " END AS LOG ,                              ",
+             "TS.DSSIZE,                                 ",
+             "TS.MAXPARTITIONS ,                         ",
+             "TS.MEMBER_CLUSTER          ",
+       "FROM "SYSIBMS".SYSTABLESPACE TS",
+       WHERELIST ,
+       "ORDER BY TS.NAME              " ,
+             ""
+
+CNR = 1
+CALL OPEN_CURSOR_AC2
+
+SQL_FETCH_SAVE =  SQL_FETCH
+DO WHILE SQLCODE = 0
+   CNR = 1
+   SQL_FETCH =  SQL_FETCH_SAVE
+   SQLTEXT = " FETCH C"CNR" INTO "   SQL_FETCH
+   Call EXECUTE_SQL_TEXT_AC2
+
+   Select
+       When SQLCODE = 100 THEN DO
+            CALL CLOSE_CURSOR_AC2 /* CLOSE CURSOR */
+            LEAVE
+         End
+       When SQLCODE <> 0  THEN DO
+            SAY "ERROR ON FETCH C"CNR", RC="RC ,
+                "SQLCODE="SQLCODE         ,
+                "SQLERRMC="SQLERRMC       ,
+                ""
+            Exit 8
+         End
+       Otherwise NOP
+    End
+
+   TAB = " "
+   IF LOCKMAX = -1 THEN LOCKMAX = "SYSTEM"
+   DDLTEXT = ""
+   DDLTEXT = DDLTEXT "-- .XOP TABLESPACE " Space(DBNAME"."NAME,0)"-NR"
+   DDLTEXT = DDLTEXT SPACE("CREATE " STYPE || ,
+                           " TABLESPACE " NAME || ,
+                           " IN " DBNAME, 1) "-NL"
+
+   If STORTYPE            = "E" Then do
+      call CREATE_TS_PART
+      Return
+    End
+
+   DDLTEXT = DDLTEXT TAB || LOG "-NL"
+
+   If TYPE =            "R" Then Do
+      DDLTEXT = DDLTEXT TAB || "NUMPARTS  "PARTITIONS"-NL"
+      PARTITIONS             =  0
+    End
+
+   If TYPE =            "G" Then Do
+      PARTITIONS             =  0
+    End
+
+   IF PARTITIONS > 0 Then Do
+      DDLTEXT = DDLTEXT TAB || "NUMPARTS  "PARTITIONS"    ( -NL"
+    END
+
+   call CREATE_TS_PART
+
+   IF PARTITIONS > 0 Then Do
+      DDLTEXT = DDLTEXT TAB || ") -NL"
+    END
+
+   IF DSSIZE > 0 Then do
+      DSVAL = DSSIZE / 1048576                     /* DSSIZE IN GB */
+      DDLTEXT = DDLTEXT " DSSIZE   "DSVAL" G -NL"
+    End
+
+
+   TAB = " "
+   IF PARTITIONS = 0 & STYPE <> 'LOB'           Then Do
+      DDLTEXT = DDLTEXT TAB || "SEGSIZE  "SEGSIZE "-NL"
+    END
+
+   IF MEMBER_CLUSTER   = 'Y'                    Then Do
+      DDLTEXT = DDLTEXT TAB || "MEMBER CLUSTER  -NL"
+    END
+
+   IF TYPE = "G"            Then Do
+      DDLTEXT = DDLTEXT TAB || ,
+                "MAXPARTITIONS " MAXPARTITIONS ,
+                "-NL"
+    END
+
+   DDLTEXT = DDLTEXT TAB || "BUFFERPOOL "BPOOL "-NL"
+   IF OP_LOCKRULE > "" THEN DO
+      DDLTEXT = DDLTEXT TAB || "LOCKSIZE "LOCKRULE "-NL"
+    END
+   DDLTEXT = DDLTEXT TAB || "LOCKMAX "LOCKMAX "-NL"
+   DDLTEXT = DDLTEXT TAB || "CLOSE "CLOSERULE "-NL"
+   SELECT
+      WHEN STYPE                     = "LOB" THEN NOP
+      WHEN ENCODING_SCHEME = "E" THEN
+           DDLTEXT = DDLTEXT TAB || "CCSID    EBCDIC " "-NL"
+      WHEN ENCODING_SCHEME = "A" THEN
+           DDLTEXT = DDLTEXT TAB || "CCSID    ASCII" "-NL"
+      WHEN ENCODING_SCHEME = "U" THEN
+           DDLTEXT = DDLTEXT TAB || "CCSID    UNICODE" "-NL"
+      OTHERWISE NOP
+    END
+   IF STYPE <> "LOB" THEN DO
+      DDLTEXT = DDLTEXT TAB || "MAXROWS "MAXROWS "-NL"
+    end
+   DDLTEXT = DDLTEXT TAB || TSDEFINE "-NL"
+   DDLTEXT = DDLTEXT "-NR"
+ End
+
+RETURN
+
+CREATE_TS_PART:
+
+EINGABE.0  = 1
+SQLSTMT    = "SELECT TP.PARTITION             ",
+             "     , CASE WHEN PQTY < 0 THEN TP.PQTY ",
+             "            ELSE TP.PQTY * 4           ",
+             "        END AS PQTY                    ",
+             "     , CASE WHEN SQTY < 0 THEN TP.SQTY ",
+             "            ELSE TP.SQTY * 4           ",
+             "        END AS SQTY                    ",
+             "     , CASE WHEN TP.STORTYPE = 'I'THEN   ",
+             "              'USING STOGROUP ' CONCAT TP.STORNAME   ",
+             "             ELSE  'USING VCAT ' CONCAT TP.VCATNAME   ",
+             "         END AS TS_STOR                               ",
+             "     , TP.STORTYPE  " ,
+             "     , TP.STORNAME  " ,
+             "     , TP.VCATNAME  ",
+             "     , TP.LIMITKEY  ",
+             "     , TP.FREEPAGE  ",
+             "     , TP.PCTFREE   ",
+             "     , CASE WHEN TP.COMPRESS = 'Y' THEN 'YES' ",
+             "            ELSE                        'NO'  ",
+             "        END AS COMPRESS                       ",
+             "     , CASE WHEN TP.GBPCACHE  = 'S' THEN 'CHANGED' ",
+             "            WHEN TP.GBPCACHE  = 'N' THEN 'NONE'    ",
+             "            WHEN TP.GBPCACHE  = 'A' THEN 'ALL'     ",
+             "            ELSE                         'CHANGED' ",
+             "        END AS  GBPCACHE                       ",
+             "    ,  CASE WHEN TP.TRACKMOD = 'N' THEN 'NO' ",
+             "            ELSE                        'YES' ",
+             "        END AS TRACKMOD                        ",
+             "   , TP.SECQTYI ",
+             "   , TP.SPACE         ",
+             "   , CASE WHEN TP.SPACE < 0 THEN 'DEFINE NO'  ",
+             "          ELSE                   'DEFINE YES' ",
+             "      END AS TSDEFINE                      ",
+       "FROM  "SYSIBMS".SYSTABLEPART TP",
+       "WHERE TP.DBNAME   = '"DBNAME"'    ",
+       "AND   TP.TSNAME   = '"NAME"'      ",
+       "ORDER BY TP.PARTITION" ,
+       ""
+
+SQL_FETCH = ""
+CNR = 4
+CALL OPEN_CURSOR_AC2
+KOMMA     = "   "
+
+DO WHILE SQLCODE = 0
+   CNR = 4
+   SQLTEXT = " FETCH C"CNR" INTO " ,
+             "       :PARTITION  " ,
+             "    ,  :PQTY       " ,
+             "    ,  :SQTY       " ,
+             "    ,  :TS_STOR    " ,
+             "    ,  :STORTYPE   " ,
+             "    ,  :STORNAME   " ,
+             "    ,  :VCATNAME   " ,
+             "    ,  :LIMITKEY   " ,
+             "    ,  :FREEPAGE   " ,
+             "    ,  :PCTFREE    " ,
+             "    ,  :COMPRESS   " ,
+             "    ,  :GBPCACHE   " ,
+             "    ,  :TRACKMOD   " ,
+             "    ,  :SECQTYI    " ,
+             "    ,  :SPACE      " ,
+             "    ,  :TSDEFINE   " ,
+             ""
+   Call EXECUTE_SQL_TEXT_AC2
+    Select
+        When SQLCODE = 100 THEN DO
+             SQLCODE = 0
+             CALL CLOSE_CURSOR_AC2 /* CLOSE CURSOR */
+             Return
+          End
+        When SQLCODE <> 0  THEN DO
+             SAY "ERROR ON FETCH C"CNR", RC="RC ,
+                 "SQLCODE="SQLCODE         ,
+                 "SQLERRMC="SQLERRMC       ,
+                 ""
+             Exit 8
+          End
+        Otherwise NOP
+     End
+
+   If STORTYPE            = "E" Then do
+      DDLTEXT = DDLTEXT TAB || "USING VCAT   "VCATNAME    "-NL"
+      DDLTEXT = DDLTEXT TAB || "BUFFERPOOL   "BPOOL       "-NL"
+      DDLTEXT = DDLTEXT TAB || "CLOSE "CLOSERULE          "-NL"
+      DDLTEXT = DDLTEXT "-NR"
+      Return
+    End
+
+   IF PARTITIONS > 0 Then Do
+      TAB = "    "
+      DDLTEXT = DDLTEXT TAB || KOMMA || "PART "PARTITION '-NL'
+    END
+
+   KOMMA     = ", "
+   DDLTEXT = DDLTEXT TAB || TS_STOR "-NL"
+   DDLTEXT = DDLTEXT TAB || "PRIQTY "PQTY "-NL"
+   DDLTEXT = DDLTEXT TAB || "SECQTY "SQTY "-NL"
+   DDLTEXT = DDLTEXT TAB || "ERASE "ERASERULE "-NL"
+   DDLTEXT = DDLTEXT TAB || "GBPCACHE "GBPCACHE "-NL"
+   If STYPE <> 'LOB' Then do
+      DDLTEXT = DDLTEXT TAB || "FREEPAGE "FREEPAGE "-NL"
+      DDLTEXT = DDLTEXT TAB || "PCTFREE  "PCTFREE "-NL"
+      DDLTEXT = DDLTEXT TAB || "TRACKMOD "TRACKMOD "-NL"
+      DDLTEXT = DDLTEXT TAB || "COMPRESS "COMPRESS "-NL"
+    End
+   if STORTYPE  = 'E' THEN LEAVE
+   if TYPE      = 'R' THEN LEAVE
+   if TYPE      = 'G' THEN LEAVE
+ END
+
+RETURN
+
+CREATE_TB:
+
+drop PKCols.
+PKCols.0 = 0
+
+SCreator  = DB2_CREATOR1
+SName     = DB2_name1
+
+WHERELIST = ""
+CALL MAKE_WHERELIST "CREATOR", DB2_CREATOR1
+CALL MAKE_WHERELIST "NAME", DB2_NAME1
+CALL MAKE_WHERELIST "TSNAME", DB2_TABLESPACE
+CALL MAKE_WHERELIST "DBNAME", DB2_DATABASE
+TTYPE = "'T', 'M', 'C', 'G', 'X', 'P', 'H', 'R'"
+CALL MAKE_WHERELIST "","TB.TYPE IN("TTYPE")"
+
+SQLSTMT   = "SELECT STRIP(NAME)    AS NAME     ",
+            "     , STRIP(CREATOR) AS CREATOR  ",
+            "     , TYPE                       ",
+            "     , DBNAME                     ",
+            "     , TSNAME                     ",
+            "     , EDPROC                     ",
+            "     , VALPROC                    ",
+            "     , CLUSTERTYPE                ",
+            "     , REMARKS                    ",
+            "     , PARENTS                    ",
+            "     , STATUS                     ",
+            "     , LABEL                      ",
+            "     , AUDITING                   ",
+            "     , LOCATION                   ",
+            "     , TBCREATOR                  ",
+            "     , TBNAME                     ",
+            "     , DATACAPTURE                ",
+            "     , CHECKS                     ",
+            "     , ENCODING_SCHEME            ",
+            "     , SPLIT_ROWS                 ",
+            "     , PARTKEYCOLNUM              ",
+            "     , APPEND                     ",
+            "     , VERSIONING_SCHEMA          ",
+            "     , VERSIONING_TABLE           ",
+            "     , ARCHIVING_SCHEMA           ",
+            "     , ARCHIVING_TABLE            ",
+            " FROM "SYSIBMS".SYSTABLES TB      ",
+            WHERELIST ,
+            " ORDER BY OBID"
+/* " AND TYPE IN ('T','V')", */
+
+CNR  = 5
+CALL OPEN_CURSOR_AC2
+
+DDLTEXT = ""
+
+
+DO FOREVER
+   TB_PARTKEYCOLNUM = 0
+   CNR  = 5
+   SQLTEXT =  " FETCH C"CNR" INTO             ",
+              "     :TB_NAME                  ",
+              "   , :TB_CREATOR               ",
+              "   , :TB_TYPE                  ",
+              "   , :TB_DBNAME                ",
+              "   , :TB_TSNAME                ",
+              "   , :TB_EDPROC                ",
+              "   , :TB_VALPROC               ",
+              "   , :TB_CLUSTERTYPE           ",
+              "   , :TB_REMARKS               ",
+              "   , :TB_PARENTS               ",
+              "   , :TB_STATUS                ",
+              "   , :TB_LABEL                 ",
+              "   , :TB_AUDITING              ",
+              "   , :TB_LOCATION              ",
+              "   , :TB_TBCREATOR             ",
+              "   , :TB_TBNAME                ",
+              "   , :TB_DATACAPTURE           ",
+              "   , :TB_CHECKS                ",
+              "   , :TB_ENCODING_SCHEME       ",
+              "   , :TB_SPLIT_ROWS            ",
+              "   , :TB_PARTKEYCOLNUM         ",
+              "   , :TB_APPEND                ",
+              "   , :TB_VERSIONING_SCHEMA     ",
+              "   , :TB_VERSIONING_TABLE      ",
+              "   , :TB_ARCHIVING_SCHEMA      ",
+              "   , :TB_ARCHIVING_TABLE       ",
+              ""
+   Call EXECUTE_SQL_TEXT_AC2
+   IF SQLCODE = 0 THEN NOP
+   ELSE  DO
+      CNR = 5
+      CALL CLOSE_CURSOR_AC2
+      LEAVE
+    END
+
+   If DB2_GRANT = "YES" Then QUEUE "TB "Space(TB_CREATOR "." TB_NAME, 0)
+
+   SELECT
+      WHEN TB_TYPE = 'T' THEN TB_HEAD = "CREATE TABLE"
+      WHEN TB_TYPE = 'H' THEN TB_HEAD = "CREATE TABLE"
+      WHEN TB_TYPE = 'G' THEN TB_HEAD = "CREATE GLOBAL TEMPORARY TABLE"
+      WHEN TB_TYPE = 'X' THEN TB_HEAD = "CREATE AUXILIARY TABLE"
+      OTHERWISE               TB_HEAD = "CREATE TABLE"
+    end
+
+   Select
+      WHEN TB_TYPE = 'X' THEN Do
+           Call Create_Aux_Table
+           Iterate
+       End
+      OTHERWISE  NOP
+    End
+
+   DDLTEXT = DDLTEXT TB_HEAD" "TB_CREATOR"."TB_NAME "-NL"
+
+   BUSINESS_PERIOD_S = ""
+   BUSINESS_PERIOD_E = ""
+   SYSTEM_PERIOD_S   = ""
+   SYSTEM_PERIOD_E   = ""
+
+   CALL CREATE_TB_COLS
+
+
+   IF LENGTH(BUSINESS_PERIOD_S) > 0 Then Do
+       DDLTEXT = DDLTEXT " , PERIOD BUSINESS_TIME (" ,
+                 BUSINESS_PERIOD_S "," BUSINESS_PERIOD_E ")  -NL"
+    End
+
+   IF LENGTH(SYSTEM_PERIOD_S)   > 0 Then Do
+       DDLTEXT = DDLTEXT " , PERIOD SYSTEM_TIME (" ,
+                 SYSTEM_PERIOD_S "," SYSTEM_PERIOD_E ")  -NL"
+    End
+
+   DDLTEXT = DDLTEXT " ) -NL  IN "TB_DBNAME"."TB_TSNAME "-NL"
+
+   IF TB_PARTKEYCOLNUM > 0 THEN
+      DO
+         TABLE_CONTROLLED_PARTITIONING = "YES"
+         TBPARTKEY = "     PARTITION BY ( "
+         CALL TBPARTKEY_COLS
+         TBPARTKEY = "     ("
+         CALL TBPARTKEY_ENDING
+      END
+
+   IF TB_EDPROC > " " THEN
+      DDLTEXT = DDLTEXT " EDITPROC "TB_EDPROC "-NL"
+
+   IF TB_VALPROC > " " THEN
+      DDLTEXT = DDLTEXT " VALIDPROC "TB_VALPROC "-NL"
+
+   IF TB_ENCODING_SCHEME = "A" THEN
+      DDLTEXT = DDLTEXT " CCSID ASCII" "-NL"
+   ELSE
+   IF TB_ENCODING_SCHEME = "U" THEN
+      DDLTEXT = DDLTEXT " CCSID UNICODE" "-NL"
+   ELSE
+      DDLTEXT = DDLTEXT " CCSID EBCDIC" "-NL"
+
+   IF TB_SPLIT_ROWS = "Y" THEN
+      DDLTEXT = DDLTEXT " VOLATILE" "-NL"
+   ELSE
+      DDLTEXT = DDLTEXT " NOT VOLATILE" "-NL"
+
+   IF TB_DATACAPTURE = "Y" THEN Do
+      DDLTEXT = DDLTEXT " DATA CAPTURE CHANGES" "-NL"
+    End
+   Else Do
+      DDLTEXT = DDLTEXT " DATA CAPTURE NONE "   "-NL"
+    End
+
+   IF TB_CLUSTERTYPE = "Y" THEN
+      DDLTEXT = DDLTEXT " WITH RESTRICT ON DROP" "-NL"
+
+   SELECT
+      WHEN TB_AUDITING = "A" THEN AUDIT = "AUDIT ALL"
+      WHEN TB_AUDITING = "C" THEN AUDIT = "AUDIT CHANGE"
+      OTHERWISE AUDIT = "AUDIT NONE"
+   END
+   DDLTEXT = DDLTEXT " "AUDIT "-NL"
+
+   SELECT
+      WHEN TB_APPEND   = "Y" THEN APPEND = "APPEND YES "
+      WHEN TB_APPEND   = "C" THEN APPEND = "APPEND NO  "
+      OTHERWISE APPEND = "APPEND NO "
+   END
+   DDLTEXT = DDLTEXT " "APPEND "-NL"
+   DDLTEXT = DDLTEXT "-NR"
+   DDLTEXT = DDLTEXT "-NL"
+
+  If TB_CHECKS > 0 Then do
+     /* SICHERN DER EINGABEN   */
+     CR1  = DB2_CREATOR1
+     NM1  = DB2_NAME1
+     CR2  = DB2_CREATOR2
+     NM2  = DB2_NAME2
+     /* ALLE CHECKS ZUR TABELLE */
+     DB2_CREATOR1 = TB_CREATOR
+     DB2_NAME1    = TB_NAME
+     DB2_CREATOR2 = ""
+     DB2_NAME2    = ""
+
+     Call Create_CK
+
+     /* EINGABEN WIEDER HERSTELLEN    */
+     DB2_CREATOR1 = CR1
+     DB2_NAME1    = NM1
+     DB2_CREATOR1 = CR2
+     DB2_NAME1    = NM2
+   End
+
+END
+
+DB2_CREATOR1 = SCreator
+DB2_name1    = SName
+
+If CALLAS = "DDL"                    Then Call CREATE_TBALTER
+If CALLAS = "HDDL"& CALLTYPE = "TB"  Then Call CREATE_TBALTER
+
+RETURN
+
+CREATE_TBALTER:
+
+WHERELIST = ""
+CALL MAKE_WHERELIST "CREATOR", DB2_CREATOR1
+CALL MAKE_WHERELIST "NAME", DB2_NAME1
+TTYPE = "'T', 'M', 'C', 'G', 'X', 'P', 'H', 'R'"
+CALL MAKE_WHERELIST "","TB.TYPE IN("TTYPE")"
+
+SQLSTMT   = "SELECT NAME                       ",
+            "     , CREATOR                    ",
+            "     , TYPE                       ",
+            "     , VERSIONING_SCHEMA          ",
+            "     , VERSIONING_TABLE           ",
+            "     , ARCHIVING_SCHEMA           ",
+            "     , ARCHIVING_TABLE            ",
+            " FROM "SYSIBMS".SYSTABLES TB      ",
+            WHERELIST ,
+            " ORDER BY OBID"
+
+CNR  = 15
+CALL OPEN_CURSOR_AC2
+
+
+DO FOREVER
+   CNR  = 15
+   SQLTEXT =  " FETCH C"CNR" INTO             ",
+              "     :TB_NAME                  ",
+              "   , :TB_CREATOR               ",
+              "   , :TB_TYPE                  ",
+              "   , :TB_VERSIONING_SCHEMA     ",
+              "   , :TB_VERSIONING_TABLE      ",
+              "   , :TB_ARCHIVING_SCHEMA      ",
+              "   , :TB_ARCHIVING_TABLE       ",
+              ""
+   Call EXECUTE_SQL_TEXT_AC2
+   IF SQLCODE = 0 THEN NOP
+   ELSE  DO
+      CNR = 15
+      CALL CLOSE_CURSOR_AC2
+      LEAVE
+    END
+
+
+   If Length(Strip(TB_VERSIONING_SCHEMA)) > 0 ,
+    & Length(Strip(TB_VERSIONING_TABLE))  > 0 ,
+    & TB_TYPE  = 'T'                          Then do
+      DDLTEXT = DDLTEXT "Alter Table "Strip(TB_CREATOR) || "." || ,
+                                      Strip(TB_NAME)  "-NL"
+      DDLTEXT = DDLTEXT "      ADD VERSIONING  USE HISTORY TABLE " "-NL"
+      DDLTEXT = DDLTEXT "      "|| Strip(TB_VERSIONING_SCHEMA) || "." ,
+                                || Strip(TB_VERSIONING_TABLE ) "-NL"
+      DDLTEXT = DDLTEXT "-NR "
+    End
+
+   If Length(Strip(TB_ARCHIVING_SCHEMA)) > 0 ,
+    & Length(Strip(TB_ARCHIVING_TABLE))  > 0 ,
+    & TB_TYPE  = 'T'                          Then do
+      DDLTEXT = DDLTEXT "Alter Table "Strip(TB_CREATOR) || "." || ,
+                                      Strip(TB_NAME)  "-NL"
+      DDLTEXT = DDLTEXT "      ENABLE ARCHIVE USE  "   "-NL"
+      DDLTEXT = DDLTEXT "      "|| Strip(TB_ARCHIVING_SCHEMA ) || "." ,
+                                || Strip(TB_ARCHIVING_TABLE  ) "-NL"
+      DDLTEXT = DDLTEXT "-NR "
+    End
+
+
+END
+
+RETURN
+
+Create_Aux_Table:
+
+CNR  = 6
+WHERELIST = ""
+CALL MAKE_WHERELIST "AUXTBOWNER", TB_CREATOR
+CALL MAKE_WHERELIST "AUXTBNAME", TB_NAME
+
+SQLSTMT   = "SELECT TBOWNER                    ",
+            "    ,  TBNAME                     ",
+            "    ,  COLNAME                    ",
+            "    ,  PARTITION                  ",
+            "    ,  AUXTBOWNER                 ",
+            "    ,  AUXTBNAME                  ",
+            "    ,  AUXRELOBID                 ",
+            "    ,  RELCREATED                 ",
+            "FROM "SYSIBMS".SYSAUXRELS         ",
+            WHERELIST ,
+            " ORDER BY AUXTBOWNER              ",
+            "        , AUXTBNAME               ",
+            "        , PARTITION               ",
+            " "
+
+CALL OPEN_CURSOR_AC2
+
+DO FOREVER
+   CNR  = 6
+   SQLTEXT =  " FETCH C"CNR" INTO             ",
+              "  :AX_TBOWNER                  ",
+              ", :AX_TBNAME                   ",
+              ", :AX_COLNAME                  ",
+              ", :AX_PARTITION                ",
+              ", :AX_AUXTBOWNER               ",
+              ", :AX_AUXTBNAME                ",
+              ", :AX_AUXRELOBID               ",
+              ", :AX_RELCREATED               ",
+              ""
+
+   Call EXECUTE_SQL_TEXT_AC2
+
+   IF SQLCODE = 0 THEN NOP
+   ELSE  DO
+      CNR = 6
+      CALL CLOSE_CURSOR_AC2
+      LEAVE
+    END
+
+
+    DDLTEXT = DDLTEXT TB_HEAD" "TB_CREATOR"."TB_NAME "-NL"
+    DDLTEXT = DDLTEXT "     IN "TB_DBNAME"."TB_TSNAME "-NL"
+    DDLTEXT = DDLTEXT "         STORES "strip(AX_TBOWNER) || "." || ,
+                                        strip(AX_TBNAME) "-NL"
+    DDLTEXT = DDLTEXT "         APPEND NO COLUMN "strip(AX_COLNAME) ,
+                      "-NL"
+    If AX_PARTITION > 0 Then Do
+       DDLTEXT = DDLTEXT "         PART " || AX_PARTITION "-NL"
+     End
+       DDLTEXT = DDLTEXT "-NR "
+
+ End
+
+CALL CLOSE_CURSOR_AC2
+
+Return
+
+/*  TABLE UNIQUE CONSTRAINT PROCESSING                            */
+CHECK_UNIQUE_CONSTRAINT:
+
+WHERELIST = ""
+CALL MAKE_WHERELIST "TBCREATOR", TB_CREATOR
+CALL MAKE_WHERELIST "TBNAME",    TB_NAME
+CALL MAKE_WHERELIST "IXOWNER",   TB_IXCREATOR
+CALL MAKE_WHERELIST "IXNAME",    TB_IXNAME
+
+SQLSTMT  = "SELECT CONSTNAME  ",
+           "     , TYPE       ",
+           "     , IXOWNER    ",
+           "     , IXNAME     ",
+           "     , TBCREATOR  ",
+           "     , TBNAME     ",
+           " FROM "SYSIBMS".SYSTABCONST",
+           WHERELIST  ,
+           " ORDER BY TYPE" ,
+           ""
+/*         " WHERE TBCREATOR = '"TB_CREATOR"'",      */
+/*         " AND TBNAME = '"TB_NAME"'",              */
+
+CNR  = 11
+CALL OPEN_CURSOR_AC2
+DO FOREVER
+   CNR  = 11
+   SQLTEXT =  " FETCH C"CNR" INTO ",
+              "   :UC_CONSTNAME   ",
+              " , :UC_TYPE        ",
+              " , :UC_IXOWNER     ",
+              " , :UC_IXNAME      ",
+              " , :UC_TBCREATOR   ",
+              " , :UC_TBNAME      ",
+              ""
+   Call EXECUTE_SQL_TEXT_AC2
+
+   IF SQLCODE = 0 THEN Do
+         CALL BUILD_UNIQUE_CONSTRAINT
+      END
+   ELSE
+   IF SQLCODE = 100 THEN  Do
+          CNR = 11
+          CALL CLOSE_CURSOR_AC2
+         LEAVE
+      END
+   ELSE
+      DO
+         EXIT
+      END
+END
+
+RETURN
+
+/*  BUILD UNIQUE CONSTRAINT PROCESSING                            */
+BUILD_UNIQUE_CONSTRAINT:
+SQLSTMT  = "SELECT COLNAME ",
+           "     , COLSEQ  ",
+           " FROM "SYSIBMS".SYSKEYS",
+           " WHERE IXCREATOR = '"UC_IXOWNER"'",
+           " AND IXNAME = '"UC_IXNAME"'",
+           " ORDER BY COLSEQ",
+           ""
+
+CNR  = 30
+CALL OPEN_CURSOR_AC2
+
+IF UC_TYPE = "P" THEN Do
+   PKCols.0 = 0
+   If DB2_FUNKTION = 'PK' Then do
+      DDLTEXT = DDLTEXT || "ALTER TABLE  " STRIP(DB2_CREATOR1) || ,
+                               '.' ||   STRIP(DB2_NAME1) "-NL"
+      DDLTEXT = DDLTEXT "   ADD PRIMARY KEY ("
+      DDLTEXT = DDLTEXT "-NL"
+    END
+   ELSE DO
+      DDLTEXT = DDLTEXT " , CONSTRAINT "UC_CONSTNAME" PRIMARY KEY ("
+      DDLTEXT = DDLTEXT "-NL"
+    END
+ END
+ELSE Do
+   If DB2_FUNKTION = 'PK' Then do
+      DDLTEXT = DDLTEXT || "ALTER TABLE  " STRIP(DB2_CREATOR1) || ,
+                                '.' ||   STRIP(DB2_NAME1)
+      DDLTEXT = DDLTEXT "   ADD UNIQUE ( "
+      DDLTEXT = DDLTEXT "-NL"
+    END
+   ELSE DO
+   DDLTEXT = DDLTEXT " , CONSTRAINT "UC_CONSTNAME" UNIQUE (" "-NL"
+    End
+ End
+PREFX = " "
+
+DO FOREVER
+   CNR  = 30
+   SQLTEXT =  " FETCH C"CNR" INTO ",
+              "    :CK_COLNAME ",
+              "  , :CK_COLSEQ  ",
+              ""
+   Call EXECUTE_SQL_TEXT_AC2
+   IF SQLCODE = 0 THEN
+      DO
+         DDLTEXT = DDLTEXT  " "PREFX" "CK_COLNAME "-NL"
+         PREFX = ","
+      END
+   ELSE
+   IF SQLCODE = 100 THEN
+      DO
+          DDLTEXT = DDLTEXT "                       )" "-NL"
+          If DB2_FUNKTION = 'PK' Then DDLTEXT = DDLTEXT "-NR -NL"
+          CNR = 30
+          CALL CLOSE_CURSOR_AC2
+          LEAVE
+      END
+END
+
+RETURN
+
+/*  FOREIGN KEY PROCESSING                                        */
+CREATE_FK:
+WHERELIST    = ""
+CALL MAKE_WHERELIST "T1.CREATOR", DB2_CREATOR1
+CALL MAKE_WHERELIST "T1.TBNAME", DB2_NAME1
+CALL MAKE_WHERELIST "T1.CREATOR", DB2_CREATOR2
+CALL MAKE_WHERELIST "T1.TBNAME", DB2_NAME2
+CALL MAKE_WHERELIST "T1.CREATOR", TB_CREATOR
+CALL MAKE_WHERELIST "T1.TBNAME", TB_NAME
+CALL MAKE_WHERELIST "T1.RELNAME", DB2_NAME3
+
+SQLSTMT  =  "SELECT CREATOR         ",
+            "     , TBNAME          ",
+            "     , RELNAME         ",
+            "     , REFTBNAME       ",
+            "     , REFTBCREATOR    ",
+            "     , COLCOUNT        ",
+            "     , DELETERULE      ",
+            "     , RELOBID1        ",
+            "     , RELOBID2        ",
+            "     , TIMESTAMP       ",
+            "     , IXOWNER         ",
+            "     , IXNAME          ",
+            "     , ENFORCED        ",
+            "     , CHECKEXISTINGDATA",
+            "     , RELCREATED      ",
+            " FROM "SYSIBMS".SYSRELS T1",
+            WHERELIST  ,
+            " ORDER BY TIMESTAMP,RELOBID1,RELOBID2"
+
+CNR  = 12
+CALL OPEN_CURSOR_AC2
+
+DO FOREVER
+   CNR  = 12
+   SQLTEXT =  " FETCH C"CNR" INTO ",
+              "   :RL_CREATOR      " ,
+              " , :RL_TBNAME       " ,
+              " , :RL_RELNAME      " ,
+              " , :RL_REFTBNAME    " ,
+              " , :RL_REFTBCREATOR ",
+              " , :RL_COLCOUNT        ",
+              " , :RL_DELETERULE      ",
+              " , :RL_RELOBID1        ",
+              " , :RL_RELOBID2        ",
+              " , :RL_TIMESTAMP       ",
+              " , :RL_IXOWNER         ",
+              " , :RL_IXNAME          ",
+              " , :RL_ENFORCED        ",
+              " , :RL_CHECKEXISTINGDATA",
+              " , :RL_RELCREATED      ",
+             ""
+
+   Call EXECUTE_SQL_TEXT_AC2
+   select
+       When SQLCODE = 100 THEN Do
+            CNR = 12
+            CALL CLOSE_CURSOR_AC2
+            RETURN
+        END
+       When SQLCODE <>  0 THEN Do
+            CNR = 12
+            CALL CLOSE_CURSOR_AC2
+            RETURN
+        END
+       OTHERWISE NOP
+    END
+
+
+   KOMMA = " , "
+   If DB2_FUNKTION = 'FK' Then do
+      DDLTEXT = DDLTEXT || "ALTER TABLE " ,
+                Strip(RL_Creator) || "." || Strip(RL_TBName) ,
+                " -NL"
+      DDLTEXT = DDLTEXT " ADD "
+      KOMMA = ""
+    end
+   DDLTEXT = DDLTEXT || KOMMA || " FOREIGN KEY "RL_RELNAME "-NL"
+   DDLTEXT = DDLTEXT "    ("  "-NL"
+   PREFX = " "
+   CALL CREATE_FK_COLUMNS
+   ref = Space(RL_REFTBCREATOR "." RL_REFTBNAME, 0)
+   DDLTEXT = DDLTEXT "    REFERENCES "ref
+   DDLTEXT = DDLTEXT "-NL"
+
+   DDLTEXT = DDLTEXT "    ("  "-NL"
+   PREFX = " "
+   CO_TBNAME   =  Strip(RL_REFTBNAME)
+   CO_CREATOR  =  Strip(RL_REFTBCREATOR)
+   Call CREATE_PK_COLUMNS
+
+   SELECT
+      WHEN RL_DELETERULE = "C" THEN RULE = "CASCADE"
+      WHEN RL_DELETERULE = "N" THEN RULE = "SET NULL"
+      WHEN RL_DELETERULE = "R" THEN RULE = "RESTRICT"
+      OTHERWISE RULE = "NO ACTION"
+   END
+   IF RULE > "" THEN
+      DDLTEXT = DDLTEXT "    ON DELETE "RULE "-NL"
+
+   select
+     When  RL_ENFORCED = "Y" Then Do
+           DDLTEXT = DDLTEXT "    ENFORCED     -NL"
+      End
+     When  RL_ENFORCED = "N" Then Do
+           DDLTEXT = DDLTEXT "    NOT ENFORCED -NL"
+      End
+     Otherwise nop
+    End
+   If DB2_FUNKTION = 'FK' Then do
+      DDLTEXT = DDLTEXT "-NR  -NL "
+    end
+END
+
+RETURN
+
+CREATE_FK_COLUMNS:
+SQLSTMT   = "SELECT CREATOR  ",
+            "     , TBNAME   ",
+            "     , RELNAME  ",
+            "     , COLNAME  ",
+            "     , COLNO    ",
+            "     , COLSEQ   ",
+            " FROM "SYSIBMS".SYSFOREIGNKEYS",
+            " WHERE TBNAME = '"RL_TBNAME"'",
+            " AND CREATOR = '"RL_CREATOR"'",
+            " AND RELNAME = '"RL_RELNAME"'",
+            " ORDER BY COLSEQ" ,
+            ""
+
+CNR  = 13
+CALL OPEN_CURSOR_AC2
+
+DO FOREVER
+   CNR  = 13
+   SQLTEXT =  " FETCH C"CNR" INTO ",
+   "      :FK_CREATOR " ,
+   "    , :FK_TBNAME  " ,
+   "    , :FK_RELNAME " ,
+   "    , :FK_COLNAME " ,
+   "    , :FK_COLNO   " ,
+   "    , :FK_COLSEQ  " ,
+   ""
+   Call EXECUTE_SQL_TEXT_AC2
+
+   IF SQLCODE = 0 THEN
+      DO
+         FL_COLNAME = TRANSLATE(FK_COLNAME,' ','00'X)
+            DDLTEXT = DDLTEXT "    "PREFX" "FK_COLNAME  "-NL"
+            PREFX = ","
+      END
+   ELSE
+      IF SQLCODE = 100 THEN
+         DO
+            DDLTEXT = DDLTEXT "    )" "-NL"
+            CNR = 13
+            CALL CLOSE_CURSOR_AC2
+            LEAVE
+         END
+ END
+
+RETURN
+
+CREATE_PK_COLUMNS:
+If strip(RL_IXOWNER) = "" Then do
+   SQLSTMT   = "SELECT TBCREATOR  ",
+               "     , TBNAME   ",
+               "     , NAME     ",
+               "     , COLNO    ",
+               "     , KEYSEQ   ",
+               " FROM "SYSIBMS".SYSCOLUMNS",
+               " WHERE TBNAME = '"CO_TBNAME"'",
+               " AND TBCREATOR  = '"CO_CREATOR"'",
+               " AND KEYSEQ  > 0 " ,
+               " ORDER BY KEYSEQ" ,
+               ""
+ End
+ELSE DO
+   SQLSTMT  = "SELECT IXNAME      " ,
+              "      ,IXCREATOR   " ,
+              "      ,COLNAME     " ,
+              "      ,COLNO       " ,
+              "      ,COLSEQ      " ,
+              " FROM "SYSIBMS".SYSKEYS",
+              " WHERE IXCREATOR = '"RL_IXOWNER"'",
+              "   AND IXNAME = '"RL_IXNAME"'",
+              " ORDER BY COLSEQ" ,
+              ""
+ End
+CNR  = 13
+CALL OPEN_CURSOR_AC2
+If SQLCODE <> 0 Then Return
+DO FOREVER
+   CNR  = 13
+   SQLTEXT =  " FETCH C"CNR" INTO ",
+              "  :CO_CREATOR " ,
+              ", :CO_TBNAME  " ,
+              ", :CO_COLNAME " ,
+              ", :CO_COLNO   " ,
+              ", :CO_KEYSEQ  " ,
+              ""
+   Call EXECUTE_SQL_TEXT_AC2
+
+   IF SQLCODE = 0 THEN
+      DO
+         FL_COLNAME = TRANSLATE(CO_COLNAME,' ','00'X)
+         DDLTEXT = DDLTEXT "    "PREFX" "CO_COLNAME  "-NL"
+         PREFX = ","
+      END
+   ELSE
+      IF SQLCODE = 100 THEN
+         DO
+            DDLTEXT = DDLTEXT "    )" "-NL"
+            CNR = 13
+            CALL CLOSE_CURSOR_AC2
+            LEAVE
+         END
+ END
+RETURN
+
+CREATE_TB_COLS:
+SQLSTMT  = "SELECT NAME             " ,
+           "     , TBNAME           " ,
+           "     , TBCREATOR        " ,
+           "     , COLNO            " ,
+           "     , COLTYPE          " ,
+           "     , LENGTH           " ,
+           "     , SCALE            " ,
+           "     , NULLS            " ,
+           "     , UPDATES          " ,
+           "     , IBMREQD          " ,
+           "     , REMARKS          " ,
+           "     , DEFAULT          " ,
+           "     , KEYSEQ           " ,
+           "     , FOREIGNKEY       " ,
+           "     , FLDPROC          " ,
+           "     , LABEL            " ,
+           "     , STATSTIME        " ,
+           "     , DEFAULTVALUE     " ,
+           "     , LENGTH2          " ,
+           "     , DATATYPEID       " ,
+           "     , SOURCETYPEID     " ,
+           "     , TYPESCHEMA       " ,
+           "     , TYPENAME         " ,
+           "     , PERIOD           " ,
+           "     , HIDDEN           " ,
+           " FROM "SYSIBMS".SYSCOLUMNS                       " ,
+           " WHERE TBNAME = '"TB_NAME"'",
+           " AND TBCREATOR = '"TB_CREATOR"'",
+           " AND NAME <> 'DB2_GENERATED_ROWID_FOR_LOBS'      " ,
+           " AND NAME <> 'DB2_GENERATED_DOCID_FOR_XML'       " ,
+           " ORDER BY COLNO                                  " ,
+           ""
+
+CNR  = 6
+CALL OPEN_CURSOR_AC2
+
+PREFX = "("
+
+DO FOREVER
+   CNR  = 6
+   SQLTEXT =  " FETCH C"CNR" INTO     ",
+              "    :CO_NAME           ",
+              "  , :CO_TBNAME         ",
+              "  , :CO_TBCREATOR      ",
+              "  , :CO_COLNO          ",
+              "  , :CO_COLTYPE        ",
+              "  , :CO_LENGTH         ",
+              "  , :CO_SCALE          ",
+              "  , :CO_NULLS          ",
+              "  , :CO_UPDATES        ",
+              "  , :CO_IBMREQD        ",
+              "  , :CO_REMARKS        ",
+              "  , :CO_DEFAULT        ",
+              "  , :CO_KEYSEQ         ",
+              "  , :CO_FOREIGNKEY     ",
+              "  , :CO_FLDPROC        ",
+              "  , :CO_LABEL          ",
+              "  , :CO_STATSTIME      ",
+              "  , :CO_DEFAULTVALUE   ",
+              "  , :CO_LENGTH2        ",
+              "  , :CO_DATATYPEID     ",
+              "  , :CO_SOURCETYPEID   ",
+              "  , :CO_TYPESCHEMA     ",
+              "  , :CO_TYPENAME       ",
+              "  , :CO_PERIOD         ",
+              "  , :CO_HIDDEN         ",
+              ""
+   Call EXECUTE_SQL_TEXT_AC2
+
+   IF SQLCODE = 0 THEN
+      NOP
+   ELSE
+      IF SQLCODE = 100 THEN
+         DO
+            CNR = 6
+            CALL CLOSE_CURSOR_AC2
+            LEAVE
+         END
+
+
+   If CO_KEYSEQ > 0 Then do
+      PKCols.0 = PKCols.0 + 1
+      PKCols.CO_KEYSEQ = CO_NAME
+    End
+
+   Select
+     When CO_PERIOD = 'B' Then BUSINESS_PERIOD_S = CO_NAME
+     When CO_PERIOD = 'C' Then BUSINESS_PERIOD_E = CO_NAME
+     When CO_PERIOD = 'S' Then SYSTEM_PERIOD_S   = CO_NAME
+     When CO_PERIOD = 'T' Then SYSTEM_PERIOD_E   = CO_NAME
+     Otherwise nop
+   End
+
+   CALL PROCESS_DATA_PROC
+   CALL PROCESS_DEFAULT_PROC
+
+   IF CO_FIELDPROC = "Y" THEN
+      CALL PROCESS_FIELDPROC_PROC
+/*
+   IF TB_CHECKS > 0 THEN
+      CALL PROCESS_CHECK_CONSTRAINTS_PROC
+*/
+END
+RETURN
+
+/*  PROCESS DATA TYPE                                             */
+PROCESS_DATA_PROC:
+SELECT
+   WHEN CO_COLTYPE = "CHAR" THEN
+        COLDEF = "CHAR("CO_LENGTH")"
+   WHEN CO_COLTYPE = "DECIMAL" THEN
+        COLDEF = "DECIMAL("CO_LENGTH" , "CO_SCALE")"
+   WHEN CO_COLTYPE = "DATE"     THEN COLDEF = "DATE"
+   WHEN CO_COLTYPE = "TIME"     THEN COLDEF = "TIME"
+   WHEN CO_COLTYPE = "TIMESTMP" THEN Do
+        COLDEF = "TIMESTAMP"
+        if CO_SCALE > 0 & CO_LENGTH <> 10 Then do
+           COLDEF = COLDEF "("CO_SCALE")"
+         End
+    End
+   WHEN CO_COLTYPE = "TIMESTZ" THEN Do
+        COLDEF = "TIMESTAMP "
+        if CO_SCALE > 0 & CO_LENGTH <> 10 Then do
+           COLDEF = COLDEF "("CO_SCALE")"
+         End
+        COLDEF = COLDEF "WITH TIME ZONE"
+    End
+   WHEN CO_COLTYPE = "BIGINT"   THEN COLDEF = "BIGINT"
+   WHEN CO_COLTYPE = "INTEGER"  THEN COLDEF = "INTEGER"
+   WHEN CO_COLTYPE = "SMALLINT" THEN COLDEF = "SMALLINT"
+   WHEN CO_COLTYPE = "DECFLOAT" THEN COLDEF = "DECFLOAT"
+   WHEN CO_COLTYPE = "ROWID"    THEN COLDEF = "ROWID"
+   WHEN CO_COLTYPE = "XML"      THEN COLDEF = "XML"
+   WHEN CO_COLTYPE = "VARBIN"   THEN COLDEF = "VARBINARY"
+   WHEN CO_COLTYPE = "BINARY"   THEN COLDEF = "BINARY"
+   WHEN CO_COLTYPE = "FLOAT" & CO_LENGTH < 5 THEN
+        COLDEF = "FLOAT(21)"
+   WHEN CO_COLTYPE = "FLOAT" & CO_LENGTH < 9 THEN
+        COLDEF = "DOUBLE"
+   WHEN CO_COLTYPE = "FLOAT" & CO_LENGTH > 8 THEN
+        COLDEF = "FLOAT(53)"
+   WHEN CO_COLTYPE = "VARCHAR" THEN
+        COLDEF = "VARCHAR("CO_LENGTH")"
+   WHEN CO_COLTYPE = "LONGVAR" THEN
+        COLDEF = "LONG VARCHAR"
+   WHEN CO_COLTYPE = "GRAPHIC" THEN
+        COLDEF = "GRAPHIC("CO_LENGTH")"
+   WHEN CO_COLTYPE = "VARG" THEN
+        COLDEF = "VARGRAPHIC("CO_LENGTH")"
+   WHEN CO_COLTYPE = "LONGVARG" THEN
+        COLDEF = "LONG VARGRAPHIC"
+   WHEN CO_COLTYPE = "BLOB" THEN  Do
+        COLDEF = "BLOB("CO_LENGTH2")"
+        IF CO_LENGTH > 4 Then Do
+           coldef = coldef " Inline length " CO_LENGTH - 4
+         end
+    end
+   WHEN CO_COLTYPE = "CLOB" THEN  Do
+        COLDEF = "CLOB("CO_LENGTH2")"
+        IF CO_LENGTH > 4 Then Do
+           coldef = coldef " Inline length " CO_LENGTH - 4
+         end
+    end
+   WHEN CO_COLTYPE = "DBCLOB" THEN Do
+        COLDEF = "DBCLOB("CO_LENGTH2")"
+        IF CO_LENGTH > 4 Then Do
+           coldef = coldef " Inline length " (CO_LENGTH - 4 ) / 2
+         end
+    end
+   WHEN CO_COLTYPE = "DISTINCT" THEN
+        COLDEF  TRANSLATE(CO_DEFAULTVALUE,' ','00'X)
+   OTHERWISE COLDEF = CO_COLTYPE" <===UNKNOWN TYPE"
+END
+
+If Pos(SUBSTR(CO_NAME, 1, 1), ALPHA, 1) > 0 Then do
+   WORK_COL = CO_NAME COLDEF
+ END
+Else Do
+   WORK_COL = '"' || CO_NAME || '"' COLDEF
+ END
+
+If NODDLTXT <> 'N' Then DDLTEXT = DDLTEXT " "PREFX" "WORK_COL
+PREFX = ","
+ZEL   = " "PREFX" "WORK_COL
+If Length(ZEL) > 50 Then DDLTEXT = DDLTEXT " -NL"
+
+IF CO_FOREIGNKEY = "B" THEN
+   IF CO_COLTYPE = "CHAR" | ,
+      CO_COLTYPE = "VARCHAR" | ,
+      CO_COLTYPE = "LONGVAR" THEN Do
+         DDLTEXT = DDLTEXT " FOR BIT DATA"
+         ZEL     = ZEL " FOR BIT DATA"
+ End
+
+IF CO_FOREIGNKEY = "M" THEN
+   IF CO_COLTYPE = "CHAR" | ,
+      CO_COLTYPE = "VARCHAR" | ,
+      CO_COLTYPE = "LONGVAR" THEN Do
+         DDLTEXT = DDLTEXT " FOR MIXED DATA"
+         ZEL     = ZEL " FOR MIXED DATA"
+ End
+
+RETURN
+
+/*  PROCESS DEFAULT VALUE                                         */
+PROCESS_DEFAULT_PROC:
+DEFAULT = ""
+LENWRK  = 46
+IF CO_NULLS = "N" THEN Do
+   DDLTEXT = DDLTEXT " NOT NULL"
+   ZEL     = ZEL " NOT NULL"
+ End
+
+IF CO_DEFAULT = "Y" | ,
+   CO_DEFAULT = "B" | ,
+   CO_DEFAULT = "1" | ,
+   CO_DEFAULT = "2" | ,
+   CO_DEFAULT = "3" | ,
+   CO_DEFAULT = "4" | ,
+   CO_DEFAULT = "5" | ,
+   CO_DEFAULT = "S" | ,
+   CO_DEFAULT = "U" THEN  Do
+      DEFAULT = " WITH DEFAULT "
+    End
+
+SELECT
+   WHEN CO_DEFAULT = "Y" & CO_NULLS = "Y" THEN
+        DEFAULT = DEFAULT||"NULL "
+   WHEN CO_DEFAULT = "S" THEN
+        DEFAULT = DEFAULT||"CURRENT SQLID "
+   WHEN CO_DEFAULT = "U" THEN
+        DEFAULT = DEFAULT||"USER "
+   WHEN CO_DEFAULT = "A" THEN
+        DEFAULT = DEFAULT||"GENERATED ALWAYS "
+   WHEN CO_DEFAULT = "D" THEN
+        DEFAULT = DEFAULT||"GENERATED BY DEFAULT "
+   WHEN CO_DEFAULT = "I" THEN
+        DEFAULT = DEFAULT||"GENERATED ALWAYS AS IDENTITY "
+   WHEN CO_DEFAULT = "J" THEN
+        DEFAULT = DEFAULT||"GENERATED BY DEFAULT AS IDENTITY "
+   WHEN CO_DEFAULT = "E" THEN
+        DEFAULT = DEFAULT||"GENERATED ALWAYS "  || ,
+             "FOR EACH ROW ON UPDATE AS ROW CHANGE TIMESTAMP  "
+   WHEN CO_DEFAULT = "F" THEN
+        DEFAULT = DEFAULT||"GENERATED BY DEFAULT " ,
+             "FOR EACH ROW ON UPDATE AS ROW CHANGE TIMESTAMP  "
+   WHEN CO_DEFAULT = "X" THEN
+        DEFAULT = DEFAULT||"GENERATED ALWAYS AS TRANSACTION START ID "
+   WHEN CO_PERIOD  = "S" THEN
+        DEFAULT = DEFAULT||"GENERATED ALWAYS AS ROW BEGIN "
+   WHEN CO_PERIOD  = "T" THEN
+        DEFAULT = DEFAULT||"GENERATED ALWAYS AS ROW END   "
+   OTHERWISE DEFAULT= DEFAULT
+END
+
+IF DEFAULT > "" THEN Do
+   If Length(ZEL) + Length(DEFAULT) > 68 Then DDLTEXT = DDLTEXT " -NL"
+   DDLTEXT = DDLTEXT  " "DEFAULT "-NL"
+ End
+ELSE Do
+   DDLTEXT = DDLTEXT "-NL"
+ End
+
+
+IF CO_DEFAULT = "I" | CO_DEFAULT = "J" THEN Do
+
+   Call PROCESS_IDENTETY_COLUMN
+
+   END
+
+CO_DEFALTVALUE = TRANSLATE(CO_DEFAULTVALUE,' ','00'X)
+
+IF CO_DEFAULT = "1" | CO_DEFAULT = "5" THEN
+   DO
+      IF CO_DEFAULT = "5" THEN
+         HEXVAL = "X"
+      ELSE
+         HEXVAL = ""
+      COLEN = LENGTH(CO_DEFAULTVALUE)
+      START_POS = 1
+      IF COLEN < 46 THEN
+         END_POS = COLEN
+      ELSE
+         DO
+            END_POS = 45
+            LENWRK = COLEN - 45
+         END
+      DO UNTIL START_POS > COLEN
+         DEFLT_OUT = SUBSTR(CO_DEFAULTVALUE,START_POS,END_POS)
+         DDLTEXT = DDLTEXT "  "HEXVAL"'"DEFLT_OUT"'" "-NL"
+         START_POS = START_POS + 45
+         IF LENWRK > 45 THEN
+            LENWRK = LENWRK - 45
+         ELSE
+            END_POS = LENWRK
+         HEXVAL = ""
+      END
+   END
+
+IF CO_DEFAULT = "2" | CO_DEFAULT = "3" | CO_DEFAULT = "4" THEN Do
+   DDLTEXT = DDLTEXT "  "CO_DEFAULTVALUE "-NL"
+ End
+
+if CO_HIDDEN = 'P' Then Do
+   DDLTEXT = DDLTEXT "IMPLICITLY HIDDEN  -NL"
+ End
+
+RETURN
+
+PROCESS_IDENTETY_COLUMN:
+
+SQLSTMT  = "SELECT SEQUENCEID ",
+           "     , CREATEDBY  " ,
+           "     , INCREMENT  " ,
+           "     , START      " ,
+           "     , MAXVALUE   ",
+           "     , MINVALUE   ",
+           "     , CYCLE      ",
+           "     , CACHE      ",
+           " FROM "SYSIBMS".SYSSEQUENCESDEP D,",
+           " "SYSIBMS".SYSSEQUENCES S",
+           " WHERE DNAME = '"TB_NAME"'",
+           " AND DCREATOR = '"TB_CREATOR"'",
+           " AND DCOLNAME = '"CO_NAME"'",
+           " AND BSEQUENCEID = SEQUENCEID",
+           " ORDER BY DCREATOR,DNAME,DCOLNAME"
+
+cnr  = 7
+CALL OPEN_CURSOR_AC2
+
+cnr  = 7
+SQLTEXT =  " FETCH C"CNR" INTO ",
+"    :SE_SEQUENCEID            ",
+"  , :SE_CREATEDBY             ",
+"  , :SE_INCREMENT             ",
+"  , :SE_START                 ",
+"  , :SE_MAXVALUE              ",
+"  , :SE_MINVALUE              ",
+"  , :SE_CYCLE                 ",
+"  , :SE_CACHE                 ",
+""
+Call EXECUTE_SQL_TEXT_AC2
+
+IF SQLCODE =  0 THEN
+   DO
+      PERIOD = POS(".",SE_START)
+      IF PERIOD > 0 THEN
+         SE_START = SUBSTR(SE_START,1,PERIOD - 1)
+      PERIOD = POS(".",SE_INCREMENT)
+      IF PERIOD > 0 THEN
+         SE_INCREMENT = SUBSTR(SE_INCREMENT,1,PERIOD - 1)
+      DDLTEXT = DDLTEXT " (START WITH "SE_START"," "-NL"
+      DDLTEXT = DDLTEXT "  INCREMENT BY "SE_INCREMENT"," "-NL"
+      IF SE_CYCLE = "Y" THEN
+         DDLTEXT = DDLTEXT "  CYCLE," "-NL"
+      ELSE
+         DDLTEXT = DDLTEXT "  NO CYCLE," "-NL"
+      IF SE_MINVALUE > 0 THEN
+         DO
+            PERIOD = POS(".",SE_MINVALUE)
+            IF PERIOD > 0 THEN
+               SE_MINVALUE = SUBSTR(SE_MINVALUE,1,PERIOD - 1)
+            DDLTEXT = DDLTEXT "  MINVALUE "SE_MINVALUE"," "-NL"
+         END
+      IF SE_MAXVALUE > 0 THEN
+         DO
+            PERIOD = POS(".",SE_MAXVALUE)
+            IF PERIOD > 0 THEN
+               SE_MAXVALUE = SUBSTR(SE_MAXVALUE,1,PERIOD - 1)
+            DDLTEXT = DDLTEXT "  MAXVALUE "SE_MAXVALUE"," "-NL"
+         END
+      IF SE_CACHE = 0 THEN
+         DDLTEXT = DDLTEXT "  NO CACHE)" "-NL"
+      ELSE
+         DDLTEXT = DDLTEXT "  CACHE "SE_CACHE")" "-NL"
+   END
+
+CNR = 7
+CALL CLOSE_CURSOR_AC2
+
+ Return
+
+/*  PROCESS FIELDPROC                                             */
+PROCESS_FIELDPROC_PROC:
+SQLSTMT  = "SELECT TBCREATOR   ",
+           "     , TBNAME      ",
+           "     , COLNO       ",
+           "     , NAME        ",
+           "     , FLDTYPE     ",
+           "     , LENGTH      ",
+           "     , SCALE       ",
+           "     , FLDPROC     ",
+           "     , WORKAREA    ",
+           "     , EXITPARML   ",
+           "     , PARMLIST    ",
+           "     , EXITPARM    ",
+           " FROM "SYSIBMS".SYSFIELDS",
+           " WHERE TBNAME = '"TB_NAME"'",
+           " AND TBCREATOR = '"TB_CREATOR"'",
+           " AND COLNO = "CO_COLNO,
+           " AND FLDPROC = ' '",
+           " ORDER BY COLNO"
+
+cnr  = 8
+CALL OPEN_CURSOR_AC2
+
+cnr  = 8
+SQLTEXT = " FETCH C"CNR" INTO               ",
+          "       :FI_TBCREATOR             ",
+          "     , :FI_TBNAME                ",
+          "     , :FI_COLNO                 ",
+          "     , :FI_NAME                  ",
+          "     , :FI_FLDTYPE               ",
+          "     , :FI_LENGTH                ",
+          "     , :FI_SCALE                 ",
+          "     , :FI_FLDPROC               ",
+          "     , :FI_WORKAREA              ",
+          "     , :FI_EXITPARML             ",
+          "     , :FI_PARMLIST              ",
+          "     , :FI_EXITPARM              ",
+          ""
+Call EXECUTE_SQL_TEXT_AC2
+
+IF SQLCODE = 0 THEN
+   DDLTEXT = DDLTEXT " FIELDPROC "FI_FLDPROC "-NL"
+
+CNR = 8
+CALL CLOSE_CURSOR_AC2
+
+RETURN
+
+/*  PROCESS CHECK CONSTRAINTS                                     */
+PROCESS_CHECK_CONSTRAINTS_PROC:
+BUSINESSCHECK  = 'DB2_GENERATED_CHECK_CONSTRAINT_FOR_BUSINESS_TIME'
+SQLSTMT  = "SELECT TBOWNER  ",
+           "     , TBNAME   ",
+           "     , STRIP(CHECKNAME) AS CHECKNAME " ,
+           "     , COLNAME  ",
+           " FROM "SYSIBMS".SYSCHECKDEP",
+           " WHERE TBNAME = '"TB_NAME"'",
+           " AND TBOWNER = '"TB_CREATOR"'",
+           " AND COLNAME = '"CO_NAME"'",
+           " AND CHECKNAME <> '"BUSINESSCHECK"' ",
+           " ORDER BY CHECKNAME"
+
+cnr  = 9
+CALL OPEN_CURSOR_AC2
+
+cnr  = 9
+SQLTEXT =  " FETCH C"CNR" INTO",
+           "   :CD_TBOWNER    ",
+           " , :CD_TBNAME     ",
+           " , :CD_CHECKNAME  ",
+           " , :CD_COLNAME    ",
+           ""
+Call EXECUTE_SQL_TEXT_AC2
+
+IF SQLCODE = 0 THEN
+   DO
+      DDLTEXT = DDLTEXT "  CONSTRAINT "CD_CHECKNAME "-NL"
+      DDLTEXT = DDLTEXT "  CHECK ("  "-NL"
+      CALL BUILD_CHECK_PROC
+      DDLTEXT = DDLTEXT "        )" "-NL"
+   END
+ELSE
+   IF SQLCODE = 100 THEN NOP
+
+CNR = 9
+CALL CLOSE_CURSOR_AC2
+
+RETURN
+
+BUILD_CHECK_PROC:
+SQLSTMT  = "SELECT TBOWNER           ",
+           "     , CREATOR           ",
+           "     , TBNAME            ",
+           "     , CHECKNAME         ",
+           "     , CHECKCONDITION    ",
+           " FROM "SYSIBMS".SYSCHECKS",
+           " WHERE TBNAME = '"TB_NAME"'",
+           " AND TBOWNER = '"TB_CREATOR"'",
+           " AND CHECKNAME = '"CD_CHECKNAME"'",
+           " ORDER BY TIMESTAMP"
+
+CNR = 10
+CALL OPEN_CURSOR_AC2
+
+CNR = 10
+SQLTEXT =  " FETCH C"CNR" INTO    ",
+           "    :CK_TBOWNER       ",
+           "  , :CK_CREATOR       ",
+           "  , :CK_TBNAME        ",
+           "  , :CK_CHECKNAME     ",
+           "  , :CK_CHECKCONDITION" ,
+           ""
+
+Call EXECUTE_SQL_TEXT_AC2
+
+IF SQLCODE = 0 THEN
+   DO
+      CK_CHECKCONDITION = TRANSLATE(CK_CHECKCONDITION,' ','00'X)
+      CKLEN = LENGTH(CK_CHECKCONDITION)
+      DDLTEXT = DDLTEXT SQL_BLOB_AUFBEREITEN(CK_CHECKCONDITION)
+   END
+ELSE
+   IF SQLCODE = 100 THEN
+      NOP
+
+CNR = 10
+CALL CLOSE_CURSOR_AC2
+
+RETURN
+
+TBPARTKEY_COLS:
+SQLSTMT  = "SELECT STRIP(NAME) AS NAME ",
+           "     , PARTKEY_COLSEQ  ",
+           "     , PARTKEY_ORDERING",
+           " FROM "SYSIBMS".SYSCOLUMNS",
+           " WHERE TBNAME = '"TB_NAME"'",
+           " AND TBCREATOR = '"TB_CREATOR"'",
+           " AND PARTKEY_COLSEQ > 0",
+           " ORDER BY PARTKEY_COLSEQ"
+
+CNR  = 27
+CALL OPEN_CURSOR_AC2
+
+DO FOREVER
+   CNR  = 27
+   SQLTEXT =  " FETCH C"CNR" INTO ",
+      "    :CO_NAME            ",
+      "  , :CO_PARTKEY_COLSEQ  ",
+      "  , :CO_PARTKEY_ORDERING",
+      ""
+   Call EXECUTE_SQL_TEXT_AC2
+
+   IF SQLCODE = 0 THEN
+      DO
+         TBPARTKEY = TBPARTKEY||CO_NAME
+         IF CO_PARTKEY_ORDERING = "A" THEN
+            TBPARTKEY = TBPARTKEY||" ASC"
+         ELSE
+            TBPARTKEY = TBPARTKEY||" DESC"
+         DDLTEXT = DDLTEXT  TBPARTKEY "-NL"
+         TBPARTKEY = "                  , "
+      END
+   ELSE
+   IF SQLCODE = 100 THEN
+      DO
+         DDLTEXT = DDLTEXT "     )" "-NL"
+         CNR = 27
+         CALL CLOSE_CURSOR_AC2
+         LEAVE
+      END
+END
+
+RETURN
+
+TBPARTKEY_ENDING:
+
+SQLSTMT  = "SELECT LOGICAL_PART ",
+           "      ,LIMITKEY     ",
+           " FROM "SYSIBMS".SYSTABLEPART",
+           " WHERE DBNAME = '"TB_DBNAME"'",
+           " AND TSNAME = '"TB_TSNAME"'",
+           " ORDER BY LOGICAL_PART"
+
+CNR  = 28
+CALL OPEN_CURSOR_AC2
+
+DO FOREVER
+   CNR  = 28
+   SQLTEXT =  " FETCH C"CNR" INTO ",
+              "   :TP_LPART       ",
+              ",  :TP_LIMITKEY    "
+   Call EXECUTE_SQL_TEXT_AC2
+
+   IF SQLCODE = 0 THEN
+      DO
+         TP_LIMITKEY = ERSETZEN_STRING(TP_LIMITKEY, ",", ", ")
+         TBPARTKEY = TBPARTKEY||"PARTITION "TP_LPART" ENDING AT ("
+         TBPARTKEY = TBPARTKEY||TP_LIMITKEY")"
+         DDLTEXT = DDLTEXT  TBPARTKEY "-NL"
+         TBPARTKEY = "     ,"
+      END
+   ELSE
+   IF SQLCODE = 100 THEN
+      DO
+         DDLTEXT = DDLTEXT " )" "-NL"
+         CNR = 28
+         CALL CLOSE_CURSOR_AC2
+         LEAVE
+      END
+END
+
+RETURN
+
+CREATE_IX:
+
+WHERELIST    = ""
+CALL MAKE_WHERELIST "IX.CREATOR", DB2_CREATOR1
+CALL MAKE_WHERELIST "IX.NAME", DB2_NAME1
+CALL MAKE_WHERELIST "IX.TBCREATOR", DB2_CREATOR2
+CALL MAKE_WHERELIST "IX.TBNAME", DB2_NAME2
+CALL MAKE_WHERELIST "TB.TSNAME", DB2_TABLESPACE
+CALL MAKE_WHERELIST "TB.DBNAME", DB2_DATABASE
+
+CALL MAKE_WHERELIST "","IX.UNIQUERULE NOT IN('X', 'G'   )"
+/* Implizid Index ausschliesen  */
+CALL MAKE_WHERELIST "", "IX.IX_EXTENSION_TYPE NOT IN('N')"
+SQLSTMT  = "SELECT STRIP(IX.NAME) AS NAME",
+           " , STRIP(IX.CREATOR)  AS CREATOR",
+           " , IX.TBNAME      ",
+           " , IX.TBCREATOR   ",
+           " , IX.UNIQUERULE  ",
+           " , IX.COLCOUNT    ",
+           " , IX.CLUSTERING  ",
+           " , IX.CLUSTERED   ",
+           " , IX.DBNAME      ",
+           " , IX.INDEXSPACE  ",
+           " , IX.BPOOL       ",
+           " , IX.PGSIZE      ",
+           " , IX.ERASERULE   ",
+           " , IX.DSETPASS    ",
+           " , IX.CLOSERULE   ",
+           " , IX.SPACE       ",
+           " , IX.INDEXTYPE   ",
+           " , IX.PIECESIZE   ",
+           " , IX.COPY        ",
+           " , IX.PADDED      ",
+           " , IX.COMPRESS    ",
+           " , IX.HASH        ",
+           " , IX.IX_EXTENSION_TYPE ",
+           " , TB.TYPE        ",
+           " , TB.DBNAME      ",
+           " , TB.TSNAME      ",
+           " FROM "SYSIBMS".SYSINDEXES IX",
+           " INNER JOIN "SYSIBMS".SYSTABLES TB",
+           " ON  TB.CREATOR = IX.TBCREATOR   ",
+           " AND TB.NAME    = IX.TBNAME      ",
+           WHERELIST                     ,
+           " ORDER BY IX.CREATOR, IX.NAME"
+
+CNR  = 14
+CALL OPEN_CURSOR_AC2
+
+If SQLCODE < 0 Then Do
+   SAY "ERROR ON FETCH C"CNR", RC="RC ,
+       "SQLCODE="SQLCODE         ,
+       "SQLERRMC="SQLERRMC       ,
+       ""
+       Call SQLERROR
+       Exit 8
+ End
+DO FOREVER
+   CNR  = 14
+   SQLTEXT =  " FETCH C"CNR" INTO ",
+              "   :IX_NAME        ",
+              " , :IX_CREATOR     ",
+              " , :IX_TBNAME      ",
+              " , :IX_TBCREATOR   ",
+              " , :IX_UNIQUERULE  ",
+              " , :IX_COLCOUNT    ",
+              " , :IX_CLUSTERING  ",
+              " , :IX_CLUSTERED   ",
+              " , :IX_DBNAME      ",
+              " , :IX_INDEXSPACE  ",
+              " , :IX_BPOOL       ",
+              " , :IX_PGSIZE      ",
+              " , :IX_ERASERULE   ",
+              " , :IX_DSETPASS    ",
+              " , :IX_CLOSERULE   ",
+              " , :IX_SPACE       ",
+              " , :IX_INDEXTYPE   ",
+              " , :IX_PIECESIZE   ",
+              " , :IX_COPY        ",
+              " , :IX_PADDED      ",
+              " , :IX_COMPRESS    ",
+              " , :IX_HASH        ",
+              " , :IX_EXTENSION_TYPE ",
+              " , :IX_TB_TYPE     ",
+              " , :IX_TB_DBNAME   ",
+              " , :IX_TB_TSNAME   ",
+              ""
+   Call EXECUTE_SQL_TEXT_AC2
+
+   Select
+    when SQLCODE = 100 THEN Do
+      CNR  = 14
+      CALL CLOSE_CURSOR_AC2
+      LEAVE
+    END
+    When SQLCODE < 0 Then Do
+       SAY "ERROR ON FETCH C"CNR", RC="RC ,
+           "SQLCODE="SQLCODE         ,
+           "SQLERRMC="SQLERRMC       ,
+           ""
+           Call SQLERROR
+           Exit 8
+     End
+    otherwise nop
+   end
+
+   IF IX_HASH = "Y" Then do
+      Call IX_HASH_Proc
+      Iterate
+    End
+
+   INDEX = "CREATE TYPE 2 "
+   IF IX_UNIQUERULE = "U" |,
+      IX_UNIQUERULE = "P" |,
+      IX_UNIQUERULE = "C" |,
+      IX_UNIQUERULE = "R" |,
+      IX_UNIQUERULE = "G" THEN
+      INDEX = INDEX||"UNIQUE INDEX "
+   ELSE
+      IF IX_UNIQUERULE = "N" THEN
+         INDEX = INDEX||"UNIQUE WHERE NOT NULL INDEX "
+      ELSE
+         INDEX = INDEX||"INDEX "
+   INDEX = INDEX || "-NL "IX_CREATOR"."IX_NAME
+   DDLTEXT = DDLTEXT  INDEX "-NL"
+   DDLTEXT = DDLTEXT " ON "Strip(IX_TBCREATOR)"."IX_TBNAME "-NL"
+
+   Select
+      When  IX_TB_TYPE = 'X' Then NOP  /*  AUXILIARY TABLE */
+      When  IX_EXTENSION_TYPE  = 'N' Then  CALL IX_ROWS_EXT
+      When  IX_EXTENSION_TYPE  = 'S' Then  CALL IX_ROWS_EXT
+      When  IX_EXTENSION_TYPE  = 'T' Then  CALL IX_ROWS_EXT
+      When  IX_EXTENSION_TYPE  = 'V' Then  CALL IX_ROWS_EXT
+      Otherwise  CALL IX_ROWS
+    End
+
+   IF IX_CLUSTERING = "Y" THEN
+      DDLTEXT = DDLTEXT  " CLUSTER" "-NL"
+
+   IF IX_COMPRESS   = "Y" THEN Do
+      DDLTEXT = DDLTEXT  " COMPRESS YES"  " -NL"
+    End
+   Else Do
+      DDLTEXT = DDLTEXT  " COMPRESS NO"   " -NL"
+    End
+
+   IF IX_INDEXTYPE = "P" THEN Do
+      DDLTEXT = DDLTEXT  " PARTITIONED" "-NL"
+    End
+
+   IF IX_EXTENSION_TYPE = "V" Then do
+      xmlindex = "Y"
+    End
+
+    Call ix_PArt_Proc
+END
+RETURN
+
+IX_HASH_Proc:
+
+SQLSTMT = "SELECT ORGANIZATIONTYPE " ,
+          ", HASHSPACE             " ,
+          ", HASHDATAPAGES         " ,
+          " FROM "SYSIBMS".SYSTABLESPACE " ,
+          " WHERE DBNAME  = '"IX_TB_DBNAME"'" ,
+          " AND   NAME    = '"IX_TB_TSNAME"'" ,
+
+CNR  = 21
+CALL OPEN_CURSOR_AC2
+
+SQLTEXT =  " FETCH C"CNR" INTO ",
+   "     :TS_ORGANIZATIONTYPE  ",
+   "   , :TS_HASHSPACE         ",
+   "   , :TS_HASHDATAPAGES     ",
+   ""
+Call EXECUTE_SQL_TEXT_AC2
+
+Select
+ when SQLCODE = 100 THEN TS_HASHSPACE = -1
+ When SQLCODE < 0 Then Do
+      SAY "ERROR ON FETCH C"CNR", RC="RC ,
+          "SQLCODE="SQLCODE         ,
+          "SQLERRMC="SQLERRMC       ,
+          ""
+          Call SQLERROR
+          Exit 8
+    End
+    otherwise nop
+   end
+  If IX_UNIQUERULE = "U" Then un = "UNIQUE"
+  Else                        un = ""
+   DDLTEXT = DDLTEXT "Alter Table " ,
+             Space(IX_TBCREATOR "." IX_TBNAME ,0) " -NL"
+   DDLTEXT = DDLTEXT "      ADD ORGANIZE BY HASH " UN " -NL"
+
+   CALL IX_ROWS
+
+   DDLTEXT = DDLTEXT "          HASH SPACE "TS_HASHSPACE " K  -NL "
+   DDLTEXT = DDLTEXT "-NR "
+
+return
+
+IX_Part_Proc:
+
+SQLSTMT = "SELECT PARTITION ",
+          ", IXNAME    ",
+          ", IXCREATOR ",
+          ", PQTY      ",
+          ", SQTY      ",
+          ", STORTYPE  ",
+          ", STORNAME  ",
+          ", VCATNAME  ",
+          ", LIMITKEY  ",
+          ", FREEPAGE  ",
+          ", PCTFREE   ",
+          ", SPACE     ",
+          " FROM "SYSIBMS".SYSINDEXPART",
+          " WHERE IXNAME = '"IX_NAME"'",
+          " AND IXCREATOR = '"IX_CREATOR"'",
+          " ORDER BY PARTITION"
+
+CNR  = 15
+CALL OPEN_CURSOR_AC2
+
+CNR  = 15
+SQLTEXT =  " FETCH C"CNR" INTO ",
+   "     :IP_PARTITION ",
+   "   , :IP_IXNAME    ",
+   "   , :IP_IXCREATOR ",
+   "   , :IP_PQTY      ",
+   "   , :IP_SQTY      ",
+   "   , :IP_STORTYPE  ",
+   "   , :IP_STORNAME  ",
+   "   , :IP_VCATNAME  ",
+   "   , :IP_LIMITKEY  ",
+   "   , :IP_FREEPAGE  ",
+   "   , :IP_PCTFREE   ",
+   "   , :IP_SPACE     ",
+   ""
+   Call EXECUTE_SQL_TEXT_AC2
+
+   Select
+    when SQLCODE = 100 THEN Do
+      CNR  = 14
+      CALL CLOSE_CURSOR_AC2
+      return
+    END
+    When SQLCODE < 0 Then Do
+       SAY "ERROR ON FETCH C"CNR", RC="RC ,
+           "SQLCODE="SQLCODE         ,
+           "SQLERRMC="SQLERRMC       ,
+           ""
+           Call SQLERROR
+           Exit 8
+     End
+    otherwise nop
+   end
+
+ IF IP_SPACE < 0 THEN IP_DEFINE = " DEFINE NO"
+ Else                 IP_DEFINE = " DEFINE YES"
+
+ IF IP_PARTITION = "0" | IX_INDEXTYPE = "D" THEN Do
+       CALL CALL_IX_NOPART
+       CNR  = 15
+       CALL CLOSE_CURSOR_AC2
+
+       DDLTEXT = DDLTEXT " BUFFERPOOL "IX_BPOOL "-NL"
+       DDLTEXT = DDLTEXT IP_DEFINE "-NL"
+       IF IX_TB_TYPE <> 'X' Then do
+          DDLTEXT = DDLTEXT " DEFER NO" "-NL"
+        End
+       IF IX_CLOSERULE = "N" THEN
+          DDLTEXT = DDLTEXT " CLOSE NO " "-NR"
+       ELSE
+          DDLTEXT = DDLTEXT " CLOSE YES " "-NR"
+       DDLTEXT = DDLTEXT " " "-NL"
+       IF IX_INDEXTYPE = "D" THEN
+          CALL DPSI_ALTERS
+    END
+ ELSE Do
+       CALL CALL_IX_PART
+       CNR  = 15
+       CALL CLOSE_CURSOR_AC2
+       DDLTEXT = DDLTEXT " )" "-NL"
+       DDLTEXT = DDLTEXT " BUFFERPOOL "IX_BPOOL "-NL"
+       IF IX_CLOSERULE = "N" THEN
+          DDLTEXT = DDLTEXT " CLOSE NO " "-NR"
+       ELSE
+          DDLTEXT = DDLTEXT " CLOSE YES " "-NR"
+       DDLTEXT = DDLTEXT "-NL"
+  END
+
+return
+
+IX_ROWS:
+SQLSTMT  = "SELECT IXNAME      " ,
+           "      ,IXCREATOR   " ,
+           "      ,COLNAME     " ,
+           "      ,COLNO       " ,
+           "      ,COLSEQ      " ,
+           "      ,ORDERING    ",
+           "      ,PERIOD      ",
+           " FROM "SYSIBMS".SYSKEYS",
+           " WHERE IXNAME = '"IX_NAME"'",
+           " AND IXCREATOR = '"IX_CREATOR"'",
+           " ORDER BY COLSEQ"
+
+CNR  = 16
+CALL OPEN_CURSOR_AC2
+
+PREFX   = "("
+INCLUDE = ""
+
+DO FOREVER
+   CNR  = 16
+   SQLTEXT =  " FETCH C"CNR" INTO ",
+              "  :IK_IXNAME       ",
+              ", :IK_IXCREATOR    ",
+              ", :IK_COLNAME      ",
+              ", :IK_COLNO        ",
+              ", :IK_COLSEQ       ",
+              ", :IK_ORDERING     ",
+              ", :IK_PERIOD       ",
+              ""
+   Call EXECUTE_SQL_TEXT_AC2
+   IF SQLCODE = 100 THEN Do
+      DDLTEXT = DDLTEXT " )" "-NL"
+      CNR  = 16
+      CALL CLOSE_CURSOR_AC2
+      LEAVE
+    END
+
+   COLINFO = IK_COLNAME
+   SELECT
+     When  IX_HASH     = "Y" THEN Do /* IX_HASH KEY Column  */
+           DDLTEXT = DDLTEXT " "PREFX" "COLINFO "-NL"
+           PREFX = ","
+      End
+     When  IK_PERIOD   = "B" THEN Do /* BUSINESS_TIME START */
+           DDLTEXT = DDLTEXT " "PREFX" BUSINESS_TIME WITHOUT OVERLAPS"
+           PREFX = ","
+      End
+     When  IK_PERIOD   = "C" THEN Do   /* BUSINESS_TIME END */
+           Iterate
+      End
+     When  IK_ORDERING = "A" THEN Do
+           COLINFO = COLINFO "ASC"
+           DDLTEXT = DDLTEXT " "PREFX" "COLINFO "-NL"
+           PREFX = ","
+      End
+     When  IK_ORDERING = "D" THEN Do
+           COLINFO = COLINFO "DESC"
+           DDLTEXT = DDLTEXT " "PREFX" "COLINFO "-NL"
+           PREFX = ","
+      End
+     When  IK_ORDERING = "R" THEN Do
+           COLINFO = COLINFO "RANDOM"
+           DDLTEXT = DDLTEXT " "PREFX" "COLINFO "-NL"
+           PREFX = ","
+      End
+     Otherwise  Do
+           INCLUDE = INCLUDE IK_COLNAME
+      End
+    End
+END
+
+komma = ""
+If length(INCLUDE) > 0 Then do
+   DDLTEXT = DDLTEXT " INCLUDE (" "-NL"
+   Do inc = 1 To words(INCLUDE)
+      DDLTEXT = DDLTEXT " "komma" "Word(INCLUDE, inc) "-NL"
+      KOMMA   = ","
+    End
+   DDLTEXT = DDLTEXT "         )" "-NL"
+
+ End
+
+RETURN
+
+
+IX_ROWS_EXT:
+SQLSTMT  = "SELECT IXNAME           ",
+           "      ,IXSCHEMA         ",
+           "      ,KEYSEQ           ",
+           "      ,COLNO            ",
+           "      ,ORDERING         ",
+           "      ,TYPESCHEMA       ",
+           "      ,TYPENAME         ",
+           "      ,LENGTH           ",
+           "      ,LENGTH2          ",
+           "      ,SCALE            ",
+           "      ,NULLS            ",
+           "      ,DERIVED_FROM     ",
+           " FROM "SYSIBMS".SYSKEYTARGETS ",
+           " WHERE IXNAME    = '"IX_NAME"'",
+           " AND   IXSCHEMA  = '"IX_CREATOR"'",
+           " ORDER BY KEYSEQ"
+
+CNR  = 16
+CALL OPEN_CURSOR_AC2
+
+PREFX = "("
+
+DO FOREVER
+   CNR  = 16
+   SQLTEXT =  " FETCH C"CNR" INTO ",
+              "  :KT_IXNAME       ",
+              ", :KT_IXSCHEMA     ",
+              ", :KT_KEYSEQ       ",
+              ", :KT_COLNO        ",
+              ", :KT_ORDERING     ",
+              ", :KT_TYPESCHEMA   ",
+              ", :KT_TYPENAME     ",
+              ", :KT_LENGTH       ",
+              ", :KT_LENGTH2      ",
+              ", :KT_SCALE        ",
+              ", :KT_NULLS        ",
+              ", :KT_DERIVED_FROM ",
+              ""
+   Call EXECUTE_SQL_TEXT_AC2
+
+   Select
+    When SQLCODE = 100 THEN Do
+         DDLTEXT = DDLTEXT " )" "-NL"
+         Leave
+     End
+    When SQLCODE > 0   THEN Leave
+    When SQLCODE < 0   THEN Exit 8
+    Otherwise               NOP
+   End
+
+  SELECT
+   WHEN KT_TYPENAME = "DECIMAL"  THEN
+        COLDEF = "DECIMAL("KT_LENGTH" , "KT_SCALE")"
+   WHEN KT_TYPENAME = "DATE"     THEN COLDEF = "DATE"
+   WHEN KT_TYPENAME = "TIME"     THEN COLDEF = "TIME"
+   WHEN KT_TYPENAME = "TIMESTMP" THEN Do
+        COLDEF = "TIMESTAMP"
+        if KT_SCALE > 0 & KT_LENGTH <> 10 Then do
+           COLDEF = COLDEF "("KT_SCALE")"
+         End
+    End
+   WHEN KT_TYPENAME = "TIMESTZ" THEN Do
+        COLDEF = "TIMESTAMP "
+        if KT_SCALE > 0 & KT_LENGTH <> 10 Then do
+           COLDEF = COLDEF "("KT_SCALE")"
+         End
+        COLDEF = COLDEF "WITH TIME ZONE"
+    End
+   WHEN KT_TYPENAME = "BIGINT"   THEN COLDEF = "BIGINT"
+   WHEN KT_TYPENAME = "INTEGER"  THEN COLDEF = "INTEGER"
+   WHEN KT_TYPENAME = "SMALLINT" THEN COLDEF = "SMALLINT"
+   WHEN KT_TYPENAME = "DECFLOAT" THEN COLDEF = "DECFLOAT"
+   WHEN KT_TYPENAME = "LONGVAR"  THEN COLDEF = "LONG VARCHAR"
+   WHEN KT_TYPENAME = "LONGVARG" THEN COLDEF = "LONG VARGRAPHIC"
+   WHEN KT_TYPENAME = "ROWID"    THEN COLDEF = "ROWID"
+   WHEN KT_TYPENAME = "XML"      THEN COLDEF = "XML"
+   WHEN KT_TYPENAME = "FLOAT" & KT_LENGTH < 5 THEN
+        COLDEF = "FLOAT(21)"
+   WHEN KT_TYPENAME = "FLOAT" & KT_LENGTH < 9 THEN
+        COLDEF = "DOUBLE"
+   WHEN KT_TYPENAME = "FLOAT" & KT_LENGTH > 8 THEN
+        COLDEF = "FLOAT(53)"
+   WHEN KT_TYPENAME = "DECFLOAT" THEN COLDEF = "DECFLOAT("KT_LENGTH")"
+   WHEN KT_TYPENAME = "VARCHAR"  THEN COLDEF = "VARCHAR("KT_LENGTH")"
+   WHEN KT_TYPENAME = "CHAR"     THEN COLDEF = "CHAR("KT_LENGTH")"
+   WHEN KT_TYPENAME = "GRAPHIC"  THEN COLDEF = "GRAPHIC("KT_LENGTH")"
+   WHEN KT_TYPENAME = "VARG"     THEN COLDEF = "VARGRAPHIC("KT_LENGTH")"
+   WHEN KT_TYPENAME = "BLOB"     THEN COLDEF = "BLOB("KT_LENGTH2")"
+   WHEN KT_TYPENAME = "CLOB"     THEN COLDEF = "CLOB("KT_LENGTH2")"
+   WHEN KT_TYPENAME = "DBCLOB"   THEN Do
+        COLDEF = "DBCLOB("KT_LENGTH2 / 2")"
+    End
+   OTHERWISE COLDEF = KT_TYPENAME KT_LENGTH " <===UNKNOWN TYPE"
+  END
+
+   Select
+     When  IX_EXTENSION_TYPE  = 'N' Then  Do
+           SAY "TYPE N  Node ID index  in arbeit "
+           Leave
+      End
+     When  IX_EXTENSION_TYPE  = 'T' Then  Do
+           SAY "TYPE T  Spatial index  in arbeit "
+           Leave
+      End
+     When  IX_EXTENSION_TYPE  = 'S' Then  Do
+           DDLTEXT = DDLTEXT " "PREFX" "KT_DERIVED_FROM "-NL"
+      End
+     When  IX_EXTENSION_TYPE  = 'V' Then  Do
+           DDLTEXT = DDLTEXT "(DESCRIPTION ) " "-NL"
+           DDLTEXT = DDLTEXT " GENERATE KEY USING XMLPATTERN" "-NL"
+           DDLTEXT = DDLTEXT " '" || KT_DERIVED_FROM || "'"   "-NL"
+           DDLTEXT = DDLTEXT "  AS SQL " || COLDEF  "-NL"
+           LEAVE
+      End
+     Otherwise  NOP
+    End
+   PREFX = ","
+END
+
+CNR     = 16
+CALL CLOSE_CURSOR_AC2
+
+RETURN
+
+CALL_IX_NOPART:
+IF IP_PQTY > 0 THEN
+   PRIQTY = IP_PQTY * 4
+ELSE
+   PRIQTY = IP_PQTY
+
+IF IP_SQTY > 0 THEN
+   SECQTY = IP_SQTY * 4
+ELSE
+   SECQTY = IP_SQTY
+
+IF IX_INDEXTYPE = "D" THEN
+   DDLTEXT = DDLTEXT " PARTITIONED" "-NL"
+
+IF IX_PADDED = "N" THEN
+   DDLTEXT = DDLTEXT " NOT PADDED" "-NL"
+ELSE
+IF IX_PADDED = "Y" THEN
+   DDLTEXT = DDLTEXT " PADDED" "-NL"
+
+IF IX_COPY   = "Y" THEN
+   DDLTEXT = DDLTEXT " COPY YES  " "-NL"
+
+
+SELECT
+   WHEN IP_STORTYPE = "I" THEN DO
+        OP_STORAGE = "USING STOGROUP "IP_STORNAME
+    END
+   OTHERWISE  OP_STORAGE = "USING VCAT  "IP_VCATNAME
+END
+DDLTEXT = DDLTEXT  " "OP_STORAGE "-NL"
+DDLTEXT = DDLTEXT  " PRIQTY "PRIQTY "-NL"
+DDLTEXT = DDLTEXT  " SECQTY "SECQTY "-NL"
+IF IX_ERASERULE = "N" THEN
+   DDLTEXT = DDLTEXT  " ERASE NO" "-NL"
+ELSE
+   DDLTEXT = DDLTEXT  " ERASE YES" "-NL"
+DDLTEXT = DDLTEXT  " FREEPAGE "IP_FREEPAGE "-NL"
+DDLTEXT = DDLTEXT  " PCTFREE "IP_PCTFREE "-NL"
+IF IP_GBPCACHE = "A" THEN
+   DDLTEXT = DDLTEXT  " GBPCACHE ALL" "-NL"
+RETURN
+
+CALL_IX_PART:
+
+STARTP = "("
+DO FOREVER
+   DDLTEXT = DDLTEXT " "STARTP"PART "IP_PARTITION "-NL"
+   STARTP = ","
+   SQLSTMT  = "SELECT TP.LIMITKEY      ",
+              "     , TB.PARTKEYCOLNUM ",
+              " FROM "SYSIBMS".SYSTABLES TB",
+              " INNER JOIN "SYSIBMS".SYSTABLEPART TP",
+              " ON    TP.DBNAME  = TB.DBNAME     ",
+              " AND   TP.TSNAME  = TB.TSNAME     ",
+              " WHERE TB.CREATOR = '"IX_TBCREATOR"'",
+              " AND TB.NAME = '"IX_TBNAME"'",
+              " AND PARTITION = "IP_PARTITION
+
+   CNR  = 18
+   CALL OPEN_CURSOR_AC2
+
+   SQLTEXT =  " FETCH C"CNR" INTO ",
+              "  :LK_LIMITKEY" ,
+              ", :TB_PARTKEYCOLNUM" ,
+              ""
+   Call EXECUTE_SQL_TEXT_AC2
+
+   IF TB_PARTKEYCOLNUM > 0 THEN TABLE_CONTROLLED_PARTITIONING = "YES"
+   ELSE                         TABLE_CONTROLLED_PARTITIONING = "NO"
+
+   IF TABLE_CONTROLLED_PARTITIONING = "NO" THEN
+      DDLTEXT = DDLTEXT " VALUES" "-NL"
+
+   IF SQLCODE = 0 THEN NOP
+   ELSE                RETURN
+
+   CNR  = 18
+   CALL CLOSE_CURSOR_AC2
+
+   LK = ""
+   PARSE VALUE LK_LIMITKEY WITH LK.1 "," LK.2 "," LK.3 "," LK.4 ",",
+   LK.5 "," LK.6 "," LK.7 "," LK.8 "," LK.9 "," LK.10 "," LK.11 ",",
+   LK.12 "," LK.13 "," LK.14 "," LK.15 "," LK.16 "," LK.17 ",",
+   LK.18 "," LK.19 "," LK.20 "," LK.21 "," LK.22 "," LK.23 ",",
+   LK.24 "," LK.25 "," LK.26 "," LK.26 "," LK.28 "," LK.29 ",",
+   LK.30 "," LK.31 "," LK.32 "," LK.33 "," LK.34 "," LK.35 ",",
+   LK.36 "," LK.37 "," LK.38 "," LK.39 "," LK.40 "," LK.41 ",",
+   LK.42 "," LK.43 "," LK.44 "," LK.45 "," LK.46 "," LK.47 ",",
+   LK.48 "," LK.49 "," LK.50
+
+
+   IF TABLE_CONTROLLED_PARTITIONING = "NO" THEN
+      DO
+         PREFX = "("
+         COUNTR = 1
+         DO FOREVER
+            IF LK.COUNTR > "" THEN
+               DO
+                  LK_LINE = PREFX||LK.COUNTR
+                  DDLTEXT = DDLTEXT " "LK_LINE "-NL"
+                  COUNTR = COUNTR + 1
+                  PREFX = ","
+               END
+            ELSE
+            DO
+               DDLTEXT = DDLTEXT " )" "-NL"
+               LEAVE
+            END
+         END
+      END
+
+   SELECT
+   WHEN IP_STORTYPE = "I" THEN OP_STORAGE = "USING STOGROUP "IP_STORNAME
+   OTHERWISE  OP_STORAGE = "USING VCAT  "IP_VCATNAME
+   END
+   DDLTEXT = DDLTEXT  " "OP_STORAGE "-NL"
+
+   IF IP_PQTY > 0 THEN
+      PRIQTY = IP_PQTY * 4
+   ELSE
+      PRIQTY = IP_PQTY
+
+   IF IP_SQTY > 0 THEN
+      SECQTY = IP_SQTY * 4
+   ELSE
+      SECQTY = IP_SQTY
+
+   DDLTEXT = DDLTEXT " PRIQTY "PRIQTY "-NL"
+   DDLTEXT = DDLTEXT " SECQTY "SECQTY "-NL"
+
+   IF IP_ERASERULE = "N" THEN
+      DDLTEXT = DDLTEXT " ERASE NO" "-NL"
+   ELSE
+      DDLTEXT = DDLTEXT " ERASE YES" "-NL"
+
+   DDLTEXT = DDLTEXT " FREEPAGE "IP_FREEPAGE "-NL"
+   DDLTEXT = DDLTEXT " PCTFREE "IP_PCTFREE "-NL"
+
+         CNR  = 15
+         SQLTEXT =  " FETCH C"CNR" INTO ",
+         "     :IP_PARTITION  ",
+         "   , :IP_IXNAME     ",
+         "   , :IP_IXCREATOR  ",
+         "   , :IP_PQTY       ",
+         "   , :IP_SQTY       ",
+         "   , :IP_STORTYPE   ",
+         "   , :IP_STORNAME   ",
+         "   , :IP_VCATNAME   ",
+         "   , :IP_LIMITKEY   ",
+         "   , :IP_FREEPAGE   ",
+         "   , :IP_PCTFREE    ",
+         ""
+         Call EXECUTE_SQL_TEXT_AC2
+
+   IF SQLCODE = 0 THEN NOP
+   ELSE                LEAVE
+
+END
+RETURN
+
+DPSI_ALTERS:
+SQLSTMT  = "SELECT PARTITION  ",
+           "     , IXNAME     ",
+           "     , IXCREATOR  ",
+           "     , PQTY       ",
+           "     , SQTY       ",
+           "     , STORTYPE   ",
+           "     , STORNAME   ",
+           "     , VCATNAME   ",
+           "     , LIMITKEY   ",
+           "     , FREEPAGE   ",
+           "     , PCTFREE    ",
+           " FROM "SYSIBMS".SYSINDEXPART",
+           " WHERE IXNAME = '"IX_NAME"'",
+           " AND IXCREATOR = '"IX_CREATOR"'",
+           " ORDER BY PARTITION"
+
+CNR  = 15
+CALL OPEN_CURSOR_AC2
+
+DO FOREVER
+   CNR  = 15
+   SQLTEXT =  " FETCH C"CNR" INTO ",
+              "    :IP_PARTITION  ",
+              " ,  :IP_IXNAME     ",
+              " ,  :IP_IXCREATOR  ",
+              " ,  :IP_PQTY       ",
+              " ,  :IP_SQTY       ",
+              " ,  :IP_STORTYPE   ",
+              " ,  :IP_STORNAME   ",
+              " ,  :IP_VCATNAME   ",
+              " ,  :IP_LIMITKEY   ",
+              " ,  :IP_FREEPAGE   ",
+              " ,  :IP_PCTFREE    ",
+              ""
+   Call EXECUTE_SQL_TEXT_AC2
+
+   IF SQLCODE = 0 THEN
+      DO
+         IF IP_PQTY > 0 THEN
+            PRIQTY = IP_PQTY * 4
+         ELSE
+            PRIQTY = IP_PQTY
+         IF IP_SQTY > 0 THEN
+            SECQTY = IP_SQTY * 4
+         ELSE
+            SECQTY = IP_SQTY
+         DDLTEXT = DDLTEXT "ALTER INDEX "IX_CREATOR"."IX_NAME "-NL"
+         DDLTEXT = DDLTEXT " ALTER PARTITION "IP_PARTITION "-NL"
+         DDLTEXT = DDLTEXT " PRIQTY "PRIQTY "-NL"
+         DDLTEXT = DDLTEXT " SECQTY "SECQTY "-NL"
+         DDLTEXT = DDLTEXT " FREEPAGE "IP_FREEPAGE "-NL"
+         DDLTEXT = DDLTEXT " PCTFREE "IP_PCTFREE"-NR"
+      END
+   ELSE
+   IF SQLCODE = 100 THEN
+      DO
+         CNR  = 15
+         CALL CLOSE_CURSOR_AC2
+         LEAVE
+      END
+   ELSE RETURN
+END
+
+RETURN
+
+CREATE_SE:
+
+WHERELIST    = ""
+CALL MAKE_WHERELIST "SCHEMA", DB2_CREATOR1
+CALL MAKE_WHERELIST "NAME", DB2_NAME1
+CALL MAKE_WHERELIST "", "SEQTYPE IN ('S', 'X', 'A') "
+
+EINGABE.0  = 1
+SQLSTMT    =  "SELECT SCHEMA           " ,
+              "     , NAME             " ,
+              "     , SEQTYPE          " ,
+              "     , SEQUENCEID       " ,
+              "     , INCREMENT        " ,
+              "     , START            " ,
+              "     , MAXVALUE         " ,
+              "     , MINVALUE         " ,
+              "     , CYCLE            " ,
+              "     , CACHE            " ,
+              "     , ORDER            " ,
+              "     , DATATYPEID       " ,
+              "     , MAXASSIGNEDVAL   " ,
+              "     , PRECISION        " ,
+              "     , RESTARTWITH      " ,
+              "     , CASE WHEN DATATYPEID = 500 THEN 'AS SMALLINT' " ,
+              "            WHEN DATATYPEID = 496 THEN 'AS INTEGER'  " ,
+              "            WHEN DATATYPEID = 492 THEN 'AS BIGINT'   " ,
+              "            ELSE                      'AS DECIMAL'",
+              "        END AS SEQ_DT_TYPE                      " ,
+              "     , SEQSCHEMA        " ,
+              "     , SEQNAME          " ,
+              "FROM "SYSIBMS".SYSSEQUENCES " ,
+               WHERELIST ,
+              "ORDER BY SCHEMA, NAME      " ,
+              "FOR FETCH ONLY ",
+              ""
+
+CNR = 1
+CALL OPEN_CURSOR_AC2
+
+DO WHILE SQLCODE = 0
+   CNR = 1
+   SQLTEXT = " FETCH C"CNR" INTO "   SQL_FETCH
+   Call EXECUTE_SQL_TEXT_AC2
+
+    Select
+        When SQLCODE = 100 THEN DO
+             CALL CLOSE_CURSOR_AC2 /* CLOSE CURSOR */
+             LEAVE
+          End
+        When SQLCODE <> 0  THEN DO
+             SAY "ERROR ON FETCH C"CNR", RC="RC ,
+                 "SQLCODE="SQLCODE         ,
+                 "SQLERRMC="SQLERRMC       ,
+                 ""
+             Exit 8
+          End
+        Otherwise NOP
+     End
+   if SEQTYPE = 'A' Then do             /* SEQUENCE ALIAS  */
+      If SCHEMA            = 'SYSPUBLIC' Then PUBAL = 'PUBLIC'
+       Else                                   PUBAL = ''
+      DDLTEXT = DDLTEXT "CREATE "PUBAL" ALIAS  "           ,
+                STRIP(SCHEMA) || "." || ,
+                STRIP(NAME)             || " "    ,
+                "-NL"
+      DDLTEXT = DDLTEXT "FOR SEQUENCE "           ,
+                STRIP(SEQSCHEMA) ||            "." || ,
+                STRIP(SEQNAME)             ||         ,
+                " -NL"
+      DDLTEXT = DDLTEXT "-NR"
+      ITERATE
+    End
+
+   DDLTEXT = DDLTEXT "CREATE SEQUENCE "           ,
+             STRIP(SCHEMA) || "." || ,
+             STRIP(NAME)             || " "    ,
+             STRIP(SEQ_DT_TYPE) ||                ,
+             "-NL"
+   DDLTEXT = DDLTEXT "  START WITH   " START "-NL"
+   DDLTEXT = DDLTEXT "  INCREMENT BY " INCREMENT "-NL"
+   DDLTEXT = DDLTEXT "  MINVALUE     " MINVALUE            "-NL"
+   DDLTEXT = DDLTEXT "  MAXVALUE     " MAXVALUE            "-NL"
+
+   IF CYCLE = 'N' Then do
+      DDLTEXT = DDLTEXT "  NO CYCLE     "  "-NL"
+    End
+   ELSE Do
+      DDLTEXT = DDLTEXT "  CYCLE     "     "-NL"
+    End
+   IF CACHE < 1 THEN DO
+      DDLTEXT = DDLTEXT "  NO CACHE      -NL"
+    END
+   ELSE DO
+      DDLTEXT = DDLTEXT "  CACHE        " CACHE               "-NL"
+    END
+   IF ORDER = "N" THEN DO
+      DDLTEXT = DDLTEXT "  NO ORDER     "     "-NL"
+    End
+   ELSE DO
+      DDLTEXT = DDLTEXT "  ORDER     "     "-NL"
+    End
+   DDLTEXT = DDLTEXT "-NR"
+ END
+
+RETURN
+
+
+CREATE_SEA:
+
+WHERELIST    = ""
+CALL MAKE_WHERELIST "SCHEMA", DB2_Creator1
+CALL MAKE_WHERELIST "NAME", DB2_NAME1
+
+SQLSTMT    = "SELECT    GRANTOR         " ,
+             "        , GRANTEE         " ,
+             "        , SCHEMA          " ,
+             "        , NAME            " ,
+             "        , GRANTEDTS       " ,
+             "        , GRANTEETYPE     " ,
+             "        , AUTHHOWGOT      " ,
+             "        , ALTERAUTH       " ,
+             "        , USEAUTH         " ,
+             "        , COLLID          " ,
+             "        , HEX(CONTOKEN) AS CONTOKEN " ,
+             "        , GRANTORTYPE     " ,
+             "FROM "SYSIBMS".SYSSEQUENCEAUTH" ,
+             WHERELIST ,
+             "ORDER BY  SCHEMA, NAME " ,
+             ""
+
+CALL OPEN_CURSOR_AC2
+
+DO WHILE SQLCODE = 0
+    SQLTEXT = " FETCH C"CNR" INTO "   SQL_FETCH
+    Call EXECUTE_SQL_TEXT_AC2
+
+    Select
+        When SQLCODE = 100 THEN DO
+             CALL CLOSE_CURSOR_AC2 /* CLOSE CURSOR */
+             LEAVE
+          End
+        When SQLCODE <> 0  THEN DO
+             SAY "ERROR ON FETCH C"CNR", RC="RC ,
+                 "SQLCODE="SQLCODE         ,
+                 "SQLERRMC="SQLERRMC       ,
+                 ""
+             Exit 8
+          End
+        Otherwise NOP
+     End
+     If GRANTEETYPE = 'P' Then Iterate  /* Keine Packages */
+     What  = ""
+     Komma = ""
+     If ALTERAUTH  = "Y" | ALTERAUTH  = "G" Then Do
+        What = "ALTER"
+        komma = ","
+        If ALTERAUTH  = "G" Then GOpt = "Y"
+      End
+     If USEAUTH    = "Y" | USEAUTH    = "G" Then Do
+        What = what Komma "USAGE"
+        komma = ","
+        If USEAUTH    = "G" Then GOpt = "Y"
+      End
+
+   DDLTEXT = DDLTEXT "-NL"
+   DDLTEXT = DDLTEXT "Grant "What " -NL"
+   DDLTEXT = DDLTEXT "   ON SEQUENCE "Space(Schema "." NAME, 0) "-NL"
+   DDLTEXT = DDLTEXT "   TO" GRANTEE "-NL"
+
+   If GOpt        = 'Y'  Then do
+      DDLTEXT = DDLTEXT "WITH GRANT OPTION  " "-NL"
+    End
+   DDLTEXT = DDLTEXT "-NR"
+
+ END
+
+CALL CLOSE_CURSOR_AC2
+RETURN
+
+
+CREATE_RO:
+
+WHERELIST    = ""
+CALL MAKE_WHERELIST "NAME", DB2_NAME1
+
+EINGABE.0  = 1
+SQLSTMT    =  "SELECT NAME         " ,
+              "     , DEFINER      " ,
+              "FROM "SYSIBMS".SYSROLES T1 " ,
+               WHERELIST ,
+              "ORDER BY NAME           " ,
+              "FOR FETCH ONLY WITH UR",
+              ""
+
+CNR = 1
+CALL OPEN_CURSOR_AC2
+
+SQL_FETCH_SAVE =  SQL_FETCH
+DO WHILE SQLCODE = 0
+   CNR = 1
+   SQL_FETCH   = SQL_FETCH_SAVE
+   SQLTEXT = " FETCH C"CNR" INTO "   SQL_FETCH
+   Call EXECUTE_SQL_TEXT_AC2
+
+    Select
+        When SQLCODE = 100 THEN DO
+             CALL CLOSE_CURSOR_AC2 /* CLOSE CURSOR */
+             LEAVE
+          End
+        When SQLCODE <> 0  THEN DO
+             SAY "ERROR ON FETCH C"CNR", RC="RC ,
+                 "SQLCODE="SQLCODE         ,
+                 "SQLERRMC="SQLERRMC       ,
+                 ""
+             Exit 8
+          End
+        Otherwise NOP
+     End
+   DDLTEXT = DDLTEXT "CREATE ROLE " STRIP(NAME) || " -NL"
+   DDLTEXT = DDLTEXT "-NR"
+ END
+
+RETURN
+
+
+CREATE_VW:
+
+WHERELIST = ""
+CALL MAKE_WHERELIST "", "T1.CREATOR = DCREATOR "
+CALL MAKE_WHERELIST "", "T1.NAME = DNAME "
+CALL MAKE_WHERELIST "DCREATOR", DB2_CREATOR1
+CALL MAKE_WHERELIST "DNAME", DB2_NAME1
+CALL MAKE_WHERELIST "BCREATOR", DB2_CREATOR2
+CALL MAKE_WHERELIST "BNAME", DB2_NAME2
+FROMLIST = ""
+FROMLIST = FROMLIST "FROM "SYSIBMS".SYSVIEWS T1 "
+FROMLIST = FROMLIST "   , "SYSIBMS".SYSVIEWDEP T2 "
+IF STRIP(DB2_TABLESPACE) <> '' ,
+ | STRIP(DB2_DATABASE) <> '' THEN DO
+   FROMLIST = FROMLIST || ", "SYSIBMS".SYSTABLES T3"
+   CALL MAKE_WHERELIST "T3.TSNAME", DB2_TABLESPACE
+   CALL MAKE_WHERELIST "T3.DBNAME", DB2_DATABASE
+   CALL MAKE_WHERELIST "T3.TYPE", "V"
+   CALL MAKE_WHERELIST "", "T1.NAME    = T3.NAME"
+   CALL MAKE_WHERELIST "", "T1.CREATOR = T3.CREATOR"
+ END
+
+
+SQLSTMT    = "SELECT T1.CREATOR   " ,
+             "     , T1.NAME      " ,
+             "     , T1.PATHSCHEMAS",
+             "     , T1.STATEMENT " ,
+              FROMLIST              ,
+              WHERELIST             ,
+             "ORDER BY T1.CREATOR " ,
+             "       , T1.NAME    " ,
+             "FOR FETCH ONLY      " ,
+             ""
+CNR  = 5
+CALL OPEN_CURSOR_AC2
+
+VWTEXT = ""
+OVIEW  = ""
+DO WHILE SQLCODE = 0
+   CNR  = 5
+   SQLTEXT =  " FETCH C"CNR" INTO             ",
+              "         :CREATOR   " ,
+              "     ,   :NAME      " ,
+              "     ,   :PATHSCHEMAS",
+              "     ,   :STATEMENT " ,
+              ""
+   Call EXECUTE_SQL_TEXT_AC2
+   IF SQLCODE = 0 THEN NOP
+   ELSE  DO
+      CNR = 5
+      CALL CLOSE_CURSOR_AC2
+      LEAVE
+    END
+
+   IF OVIEW = SPACE(CREATOR "." NAME, 0) Then Do
+      Iterate
+    End
+
+   OVIEW = SPACE(CREATOR "." NAME, 0)
+   If DB2_GRANT = "YES" Then Do
+      QUEUE "VW "OVIEW
+    END
+
+   DDLTEXT = DDLTEXT "SET CURRENT SCHEMA = '"Strip(CREATOR)"' -NR"
+   DDLTEXT = DDLTEXT " SET CURRENT PATH  = "Strip(PATHSCHEMAS)" -NR"
+   DDLTEXT = DDLTEXT SQL_BLOB_AUFBEREITEN(STATEMENT)
+   DDLTEXT = DDLTEXT "-NR"
+ END
+
+RETURN
+
+Create_PERM:      /* Permission / MASK */
+
+
+WHERELIST    = ""
+CALL MAKE_WHERELIST "PE.SCHEMA", DB2_CREATOR1
+CALL MAKE_WHERELIST "PE.NAME", DB2_NAME1
+CALL MAKE_WHERELIST "CONTROL_ID", DB2_CREATOR2, NUM
+CALL MAKE_WHERELIST "PE.TBSCHEMA", DB2_CREATOR3
+CALL MAKE_WHERELIST "PE.TBNAME", DB2_NAME3
+
+SQLSTMT   =  "SELECT SCHEMA           " ,
+             "     , NAME             " ,
+             "     , OWNER            " ,
+             "     , OWNERTYPE        " ,
+             "     , TBSCHEMA         " ,
+             "     , TBNAME           " ,
+             "     , TBCORRELATION    " ,
+             "     , COLNAME          " ,
+             "     , COLNO            " ,
+             "     , CONTROL_ID       " ,
+             "     , CONTROL_TYPE     " ,
+             "     , ENFORCED         " ,
+             "     , IMPLICIT         " ,
+             "     , ENABLE           " ,
+             "     , STATUS           " ,
+             "     , RELCREATED       " ,
+             "     , REMARKS          " ,
+             "     , ENVID            " ,
+             "     , RULETEXT         " ,
+             "FROM "SYSIBMS".SYSCONTROLS PE " ,
+             WHERELIST ,
+             "ORDER BY 1, 2              " ,
+             ""
+CNR  = 1
+CALL OPEN_CURSOR_AC2
+
+DO WHILE SQLCODE = 0
+   CNR  = 1
+   SQLTEXT =  " FETCH C"CNR" INTO      " ,
+              "   :PE_SCHEMA           " ,
+              " , :PE_NAME             " ,
+              " , :PE_OWNER            " ,
+              " , :PE_OWNERTYPE        " ,
+              " , :PE_TBSCHEMA         " ,
+              " , :PE_TBNAME           " ,
+              " , :PE_TBCORRELATION    " ,
+              " , :PE_COLNAME          " ,
+              " , :PE_COLNO            " ,
+              " , :PE_CONTROL_ID       " ,
+              " , :PE_CONTROL_TYPE     " ,
+              " , :PE_ENFORCED         " ,
+              " , :PE_IMPLICIT         " ,
+              " , :PE_ENABLE           " ,
+              " , :PE_STATUS           " ,
+              " , :PE_RELCREATED       " ,
+              " , :PE_REMARKS          " ,
+              " , :PE_ENVID            " ,
+              " , :PE_RULETEXT         " ,
+              ""
+   Call EXECUTE_SQL_TEXT_AC2
+
+   Select
+     When  SQLCODE = 0 THEN NOP
+     when  sqlcode = 100 Then do
+           CNR = 1
+           CALL CLOSE_CURSOR_AC2
+           LEAVE
+      End
+     Otherwise do
+           say "SQLCODE = " SQLCODE
+           return
+      End
+    END
+
+   Select
+     when PE_CONTROL_TYPE = "M" Then Do
+          mname = Strip(PE_SCHEMA) || "." || Strip(PE_NAME)
+          tname = Strip(PE_TBSCHEMA) || "." || Strip(PE_TBNAME)
+          DDLTEXT = DDLTEXT || "CREATE MASK    "mname  "-NL"
+          DDLTEXT = DDLTEXT    "ON   "tname  "-NL"
+          DDLTEXT = DDLTEXT    "FOR Column " PE_COLNAME "-NL"
+          DDLTEXT = DDLTEXT    "RETURN -NL"
+          DDLTEXT = DDLTEXT SQL_BLOB_AUFBEREITEN(PE_RULETEXT)
+      end
+     when PE_CONTROL_TYPE = "R" Then Do
+          mname = Strip(PE_SCHEMA) || "." || Strip(PE_NAME)
+          tname = Strip(PE_TBSCHEMA) || "." || Strip(PE_TBNAME)
+          DDLTEXT = DDLTEXT || "CREATE PERMISSION "mname  "-NL"
+          DDLTEXT = DDLTEXT    "ON   "tname  "-NL"
+          DDLTEXT = DDLTEXT    "FOR ROWS WHERE  -NL"
+          DDLTEXT = DDLTEXT SQL_BLOB_AUFBEREITEN(PE_RULETEXT)
+          IF PE_ENFORCED = "A" Then do
+             DDLTEXT = DDLTEXT    "ENFORCED FOR ALL ACCESS  -NL"
+           end
+      end
+     otherwise                       type = "UNKOWN     "
+    End
+
+   IF PE_ENABLE = "Y" Then Do
+          DDLTEXT = DDLTEXT "ENABLE -NL"
+    End
+   Else do
+          DDLTEXT = DDLTEXT "DISABLE -NL"
+    End
+
+   DDLTEXT = DDLTEXT "-NR"
+ END
+
+RETURN
+
+CREATE_VAR:
+CNR = 1
+SNR = CNR
+
+WHERELIST    = ""
+CALL MAKE_WHERELIST "VAR.SCHEMA", DB2_CREATOR1
+CALL MAKE_WHERELIST "VAR.NAME  ", DB2_NAME1
+CALL MAKE_WHERELIST "VAR.VARID", DB2_NAME2, "NUM"
+
+SQLSTMT   =  "SELECT    VARID          ",
+             "        , SCHEMA         ",
+             "        , NAME           ",
+             "        , OWNER          ",
+             "        , OWNERTYPE      ",
+             "        , TYPESCHEMA     ",
+             "        , TYPENAME       ",
+             "        , DATATYPEID     ",
+             "        , SOURCETYPEID   ",
+             "        , LENGTH         ",
+             "        , SCALE          ",
+             "        , CCSID          ",
+             "        , DEFAULT        ",
+             "        , DEFAULTTEXT    ",
+             "        , REMARKS        ",
+             "FROM "SYSIBMS".SYSVARIABLES VAR",
+             WHERELIST ,
+             "ORDER BY VAR.SCHEMA",
+             "       , VAR.NAME  ",
+             ""
+
+CNR  = 1
+CALL OPEN_CURSOR_AC2
+
+DO WHILE SQLCODE = 0
+   SQLTEXT = " FETCH C"CNR" INTO  ",
+             "       :VARID       ",
+             "     , :SCHEMA      ",
+             "     , :NAME        ",
+             "     , :OWNER       ",
+             "     , :OWNERTYPE   ",
+             "     , :TYPESCHEMA  ",
+             "     , :TYPENAME    ",
+             "     , :DATATYPEID  ",
+             "     , :SOURCETYPEID",
+             "     , :LENGTH      ",
+             "     , :SCALE       ",
+             "     , :CCSID       ",
+             "     , :DEFAULT     ",
+             "     , :DEFAULTTEXT ",
+             "     , :REMARKS     ",
+             ""
+    SQLTEXT = SPACE(SQLTEXT, 1)
+    Call EXECUTE_SQL_TEXT_AC2
+
+    Select
+        When SQLCODE = 100 THEN DO
+             CALL CLOSE_CURSOR_AC2 /* CLOSE CURSOR */
+             LEAVE
+          End
+        When SQLCODE <> 0  THEN DO
+             SAY "ERROR ON FETCH C"CNR", RC="RC ,
+                 "SQLCODE="SQLCODE         ,
+                 "SQLERRMC="SQLERRMC       ,
+                 ""
+             Call SQLERROR
+             Exit 8
+          End
+        Otherwise NOP
+     End
+
+   CO_COLTYPE = TYPENAME
+   CO_LENGTH  = LENGTH
+   CO_SCALE   = SCALE
+
+   NODDLTXT  = 'N'
+   CALL PROCESS_DATA_PROC
+   NODDLTXT  = 'Y'
+
+   vname = Strip(SCHEMA) || "." || Strip(NAME)
+   DDLTEXT = DDLTEXT || "CREATE VARIABLE "vname  "-NL"
+   DDLTEXT = DDLTEXT    "     "COLDEF    "-NL"
+   If Length(DEFAULTTEXT) > 0 Then do
+      DDLTEXT = DDLTEXT ||  "      DEFAULT "DEFAULTTEXT "-NL"
+    End
+   DDLTEXT = DDLTEXT "-NR"
+ END
+
+CALL CLOSE_CURSOR_AC2
+
+Return
+
+CREATE_DT:
+CNR = 1
+SNR = CNR
+
+WHERELIST    = ""
+CALL MAKE_WHERELIST "DT.SCHEMA ", DB2_CREATOR1
+CALL MAKE_WHERELIST "DT.NAME   ", DB2_NAME1
+
+SQLSTMT   =  "SELECT    SCHEMA            ",
+             "        , OWNER             ",
+             "        , NAME              ",
+             "        , CREATEDBY         ",
+             "        , SOURCESCHEMA      ",
+             "        , SOURCETYPE        ",
+             "        , METATYPE          ",
+             "        , DATATYPEID        ",
+             "        , SOURCETYPEID      ",
+             "        , LENGTH            ",
+             "        , SCALE             ",
+             "        , SUBTYPE           ",
+             "        , CREATEDTS         ",
+             "        , ENCODING_SCHEME   ",
+             "        , IBMREQD           ",
+             "        , REMARKS           ",
+             "        , OWNERTYPE         ",
+             "        , RELCREATED        ",
+             "        , INLINE_LENGTH     ",
+             "        , ARRAYLENGTH       ",
+             "        , ARRAYINDEXTYPEID  ",
+             "        , ARRAYINDEXTYPELEN ",
+             "        , ARRAYINDEXSUBTYPE ",
+             "FROM "SYSIBMS".SYSDATATYPES DT ",
+             WHERELIST ,
+             "ORDER BY DT.SCHEMA ",
+             "       , DT.NAME   ",
+             ""
+
+CNR  = 1
+CALL OPEN_CURSOR_AC2
+
+DO WHILE SQLCODE = 0
+   SQLTEXT = " FETCH C"CNR" INTO        ",
+             "       :SCHEMA            ",
+             "     , :OWNER             ",
+             "     , :NAME              ",
+             "     , :CREATEDBY         ",
+             "     , :SOURCESCHEMA      ",
+             "     , :SOURCETYPE        ",
+             "     , :METATYPE          ",
+             "     , :DATATYPEID        ",
+             "     , :SOURCETYPEID      ",
+             "     , :LENGTH            ",
+             "     , :SCALE             ",
+             "     , :SUBTYPE           ",
+             "     , :CREATEDTS         ",
+             "     , :ENCODING_SCHEME   ",
+             "     , :IBMREQD           ",
+             "     , :REMARKS           ",
+             "     , :OWNERTYPE         ",
+             "     , :RELCREATED        ",
+             "     , :INLINE_LENGTH     ",
+             "     , :ARRAYLENGTH       ",
+             "     , :ARRAYINDEXTYPEID  ",
+             "     , :ARRAYINDEXTYPELEN ",
+             "     , :ARRAYINDEXSUBTYPE ",
+             ""
+    SQLTEXT = SPACE(SQLTEXT, 1)
+    Call EXECUTE_SQL_TEXT_AC2
+
+    Select
+        When SQLCODE = 100 THEN DO
+             CALL CLOSE_CURSOR_AC2 /* CLOSE CURSOR */
+             LEAVE
+          End
+        When SQLCODE <> 0  THEN DO
+             SAY "ERROR ON FETCH C"CNR", RC="RC ,
+                 "SQLCODE="SQLCODE         ,
+                 "SQLERRMC="SQLERRMC       ,
+                 ""
+             Call SQLERROR
+             Exit 8
+          End
+        Otherwise NOP
+     End
+
+   CO_COLTYPE = SOURCETYPE
+   CO_LENGTH  = LENGTH
+   CO_SCALE   = SCALE
+
+   NODDLTXT  = 'N'
+   CALL PROCESS_DATA_PROC
+   NODDLTXT  = 'Y'
+
+   dname = Strip(SCHEMA) || "." || Strip(NAME)
+   DDLTEXT = DDLTEXT || "CREATE TYPE     "dname  "-NL"
+   select
+     when METATYPE = 'L' Then Do
+          IndTypID = Get_Datatype_ID(ARRAYINDEXTYPEID)
+          DDLTEXT = DDLTEXT || "         AS "COLDEF "ARRAYÄ"IndTypID"Ü"
+          ddltext = ddltext || " -NL"
+       end
+     when METATYPE = 'A' Then Do
+          DDLTEXT = DDLTEXT || "         AS "COLDEF "ARRAYÄ" || ,
+                               ARRAYLENGTH"Ü"
+          DDLTEXT = DDLTEXT || " -NL"
+       end
+     when METATYPE = 'T' Then Do
+          ddltext = ddltext || "         AS "coldef
+          ddltext = ddltext || " -NL"
+       end
+     OTHERWISE NOP
+    END
+
+   DDLTEXT = DDLTEXT "-NR"
+ END
+
+CALL CLOSE_CURSOR_AC2
+
+Return
+
+CREATE_CK:
+CNR = 12
+SNR = CNR
+
+BUSINESSCHECK  = 'DB2_GENERATED_CHECK_CONSTRAINT_FOR_BUSINESS_TIME'
+WHERELIST    = ""
+CALL MAKE_WHERELIST "CK.TBOWNER", DB2_CREATOR1
+CALL MAKE_WHERELIST "CK.TBNAME ", DB2_NAME1
+CALL MAKE_WHERELIST "CK.CHECKNAME", DB2_NAME2
+CALL MAKE_WHERELIST "","CHECKNAME <> '"BUSINESSCHECK"' "
+
+SQLSTMT   =  "SELECT    TBOWNER           ",
+             "        , TBNAME            ",
+             "        , CHECKNAME         ",
+             "        , CHECKCONDITION    ",
+             "        , TIMESTAMP         ",
+             "FROM "SYSIBMS".SYSCHECKS    CK ",
+             WHERELIST ,
+             "ORDER BY CK.TBOWNER",
+             "       , CK.TBNAME ",
+             "       , CK.TIMESTAMP" ,
+             ""
+
+CALL OPEN_CURSOR_AC2
+
+DO WHILE SQLCODE = 0
+   SQLTEXT = " FETCH C"CNR" INTO        ",
+             "       :TBOWNER           ",
+             "     , :TBNAME            ",
+             "     , :CHECKNAME         ",
+             "     , :CHECKCONDITION    ",
+             "     , :TIMESTAMP         ",
+             ""
+    SQLTEXT = SPACE(SQLTEXT, 1)
+    Call EXECUTE_SQL_TEXT_AC2
+
+    Select
+        When SQLCODE = 100 THEN DO
+             CALL CLOSE_CURSOR_AC2 /* CLOSE CURSOR */
+             LEAVE
+          End
+        When SQLCODE <> 0  THEN DO
+             SAY "ERROR ON FETCH C"CNR", RC="RC ,
+                 "SQLCODE="SQLCODE         ,
+                 "SQLERRMC="SQLERRMC       ,
+                 ""
+             Call SQLERROR
+             Exit 8
+          End
+        Otherwise NOP
+     End
+
+
+   DDLTEXT = DDLTEXT || "ALTER TABLE  "Strip(TBOWNER) || '.' || ,
+             Strip(TBNAME) "-NL "
+   DDLTEXT = DDLTEXT || "   ADD CONSTRAINT "Strip(CHECKNAME) ,
+                        "CHECK -NL"
+   DDLTEXT = DDLTEXT "(" Strip(SQL_BLOB_AUFBEREITEN(CHECKCONDITION)) ")"
+   DDLTEXT = DDLTEXT "-NR"
+ END
+
+CALL CLOSE_CURSOR_AC2
+
+Return
+
+CREATE_TCO:
+
+WHERELIST    = ""
+CALL MAKE_WHERELIST "SC.NAME", DB2_NAME1
+CALL MAKE_WHERELIST "SC.CONTEXTID", DB2_NAME2, "NUM"
+
+SQLSTMT   =  "SELECT NAME             " ,
+             "     , CONTEXTID        " ,
+             "     , DEFINER          " ,
+             "     , DEFINERTYPE      " ,
+             "     , SYSTEMAUTHID     " ,
+             "     , DEFAULTROLE      " ,
+             "     , OBJECTOWNERTYPE  " ,
+             "     , ENABLED          " ,
+             "     , ALLOWPUBLIC      " ,
+             "     , AUTHENTICATEPUBLIC " ,
+             "     , REMARKS          " ,
+             "     , DEFAULTSECURITYLABEL " ,
+             "FROM "SYSIBMS".SYSCONTEXT SC" ,
+             WHERELIST ,
+             "ORDER BY 1, 2              " ,
+             ""
+CNR  = 1
+CALL OPEN_CURSOR_AC2
+
+DO WHILE SQLCODE = 0
+   CNR  = 1
+   SQLTEXT =  " FETCH C"CNR" INTO             ",
+              "   :SC_NAME             " ,
+              " , :SC_CONTEXTID        " ,
+              " , :SC_DEFINER          " ,
+              " , :SC_DEFINERTYPE      " ,
+              " , :SC_SYSTEMAUTHID     " ,
+              " , :SC_DEFAULTROLE      " ,
+              " , :SC_OBJECTOWNERTYPE  " ,
+              " , :SC_ENABLED          " ,
+              " , :SC_ALLOWPUBLIC      " ,
+              " , :SC_AUTHENTICATEPUBLIC " ,
+              " , :SC_REMARKS          " ,
+              " , :SC_DEFAULTSECURITYLABEL " ,
+              ""
+   Call EXECUTE_SQL_TEXT_AC2
+   IF SQLCODE = 0 THEN NOP
+   ELSE  DO
+      CNR = 1
+      CALL CLOSE_CURSOR_AC2
+      LEAVE
+    END
+
+   DDLTEXT = DDLTEXT || "CREATE TRUSTED CONTEXT "SC_NAME "-NL"
+   DDLTEXT = DDLTEXT || "   BASED UPON CONNECTION USING SYSTEM AUTHID "
+   DDLTEXT = DDLTEXT SC_SYSTEMAUTHID  || "-NL"
+
+   If Length(Strip(SC_DEFAULTROLE)) > 0 Then do
+      DDLTEXT = DDLTEXT || "   DEFAULT ROLE " SC_DEFAULTROLE
+      If OBJECTOWNERTYPE = "L" Then Do
+         DDLTEXT = DDLTEXT " WITH ROLE AS OBJECT OWNER AND QUALIFIER "
+       End
+      Else Do
+         DDLTEXT = DDLTEXT "WITHOUT ROLE AS OBJECT OWNER "
+       End
+      DDLTEXT = DDLTEXT || "-NL"
+    End
+   Else Do
+      DDLTEXT = DDLTEXT || " NO  DEFAULT ROLE " "-NL"
+    End
+
+   If SC_ENABLED = 'Y' Then Do
+      DDLTEXT = DDLTEXT || "   ENABLE -NL"
+    END
+   ELSE DO
+      DDLTEXT = DDLTEXT || "   DISABLE -NL"
+    END
+
+   If Length(Strip(SC_DEFAULTSECURITYLABEL)) > 0 Then Do
+      DDLTEXT = DDLTEXT || "   DEFAULT SECURETY LABEL "
+      DDLTEXT = DDLTEXT || SC_DEFAULTSECURITYLABEL "-NL"
+    End
+   Else Do
+      DDLTEXT = DDLTEXT || "   NO  DEFAULT SECURETY LABEL " "-NL"
+    End
+
+   Call CREATE_TCO_ATTRIBUTES
+
+
+   select
+     When SC_ALLOWPUBLIC = "Y" Then Do
+          DDLTEXT = DDLTEXT || " WITH USE FOR PUBLIC "
+          If SC_AUTHENTICATEPUBLIC = "Y" Then Do
+             DDLTEXT = DDLTEXT || " WITH AUTHENTICATION "
+           End
+          Else Do
+             DDLTEXT = DDLTEXT || " WITHOUT AUTHENTICATION "
+           End
+          DDLTEXT = DDLTEXT || " -NL"
+      End
+     Otherwise Call CREATE_TCO_AUTH
+    End
+
+   DDLTEXT = DDLTEXT "-NR"
+ END
+
+RETURN
+
+CREATE_TCO_ATTRIBUTES:
+
+WHERELIST    = ""
+CALL MAKE_WHERELIST "SCA.CONTEXTID", DB2_NAME2, "NUM"
+
+SQLSTMT   =  "SELECT NAME             " ,
+             "     , VALUE            " ,
+             "FROM "SYSIBMS".SYSCTXTTRUSTATTRS SCA ",
+             WHERELIST ,
+             "ORDER BY NAME              " ,
+             ""
+CNR  = 2
+CALL OPEN_CURSOR_AC2
+
+
+ATB = "   ATTRIBUTES ("
+DO WHILE SQLCODE = 0
+   CNR  = 2
+   SQLTEXT =  " FETCH C"CNR" INTO     " ,
+              "   :SCA_NAME           " ,
+              " , :SCA_VALUE          " ,
+              ""
+   Call EXECUTE_SQL_TEXT_AC2
+   Select
+     When SQLCODE = 100 THEN Do
+          CNR = 2
+          CALL CLOSE_CURSOR_AC2
+          DDLTEXT = DDLTEXT || "          ) " "-NL "
+          LEAVE
+      End
+     When SQLCODE < 0   THEN Do
+          SAY "ERROR ON FETCH "CNR"RC="RC ,
+              "SQLCODE="SQLCODE         ,
+              "SQLERRMC="SQLERRMC       ,
+              ""
+          say sqlstmt
+          return
+      End
+     Otherwise NOP
+    End
+
+   DDLTEXT = DDLTEXT || ATB Strip(SCA_NAME)
+   DDLTEXT = DDLTEXT || " " "'" || Strip(SCA_VALUE) || "'"
+   DDLTEXT = DDLTEXT || "-NL"
+   ATB = "        ,   "
+ END
+
+RETURN
+
+CREATE_TCO_AUTH:
+
+WHERELIST    = ""
+CALL MAKE_WHERELIST "SCA.CONTEXTID", DB2_NAME2, "NUM"
+
+SQLSTMT   =  "SELECT AUTHID           " ,
+             "     , AUTHENTICATE     " ,
+             "     , ROLE             " ,
+             "     , SECURITYLABEL    " ,
+             "FROM "SYSIBMS".SYSCONTEXTAUTHIDS SCA ",
+             WHERELIST ,
+             "ORDER BY AUTHID            " ,
+             ""
+CNR  = 2
+CALL OPEN_CURSOR_AC2
+
+WU = "WITH USE FOR "
+DO WHILE SQLCODE = 0
+   CNR  = 2
+   SQLTEXT =  " FETCH C"CNR" INTO     " ,
+              "   :SCA_AUTHID         " ,
+              " , :SCA_AUTHENTICATE   " ,
+              " , :SCA_ROLE           " ,
+              " , :SCA_SECURITYLABEL  " ,
+              ""
+   Call EXECUTE_SQL_TEXT_AC2
+   Select
+     When SQLCODE = 100 THEN Do
+          CNR = 2
+          CALL CLOSE_CURSOR_AC2
+          LEAVE
+      End
+     When SQLCODE < 0   THEN Do
+          SAY "ERROR ON FETCH "CNR"RC="RC ,
+              "SQLCODE="SQLCODE         ,
+              "SQLERRMC="SQLERRMC       ,
+              ""
+          say sqlstmt
+          return
+      End
+     Otherwise NOP
+    End
+
+   DDLTEXT = DDLTEXT || WU  Strip(SCA_AUTHID)
+   DDLTEXT = DDLTEXT || "-NL"
+   WU = "          ,  "
+ END
+
+   DDLTEXT = DDLTEXT || "ROLE "SCA_ROLE
+
+   if SCA_AUTHENTICATE = 'Y' Then do
+      DDLTEXT = DDLTEXT || " WITH AUTHENTICATION"
+    End
+   Else Do
+      DDLTEXT = DDLTEXT || " WITHOUT AUTHENTICATION"
+    End
+   DDLTEXT = DDLTEXT || "-NL"
+
+RETURN
+
+CREATE_RT:
+
+FROMLIST  = ""
+WHERELIST = ""
+CALL MAKE_WHERELIST "SPECIFICNAME", DB2_NAME1
+CALL MAKE_WHERELIST "SCHEMA", DB2_CREATOR2
+CALL MAKE_WHERELIST "NAME", DB2_NAME2
+
+IF LENGTH(STRIP(DB2_CREATOR3)) > 0 ,
+ | LENGTH(STRIP(DB2_NAME3)) > 0 THEN DO
+   FROMLIST = FROMLIST "    , "SYSIBMS".SYSPACKDEP PG"
+   CALL MAKE_WHERELIST "", "PG.DCOLLID = RT.SCHEMA "
+   CALL MAKE_WHERELIST "", "PG.DNAME   = RT.NAME "
+   IF LENGTH(DB2_CREATOR3) > 0 ,
+    | LENGTH(DB2_NAME3) > 0 THEN DO
+      PGTYPE = "'A', 'S', 'V', 'T', 'I', 'R' "
+      CALL MAKE_WHERELIST "", "PG.BTYPE IN ("PGTYPE")"
+      CALL MAKE_WHERELIST "PG.BQUALIFIER", DB2_CREATOR3
+      CALL MAKE_WHERELIST "PG.BNAME", DB2_NAME3
+    END
+ END
+
+EINGABE.0  = 1
+SQLSTMT =    "SELECT  DISTINCT RT.SCHEMA      " ,
+             "     ,  RT.NAME                 " ,
+             "     ,  RT.ROUTINETYPE          " ,
+             "     ,  RT.CREATEDBY            " ,
+             "     ,  RT.SPECIFICNAME         " ,
+             "     ,  RT.ROUTINEID            " ,
+             "     ,  RT.RETURN_TYPE          " ,
+             "     ,  RT.ORIGIN               " ,
+             "     ,  RT.FUNCTION_TYPE        " ,
+             "     ,  RT.PARM_COUNT           " ,
+             "     ,  RT.LANGUAGE             " ,
+             "     ,  RT.COLLID               " ,
+             "     ,  RT.SOURCESCHEMA         " ,
+             "     ,  RT.SOURCESPECIFIC       " ,
+             "     ,  RT.DETERMINISTIC        " ,
+             "     ,  RT.EXTERNAL_ACTION      " ,
+             "     ,  RT.NULL_CALL            " ,
+             "     ,  RT.CAST_FUNCTION        " ,
+             "     ,  RT.SCRATCHPAD           " ,
+             "     ,  RT.SCRATCHPAD_LENGTH    " ,
+             "     ,  RT.FINAL_CALL           " ,
+             "     ,  RT.PARALLEL             " ,
+             "     ,  RT.PARAMETER_STYLE      " ,
+             "     ,  RT.FENCED               " ,
+             "     ,  RT.SQL_DATA_ACCESS      " ,
+             "     ,  RT.DBINFO               " ,
+             "     ,  RT.STAYRESIDENT         " ,
+             "     ,  RT.ASUTIME              " ,
+             "     ,  RT.WLM_ENVIRONMENT      " ,
+             "     ,  RT.WLM_ENV_FOR_NESTED   " ,
+             "     ,  RT.PROGRAM_TYPE         " ,
+             "     ,  RT.EXTERNAL_SECURITY    " ,
+             "     ,  RT.COMMIT_ON_RETURN     " ,
+             "     ,  RT.RESULT_SETS          " ,
+             "     ,  RT.LOBCOLUMNS           " ,
+             "     ,  RT.CREATEDTS            " ,
+             "     ,  RT.ALTEREDTS            " ,
+             "     ,  RT.IOS_PER_INVOC        " ,
+             "     ,  RT.INSTS_PER_INVOC      " ,
+             "     ,  RT.INITIAL_IOS          " ,
+             "     ,  RT.INITIAL_INSTS        " ,
+             "     ,  RT.CARDINALITY          " ,
+             "     ,  RT.RESULT_COLS          " ,
+             "     ,  RT.EXTERNAL_NAME        " ,
+             "     ,  RT.PARM_SIGNATURE       " ,
+             "     ,  RT.RUNOPTS              " ,
+             "     ,  RT.REMARKS              " ,
+             "     ,  RT.JAVA_SIGNATURE       " ,
+             "     ,  RT.CLASS                " ,
+             "     ,  RT.JARSCHEMA            " ,
+             "     ,  RT.JAR_ID               " ,
+             "     ,  RT.SPECIAL_REGS         " ,
+             "     ,  RT.NUM_DEP_MQTS         " ,
+             "     ,  RT.MAX_FAILURE          " ,
+             "     ,  RT.PARAMETER_CCSID      " ,
+             "     ,  RT.VERSION              " ,
+             "     ,  RT.CONTOKEN             " ,
+             "     ,  RT.ACTIVE               " ,
+             "     ,  RT.DEBUG_MODE           " ,
+             "     ,  RT.TEXT_ENVID           " ,
+             "     ,  RT.OWNERTYPE            " ,
+             "     ,  RT.PACKAGEPATH          " ,
+             "FROM  "SYSIBMS".SYSROUTINES RT  " ,
+              FROMLIST  ,
+              WHERELIST ,
+             "ORDER BY RT.SCHEMA, RT.NAME, RT.SPECIFICNAME " ,
+             "FOR FETCH ONLY ",
+             ""
+
+SQLSTMT = Space(SQLSTMT, 1)
+CNR = 1
+CALL OPEN_CURSOR_AC2
+
+SQL_FETCH_SAVE = SQL_FETCH
+DO WHILE SQLCODE = 0
+   CNR = 1
+   SQL_FETCH = SQL_FETCH_SAVE
+   SQLTEXT = " FETCH C"CNR" INTO "   SQL_FETCH
+   Call EXECUTE_SQL_TEXT_AC2
+
+    Select
+        When SQLCODE = 100 THEN DO
+             CALL CLOSE_CURSOR_AC2 /* CLOSE CURSOR */
+             LEAVE
+          End
+        When SQLCODE <> 0  THEN DO
+             SAY "ERROR ON FETCH C"CNR", RC="RC ,
+                 "SQLCODE="SQLCODE         ,
+                 "SQLERRMC="SQLERRMC       ,
+                 ""
+             Exit 8
+          End
+        Otherwise NOP
+     End
+
+   IF LANGUAGE = 'SQL' Then do
+      SQLSTMT =    "SELECT  RT.TEXT                 " ,
+                   "FROM  "SYSIBMS".SYSROUTINES RT  " ,
+                   "WHERE RT.SCHEMA       = '"SCHEMA"'" ,
+                   "AND   RT.SPECIFICNAME = '"SPECIFICNAME"'",
+                   "AND   RT.ROUTINETYPE  = '"ROUTINETYPE"'",
+                   "AND   RT.VERSION      = '"VERSION"'",
+                   "FOR FETCH ONLY ",
+                   ""
+      SQLSTMT = Space(SQLSTMT, 1)
+      CNR = 11
+      CALL OPEN_CURSOR_AC2
+      SQLTEXT = " FETCH C"CNR" INTO :TEXT "
+      Call EXECUTE_SQL_TEXT_AC2
+      call CLOSE_CURSOR_AC2
+
+      TEXTENVID = TEXT_ENVID
+      Call Create_Routine_PATHSCHEMAS
+
+      VWTEXT  = TEXT
+      DDLTEXT = DDLTEXT "SET CURRENT SCHEMA = '"Strip(SCHEMA)"' -NR"
+      DDLTEXT = DDLTEXT SQL_BLOB_AUFBEREITEN(VWTEXT)
+      DDLTEXT = DDLTEXT "-NR"
+    End
+   Else do
+      Call Create_Routines_not_sql
+    End
+
+   If DB2_GRANT = "YES" Then QUEUE "RT "Space(SCHEMA     "."    NAME, 0)
+ END
+
+RETURN
+
+
+Create_Routines_not_sql:
+Select
+  When ROUTINETYPE = 'F' Then do
+       DDLTEXT = DDLTEXT " CREATE FUNCTION " || ,
+       Strip(SCHEMA) || "." || ,
+       Strip(NAME) || "-NL"
+   End
+  When ROUTINETYPE = 'P' Then do
+       DDLTEXT = DDLTEXT " CREATE PROCEDURE"    ,
+       Strip(SCHEMA) || "." || ,
+       Strip(NAME) || "-NL"
+   End
+  When ROUTINETYPE = 'M' Then do
+       DDLTEXT = DDLTEXT " CREATE -METHOD FOR "    ,
+       Strip(ROUTINESCHEMA) || "." || ,
+       Strip(ROUTINENAME) || "-NL"
+   End
+  Otherwise NOP
+ End
+DDLTEXT = DDLTEXT "       (" "-NL"
+Row_Types = "'B', 'P', 'O'"
+call Create_Routine_Parms
+DDLTEXT = DDLTEXT "       )" "-NL"
+select
+  when FUNCTIONTYPE = 'T' Then do
+       SAVE_DDL = DDLTEXT
+       DDLTEXT = ""
+       Row_Types = "'C', 'R'"
+       call Create_Routine_Parms
+       DDLTEXT = SAVE_DDL "RETURNS TABLE  ( " "-NL" DDLTEXT ")" "-NL"
+   End
+  when FUNCTIONTYPE = 'C' Then do
+       NOP
+   End
+  when FUNCTIONTYPE = 'R' Then do
+       NOP
+   End
+  when FUNCTIONTYPE = 'S' Then do
+       NOP
+   End
+  Otherwise NOP
+ End
+DDLTEXT = DDLTEXT "       SPECIFIC " Strip(SPECIFICNAME) "-NL"
+DDLTEXT = DDLTEXT "       LANGUAGE " Strip(LANGUAGE) "-NL"
+DDLTEXT = DDLTEXT "       PARAMETER STYLE " ,
+                  STRIP(PARAMETER_STYLE) ,
+                  "-NL"
+if LANGUAGE = "JAVA" ,
+ | LANGUAGE = "OLE"            ,
+ | LANGUAGE = "CLR"            Then do
+   DDLTEXT = DDLTEXT "       EXTERNAL NAME   " ,
+                     STRIP(CLASS) || "." ||,
+                     STRIP(EXTERNAL_NAME) ,
+                     "-NL"
+ End
+Else Do
+   DDLTEXT = DDLTEXT "       EXTERNAL NAME   " ,
+                     STRIP(EXTERNAL_NAME) ,
+                     "-NL"
+ End
+
+if SQL_DATA_ACCESS = 'N' THEN DO
+   DDLTEXT = DDLTEXT "       NO SQL          " ,
+                     "-NL"
+ End
+EXTERNAL = ""
+if EXTERNAL_ACTION = 'N' THEN DO
+   EXTERNAL = "NO"
+ End
+   DDLTEXT = DDLTEXT "      "EXTERNAL || " EXTERNAL ACTION" "-NL"
+
+select
+  when FENCED = 'N' Then do
+       DDLTEXT = DDLTEXT "       NOT FENCED "   "-NL"
+   End
+  when FENCED = 'Y' Then do
+       DDLTEXT = DDLTEXT "           FENCED "   "-NL"
+   End
+  Otherwise NOP
+ End
+
+select
+  when DETERMINISTIC = 'N' Then do
+       DDLTEXT = DDLTEXT "       NOT DETERMINISTIC " "-NL"
+   End
+  when DETERMINISTIC = 'Y' Then do
+       DDLTEXT = DDLTEXT "           DETERMINISTIC " "-NL"
+   End
+  Otherwise NOP
+ End
+
+select
+  when PARALLEL                = 'N' Then do
+       NOP
+   End
+  when PARALLEL                = 'Y' Then do
+       DDLTEXT = DDLTEXT "           "  || ,
+           "ALLOW PARALLEL EXECUTE ON ALL RESULT TABLE DISTRIBUTED -NL"
+   End
+  Otherwise NOP
+ End
+
+select
+  when NULLCALL                = 'N' Then do
+       NOP
+   End
+  when NULLCALL                = 'Y' Then do
+       DDLTEXT = DDLTEXT "           CALLED ON NULL INPUT"  "-NL"
+   End
+  Otherwise NOP
+ End
+
+select
+  when DBINFO                  = 'N' Then do
+       NOP
+   End
+  when DBINFO                  = 'Y' Then do
+       DDLTEXT = DDLTEXT "           DBINFO "               "-NL"
+   End
+  Otherwise NOP
+ End
+
+ DDLTEXT = DDLTEXT "-NR"
+
+Return
+
+
+Create_Routine_Parms:
+CNR = 09
+SNR = 09
+Komma = ""
+WHERELIST = ""
+CALL MAKE_WHERELIST "SCHEMA", DB2_CREATOR2
+CALL MAKE_WHERELIST "NAME", DB2_NAME2
+CALL MAKE_WHERELIST "SPECIFICNAME", DB2_NAME1
+CALL MAKE_WHERELIST "", "ROWTYPE IN ("Row_Types")"
+
+ SQLSTMT = "SELECT    DISTINCT                            ",
+           "        P.SCHEMA       AS ROUTINESCHEMA       ",
+           "     ,  P.NAME         AS ROUTINENAME         ",
+           "     ,  P.SPECIFICNAME AS SPECIFICNAME        ",
+           "     ,  P.ROWTYPE      AS ROWTYPE             ",
+           "     ,  P.PARMNAME     AS PARMNAME            ",
+           "     ,  P.LOCATOR      AS LOCATOR             ",
+           "     ,  P.ORDINAL      AS ORDINAL             ",
+           "     ,  P.TYPENAME     AS TYPENAME            ",
+           "     ,  P.LENGTH       AS LENGTH              ",
+           "     ,  P.SCALE        AS SCALE               ",
+           "     ,  P.ROUTINETYPE  AS ROUTINETYPE         ",
+           "FROM "SYSIBMS".SYSPARMS P                     ",
+           wherelist                              ,
+           "ORDER BY SPECIFICNAME,  ORDINAL     " ,
+           ""
+
+call OPEN_CURSOR_AC2
+KOMMA = " "
+Do  forever
+    SQLTEXT =         " FETCH C"CNR" INTO         ",
+             "       :RTP_ROUTINESCHEMA     :I01  " ,
+             "    ,  :RTP_ROUTINENAME       :I02  " ,
+             "    ,  :RTP_SPECIFICNAME      :I05  " ,
+             "    ,  :RTP_ROWTYPE           :I07  " ,
+             "    ,  :RTP_PARMNAME          :I08  " ,
+             "    ,  :RTP_LOCATOR           :I09  " ,
+             "    ,  :RTP_ORDINAL           :I10  " ,
+             "    ,  :RTP_TYPENAME          :I11  " ,
+             "    ,  :RTP_LENGTH            :I12  " ,
+             "    ,  :RTP_SCALE             :I13  " ,
+             "    ,  :RTP_ROUTINETYPE       :I14  " ,
+             ""
+    Call EXECUTE_SQL_TEXT_AC2
+    if sqlcode = 100 then Do
+       sqlcode = 0
+       Leave
+     End
+    if sqlcode <> 0 then do
+       say "SQLFEHLER " SQLCODE sqlerrmc
+       Return
+     End
+
+    Select
+      When RTP_Rowtype  = 'B'  Then RTP_ROWTYPE = 'INOUT'
+      When RTP_Rowtype  = 'P'  Then RTP_ROWTYPE = 'IN'
+      When RTP_Rowtype  = 'O'  Then RTP_ROWTYPE = 'OUT'
+      When RTP_Rowtype  = 'C'  Then RTP_ROWTYPE = ''
+      When RTP_Rowtype  = 'R'  Then RTP_ROWTYPE = ''
+      Otherwise NOP
+     End
+
+    Select
+      When RTP_TYPENAME = 'DECIMAL' Then Do
+           RTP_Length = RTP_Length "," RTP_Scale
+       End
+      Otherwise NOP
+     End
+
+    DDLTEXT = DDLTEXT KOMMA || RTP_ROWTYPE
+    DDLTEXT = DDLTEXT RTP_PARMNAME
+    DDLTEXT = DDLTEXT RTP_TYPENAME
+    If RTP_Length > 0 Then Do
+       DDLTEXT = DDLTEXT "(" RTP_Length ")"
+     End
+    DDLTEXT = DDLTEXT "-NL"
+    KOMMA   = ","
+ End
+call CLOSE_CURSOR_AC2
+RETURN
+
+
+Create_Routine_PATHSCHEMAS:
+CNR = 10
+SNR = 10
+
+ SQLSTMT = "SELECT  EV.ENVID                              ",
+           "     ,  EV.CURRENT_SCHEMA                     ",
+           "     ,  EV.PATHSCHEMAS                        ",
+           "FROM "SYSIBMS".SYSENVIRONMENT EV              ",
+           "Where EV.ENVID = "TEXTENVID                    ,
+           ""
+
+call OPEN_CURSOR_AC2
+KOMMA = " "
+Do  forever
+    SQLTEXT =         " FETCH C"CNR" INTO         ",
+             "       :EV_ENVID              :I01  " ,
+             "    ,  :EV_CURRENT_SCHEMA     :I02  " ,
+             "    ,  :EV_PATHSCHEMAS        :I05  " ,
+             ""
+    Call EXECUTE_SQL_TEXT_AC2
+    if sqlcode = 100 then Do
+       sqlcode = 0
+       Leave
+     End
+    if sqlcode <> 0 then do
+       say "SQLFEHLER " SQLCODE sqlerrmc
+       Return
+     End
+
+    If Length(Strip(EV_PATHSCHEMAS)) > 0 then do
+       DDLTEXT = DDLTEXT ||,
+                 "SET CURRENT PATH " ||,
+                 Strip(EV_PATHSCHEMAS) ||,
+                 "-NL -NR -NL"
+     End
+ End
+
+call CLOSE_CURSOR_AC2
+RETURN
+
+
+
+CREATE_SY:
+
+WHERELIST = ""
+CALL MAKE_WHERELIST "SY.CREATOR", DB2_CREATOR1
+CALL MAKE_WHERELIST "SY.NAME", DB2_NAME1
+CALL MAKE_WHERELIST "SY.TBCREATOR", DB2_CREATOR2
+CALL MAKE_WHERELIST "SY.TBNAME", DB2_NAME2
+CALL MAKE_WHERELIST "TB.DBNAME", DB2_DATABASE
+CALL MAKE_WHERELIST "TB.TSNAME", DB2_TABLESPACE
+
+EINGABE.0  = 1
+SQLSTMT    = "SELECT  SY.NAME      " ,
+             "     ,  SY.CREATOR   " ,
+             "     ,  SY.TBNAME    " ,
+             "     ,  SY.TBCREATOR " ,
+             "FROM  "SYSIBMS".SYSSYNONYMS SY" ,
+             "INNER JOIN "SYSIBMS".SYSTABLES TB" ,
+             "ON  SY.TBCREATOR  = TB.CREATOR" ,
+             "AND SY.TBNAME     = TB.NAME   " ,
+             WHERELIST ,
+             "FOR FETCH ONLY ",
+             ""
+CNR = 1
+CALL OPEN_CURSOR_AC2
+
+DO WHILE SQLCODE = 0
+   CNR = 1
+   SQLTEXT = " FETCH C"CNR" INTO "   SQL_FETCH
+   Call EXECUTE_SQL_TEXT_AC2
+
+    Select
+        When SQLCODE = 100 THEN DO
+             CALL CLOSE_CURSOR_AC2 /* CLOSE CURSOR */
+             LEAVE
+          End
+        When SQLCODE <> 0  THEN DO
+             SAY "ERROR ON FETCH C"CNR", RC="RC ,
+                 "SQLCODE="SQLCODE         ,
+                 "SQLERRMC="SQLERRMC       ,
+                 ""
+             Exit 8
+          End
+        Otherwise NOP
+     End
+
+   TBN = STRIP(TBCREATOR)"."STRIP(TBNAME)
+   DDLTEXT = DDLTEXT ||"SET CURRENT SQLID = '" ,
+                     || STRIP(CREATOR)"'               -NR"
+   DDLTEXT = DDLTEXT ||"CREATE SYNONYM " ,
+                     || STRIP(NAME) ,
+                     || " FOR "TBN"  -NR"
+   DDLTEXT = DDLTEXT ||"SET CURRENT SQLID = 'USER'   -NR"
+ END
+
+RETURN
+
+CREATE_KOMMENT:
+
+WHERELIST = ""
+CALL MAKE_WHERELIST "", "T1.CREATOR = T2.TBCREATOR"
+CALL MAKE_WHERELIST "", "T1.NAME    = T2.TBNAME"
+CALL MAKE_WHERELIST "T1.CREATOR", DB2_CREATOR1
+CALL MAKE_WHERELIST "T1.NAME", DB2_NAME1
+CALL MAKE_WHERELIST "T1.CREATOR", DB2_CREATOR2
+CALL MAKE_WHERELIST "T1.NAME", DB2_NAME2
+CALL MAKE_WHERELIST "T1.TSNAME", DB2_TABLESPACE
+CALL MAKE_WHERELIST "T1.TYPE", DB2_TYPE
+FROMLIST  = ""
+FROMLIST  = FROMLIST "FROM "SYSIBMS".SYSTABLES T1"
+FROMLIST  = FROMLIST "   , "SYSIBMS".SYSCOLUMNS T2"
+IF DB2_TYPE = 'V' THEN DO
+   IF DB2_CREATOR2 <> '' | DB2_NAME2 <> '' THEN DO
+      FROMLIST  = FROMLIST "   , "SYSIBMS".SYSVIEWDEP T3"
+      CALL MAKE_WHERELIST "", "T1.NAME    = T3.DNAME"
+      CALL MAKE_WHERELIST "", "T1.CREATOR = T3.DCREATOR"
+      CALL MAKE_WHERELIST "T3.BCREATOR", DB2_CREATOR2
+      CALL MAKE_WHERELIST "T3.BNAME", DB2_NAME2
+    END /* DB2_CREATOR | DB2_NAME */
+ END /* IF TYPE = 'V'  */
+
+EINGABE.0  = 1
+EINGABE.1 =  "SELECT  T1.REMARKS AS TABREMARKS" ,
+             "      , T1.LABEL   AS TABLABEL  " ,
+             "      , T2.NAME" ,
+             "      , T2.TBNAME" ,
+             "      , T2.TBCREATOR" ,
+             "      , COLNO" ,
+             "      , T2.REMARKS AS COLREMARKS" ,
+             "      , T2.LABEL   AS COLLABEL  " ,
+             FROMLIST ,
+             WHERELIST ,
+             "ORDER BY T2.TBCREATOR, T2.TBNAME, COLNO" ,
+             "FOR FETCH ONLY ",
+             ""
+
+CALL EXECUTE_SQL_AC2
+
+IF AUSGABE.0 > 0 THEN DO
+   CALL CREATE_TB_TBKOMMENT    /* COMMENT ON TABLE  */
+   CALL CREATE_TB_COLKOMMENT   /* COMMENT ON COLUMN */
+   CALL CREATE_TB_COLLAB       /* LABEL   ON COLUMN */
+ END
+
+
+RETURN
+
+CREATE_TB_TBKOMMENT:
+ /* CREATE COMMENT ON TABLE */
+   OLDCREATOR = ''
+   OLDNAME =    ''
+
+   DO COMI = 1 TO AUSGABE.0
+      IF STRIP(AUSGABE.COMI.TABREMARKS) = '' ,
+       & STRIP(AUSGABE.COMI.TABLABEL)   = '' THEN ITERATE
+
+      IF STRIP(AUSGABE.COMI.TBCREATOR) = OLDCREATOR ,
+       & STRIP(AUSGABE.COMI.TBNAME)    = OLDNAME THEN ITERATE
+
+      If Length(STRIP(AUSGABE.COMI.TABREMARKS)) > 0 Then Do
+         TBR      = "'" || STRIP(AUSGABE.COMI.TABREMARKS) || "'"
+         Call SPLIT_TB_COMMENT
+         DDLTEXT = DDLTEXT || " COMMENT ON TABLE" ,
+                             STRIP(AUSGABE.COMI.TBCREATOR) ,
+                   || "." || STRIP(AUSGABE.COMI.TBNAME) "IS -NL"
+
+         DO TBRI = 1 TO TBREM.0
+            DDLTEXT = DDLTEXT || TBREM.TBRI || "-NL"
+          END
+         DDLTEXT = DDLTEXT "-NR -NL"
+       End
+
+      If Length(STRIP(AUSGABE.COMI.TABLABEL)) > 0 Then Do
+         TBR      = "'" || STRIP(AUSGABE.COMI.TABLABEL) || "'"
+         Call SPLIT_TB_COMMENT
+         DDLTEXT = DDLTEXT || " LABEL ON TABLE" ,
+                             STRIP(AUSGABE.COMI.TBCREATOR) ,
+                   || "." || STRIP(AUSGABE.COMI.TBNAME) "IS -NL"
+
+         DO TBRI = 1 TO TBREM.0
+            DDLTEXT = DDLTEXT || TBREM.TBRI || "-NL"
+          END
+         DDLTEXT = DDLTEXT || "-NR -NL"
+       End
+
+      OLDCREATOR =  STRIP(AUSGABE.COMI.TBCREATOR)
+      OLDNAME    =  STRIP(AUSGABE.COMI.TBNAME)
+
+    END /* DO COMI = 1 TO AUSGABE.0 */
+
+
+RETURN
+
+SPLIT_TB_COMMENT:
+
+TBRL     = 72
+DROP TBREM.
+TBREM.0  = 0
+TBRI     = 0
+DO WHILE LENGTH(TBR) > 0
+   IF TBRI = 0 THEN TBRL = 72
+   ELSE             TBRL = 72
+   TBREM.0    = TBREM.0 + 1
+   TBRI       = TBREM.0
+   IF LENGTH(TBR) > TBRL THEN DO
+      TBREM.TBRI = SUBSTR(TBR, 1, TBRL)
+      TBR        = SUBSTR(TBR, TBRL+1)
+    END
+   ELSE DO
+      TBREM.TBRI = TBR
+      TBR        = ""
+    END
+ END
+Return
+
+
+SPLIT_COMMENT:
+
+REMARKS_SAVE = REMARKS
+RL       = 72
+DROP REM.
+REM.0    = 0
+RI       = 0
+DO WHILE LENGTH(REMARKS) > 0
+   IF RI = 0 THEN RL = 72
+   ELSE           RL = 72
+   REM.0      = REM.0 + 1
+   RI         = REM.0
+   IF LENGTH(REMARKS) > RL THEN DO
+      REM.RI = SUBSTR(REMARKS, 1, RL)
+      REMARKS    = SUBSTR(REMARKS, RL+1)
+    END
+   ELSE DO
+      REM.RI = REMARKS
+      REMARKS  = ""
+    END
+ END
+REMARKS = REMARKS_SAVE
+Return
+
+
+CREATE_TB_COLKOMMENT:
+ /* CREATE COMMENT ON COLUM */
+ OLDCREATOR = ""
+ OLDNAME    = ""
+ COMCOUNT   = 0
+ KOMMA      = "  "
+
+ DO COMI = 1 TO AUSGABE.0
+
+    NI = COMI + 1
+    IF STRIP(AUSGABE.COMI.TBCREATOR) <> OLDCREATOR ,
+     | STRIP(AUSGABE.COMI.TBNAME) <> OLDNAME THEN DO
+       IF COMCOUNT > 0 THEN DO
+          DDLTEXT = DDLTEXT || " )    -NL -NR"
+        END /* IF COMCOUNT > 0 */
+       KOMMA = ''
+       COMCOUNT   = 0
+     END /* IF STRIP(AUSGABE.COMI.TBCREATOR) */
+
+    IF AUSGABE.COMI.COLREMARKS = '' THEN ITERATE
+
+    IF STRIP(AUSGABE.COMI.TBCREATOR) <> OLDCREATOR ,
+     | STRIP(AUSGABE.COMI.TBNAME) <> OLDNAME THEN DO
+       DDLTEXT = DDLTEXT || " COMMENT ON " ,
+                            STRIP(AUSGABE.COMI.TBCREATOR) ,
+                  || "." || STRIP(AUSGABE.COMI.TBNAME) "( -NL"
+       KOMMA = ''
+       COMCOUNT   = 0
+     END /* IF STRIP(AUSGABE.COMI.TBCREATOR) */
+
+    OLDCREATOR =  STRIP(AUSGABE.COMI.TBCREATOR)
+    OLDNAME    =  STRIP(AUSGABE.COMI.TBNAME)
+
+    DDLTEXT = DDLTEXT KOMMA ,
+                   || STRIP(AUSGABE.COMI.NAME) "IS -NL "
+
+    CORL     = 72
+    COR      =     Strip("'" || STRIP(AUSGABE.COMI.COLREMARKS) || "'")
+    CORC     = 0
+    DROP TBCREM.
+    TBCREM.0  = 0
+    DO WHILE LENGTH(COR) > 0
+       if CORC  = 0 THEN CORL   = 71
+       Else              CORL   = 72
+       TBCREM.0   = TBCREM.0 + 1
+       CORI       = TBCREM.0
+       IF LENGTH(COR) > CORL THEN DO
+          TBCREM.CORI = SUBSTR(COR, 1, CORL)
+          COR        = SUBSTR(COR, CORL+1)
+        END
+       ELSE DO
+          TBCREM.CORI = COR
+          COR         = ""
+        END
+     END
+    DO CORI = 1 TO TBCREM.0
+       DDLTEXT = DDLTEXT || TBCREM.CORI || "-NL"
+     END
+
+    KOMMA = ', '
+    COMCOUNT   = COMCOUNT + 1
+
+    IF AUSGABE.0 = COMI THEN DO
+       KOMMA = ''
+       DDLTEXT = DDLTEXT || " )    -NL -NR"
+     END /* IF AUSGABE.0 = COMI */
+
+  END /*  DO COMI = 1 TO AUSGABE.0 */
+
+If length(KOMMA) > 0 Then Do
+   DDLTEXT = DDLTEXT || " )    -NL -NR"
+ END /* IF AUSGABE.0 = COMI */
+
+RETURN
+
+CREATE_TB_COLLAB:
+ /* CREATE COMMENT ON COLUM */
+ OLDCREATOR = ""
+ OLDNAME    = ""
+ COMCOUNT   = 0
+ KOMMA      = "  "
+
+ DO COMI = 1 TO AUSGABE.0
+
+    NI = COMI + 1
+    IF STRIP(AUSGABE.COMI.TBCREATOR) <> OLDCREATOR ,
+     | STRIP(AUSGABE.COMI.TBNAME) <> OLDNAME THEN DO
+       IF COMCOUNT > 0 THEN DO
+          DDLTEXT = DDLTEXT || " )    -NL -NR"
+        END /* IF COMCOUNT > 0 */
+       KOMMA = ''
+       COMCOUNT   = 0
+     END /* IF STRIP(AUSGABE.COMI.TBCREATOR) */
+
+    IF LENGTH(STRIP(AUSGABE.COMI.COLLABEL))   = 0 THEN ITERATE
+
+    IF STRIP(AUSGABE.COMI.TBCREATOR) <> OLDCREATOR ,
+     | STRIP(AUSGABE.COMI.TBNAME) <> OLDNAME THEN DO
+       DDLTEXT = DDLTEXT || " LABEL ON " ,
+                            STRIP(AUSGABE.COMI.TBCREATOR) ,
+                  || "." || STRIP(AUSGABE.COMI.TBNAME) "( -NL"
+       KOMMA = ''
+       COMCOUNT   = 0
+     END /* IF STRIP(AUSGABE.COMI.TBCREATOR) */
+
+    OLDCREATOR =  STRIP(AUSGABE.COMI.TBCREATOR)
+    OLDNAME    =  STRIP(AUSGABE.COMI.TBNAME)
+
+    DDLTEXT = DDLTEXT KOMMA ,
+                   || STRIP(AUSGABE.COMI.NAME) "IS -NL "
+
+    CORL     = 72
+    COR      =     Strip("'" || STRIP(AUSGABE.COMI.COLLABEL) || "'")
+    CORC     = 0
+    DROP TBCREM.
+    TBCREM.0  = 0
+    DO WHILE LENGTH(COR) > 0
+       if CORC  = 0 THEN CORL   = 71
+       Else              CORL   = 72
+       TBCREM.0   = TBCREM.0 + 1
+       CORI       = TBCREM.0
+       IF LENGTH(COR) > CORL THEN DO
+          TBCREM.CORI = SUBSTR(COR, 1, CORL)
+          COR        = SUBSTR(COR, CORL+1)
+        END
+       ELSE DO
+          TBCREM.CORI = COR
+          COR         = ""
+        END
+     END
+    DO CORI = 1 TO TBCREM.0
+       DDLTEXT = DDLTEXT || TBCREM.CORI || "-NL"
+     END
+
+    KOMMA = ', '
+    COMCOUNT   = COMCOUNT + 1
+
+    IF AUSGABE.0 = COMI THEN DO
+       KOMMA = ''
+       DDLTEXT = DDLTEXT || " )    -NL -NR"
+     END /* IF AUSGABE.0 = COMI */
+
+  END /*  DO COMI = 1 TO AUSGABE.0 */
+
+If length(KOMMA) > 0 Then Do
+   DDLTEXT = DDLTEXT || " )    -NL -NR"
+ END /* IF AUSGABE.0 = COMI */
+
+RETURN
+
+CREATE_TG:
+
+WHERELIST = ""
+CALL MAKE_WHERELIST "TG.SCHEMA", DB2_CREATOR1
+CALL MAKE_WHERELIST "TG.NAME", DB2_NAME1
+CALL MAKE_WHERELIST "TG.TBOWNER", DB2_CREATOR2
+CALL MAKE_WHERELIST "TG.TBNAME", DB2_NAME2
+CALL MAKE_WHERELIST "TB.DBNAME", DB2_DATABASE
+CALL MAKE_WHERELIST "TB.TSNAME", DB2_TABLESPACE
+
+SQLSTMT    = "SELECT TG.SCHEMA    " ,
+             "     , TG.NAME      " ,
+             "     , TG.REMARKS   " ,
+             "     , TG.STATEMENT " ,
+             "FROM  "SYSIBMS".SYSTRIGGERS TG" ,
+             "INNER JOIN "SYSIBMS".SYSTABLES TB" ,
+             "ON  TG.TBOWNER    = TB.CREATOR" ,
+             "AND TG.TBNAME     = TB.NAME   " ,
+              WHERELIST ,
+             "ORDER BY TG.SCHEMA, TG.NAME,  TG.SEQNO " ,
+             "FOR FETCH ONLY ",
+             ""
+
+CNR  = 5
+CALL OPEN_CURSOR_AC2
+
+DO WHILE SQLCODE = 0
+   CNR  = 5
+   SQLTEXT =  " FETCH C"CNR" INTO             ",
+              "         :SCHEMA    " ,
+              "     ,   :NAME      " ,
+              "     ,   :REMARKS   " ,
+              "     ,   :STATEMENT " ,
+              ""
+   Call EXECUTE_SQL_TEXT_AC2
+   IF SQLCODE = 0 THEN NOP
+   ELSE  DO
+      CNR = 5
+      CALL CLOSE_CURSOR_AC2
+      LEAVE
+    END
+
+   DDLTEXT = DDLTEXT "SET CURRENT SCHEMA = '"Strip(SCHEMA)"' -NR"
+   DDLTEXT = DDLTEXT SQL_BLOB_AUFBEREITEN(STATEMENT)
+   DDLTEXT = DDLTEXT "-NR"
+   DDLTEXT = DDLTEXT "-NL"
+   If length(Remarks) > 0 Then do
+      Remarks = "'" || Strip(Remarks, "T") || "'"
+      Call SPLIT_COMMENT
+      DDLTEXT = DDLTEXT "COMMENT ON TRIGGER -NL"
+      DDLTEXT = DDLTEXT "  " Strip(SCHEMA) || "." || ,
+                             STRIP(NAME) " IS  -NL"
+      DO RI = 1 TO REM.0
+         DDLTEXT = DDLTEXT || REM.RI || "-NL"
+       END
+      DDLTEXT = DDLTEXT || "-NR -NL"
+    End
+ END
+
+
+RETURN
+
+CREATE_AL:
+
+WHERELIST = ""
+CALL MAKE_WHERELIST "AL.CREATOR", DB2_CREATOR1
+CALL MAKE_WHERELIST "AL.NAME", DB2_NAME1
+CALL MAKE_WHERELIST "AL.TBCREATOR", DB2_CREATOR2
+CALL MAKE_WHERELIST "AL.TBNAME", DB2_NAME2
+CALL MAKE_WHERELIST "TB.DBNAME", DB2_DATABASE
+CALL MAKE_WHERELIST "TB.TSNAME", DB2_TABLESPACE
+CALL MAKE_WHERELIST "AL.TYPE", "A"
+
+EINGABE.0  = 1
+If length(Strip(DB2_DATABASE)) > 0 ,
+ | length(Strip(DB2_TABLESPACE)) > 0 Then do
+   SQLSTMT    = "SELECT  AL.NAME" ,
+                "      , AL.CREATOR" ,
+                "      , AL.TYPE" ,
+                "      , AL.LOCATION" ,
+                "      , AL.TBCREATOR" ,
+                "      , AL.TBNAME" ,
+                "FROM  "SYSIBMS".SYSTABLES AL" ,
+                "INNER JOIN "SYSIBMS".SYSTABLES TB" ,
+                "ON  AL.TBCREATOR  = TB.CREATOR" ,
+                "AND AL.TBNAME     = TB.NAME   " ,
+                WHERELIST ,
+                "FOR FETCH ONLY ",
+                ""
+ End
+ Else Do
+   SQLSTMT    = "SELECT  AL.NAME" ,
+                "      , AL.CREATOR" ,
+                "      , AL.TYPE" ,
+                "      , AL.LOCATION" ,
+                "      , AL.TBCREATOR" ,
+                "      , AL.TBNAME" ,
+                "FROM  "SYSIBMS".SYSTABLES AL" ,
+                WHERELIST ,
+                "FOR FETCH ONLY ",
+                ""
+ End
+
+CNR = 1
+CALL OPEN_CURSOR_AC2
+
+DO WHILE SQLCODE = 0
+   CNR = 1
+   SQLTEXT = " FETCH C"CNR" INTO "   SQL_FETCH
+   Call EXECUTE_SQL_TEXT_AC2
+
+    Select
+        When SQLCODE = 100 THEN DO
+             CALL CLOSE_CURSOR_AC2 /* CLOSE CURSOR */
+             LEAVE
+          End
+        When SQLCODE <> 0  THEN DO
+             SAY "ERROR ON FETCH C"CNR", RC="RC ,
+                 "SQLCODE="SQLCODE         ,
+                 "SQLERRMC="SQLERRMC       ,
+                 ""
+             Exit 8
+          End
+        Otherwise NOP
+     End
+   TBN = ""
+   IF STRIP(LOCATION) <> "" THEN
+      TBN = TBN || STRIP(LOCATION) || "."
+   TBN = TBN || STRIP(TBCREATOR) || "." || ,
+                STRIP(TBNAME)
+   ALN = STRIP(CREATOR)"."STRIP(NAME)
+   IF  STRIP(CREATOR) = 'SYSPUBLIC' Then PUBAL            = "PUBLIC"
+   ELSE                                            PUBAL  = ""
+   DDLTEXT = DDLTEXT || "CREATE "PUBAL" ALIAS "  ALN "-NL"
+   DDLTEXT = DDLTEXT || "       FOR   "  TBN "-NR"
+ END
+
+RETURN
+
+CREATE_PG:
+
+WHERELIST = ""
+FROMLIST  = ""
+CALL MAKE_WHERELIST "", "REMOTE <> 'Y'"
+CALL MAKE_WHERELIST "CREATOR", DB2_CREATOR1
+CALL MAKE_WHERELIST "NAME", DB2_NAME1
+
+FROMLIST = FROMLIST "FROM  "SYSIBMS".SYSPACKAGE T1"
+SELECT
+   WHEN LENGTH(STRIP(DB2_CREATOR2)) > 0 ,
+      | LENGTH(STRIP(DB2_NAME2)) > 0 ,
+      | LENGTH(STRIP(DB2_TABLESPACE)) > 0 ,
+      | LENGTH(STRIP(DB2_DATABASE)) > 0  THEN DO
+        FROMLIST = FROMLIST "    , "SYSIBMS".SYSPACKDEP T2"
+        CALL MAKE_WHERELIST "", "DCOLLID = COLLID"
+        CALL MAKE_WHERELIST "", "DNAME   = NAME"
+        IF LENGTH(DB2_CREATOR2) > 0 ,
+         | LENGTH(DB2_NAME2) > 0 THEN DO
+           CALL MAKE_WHERELIST "",  "BTYPE IN ('A', 'S', 'V', 'T', 'I')"
+           CALL MAKE_WHERELIST "BQUALIFIER", DB2_CREATOR2
+           CALL MAKE_WHERELIST "BNAME", DB2_NAME2
+         END
+        IF LENGTH(DB2_TABLESPACE) > 0 ,
+         | LENGTH(DB2_DATABASE) > 0 THEN DO
+           CALL MAKE_WHERELIST "", "BTYPE IN ('P', 'R')"
+           CALL MAKE_WHERELIST "BQUALIFIER", DB2_DATABASE
+           CALL MAKE_WHERELIST "BNAME", DB2_TABLESPACE
+         END
+
+      END
+   WHEN LENGTH(STRIP(DB2_CREATOR3)) > 0 ,
+      | LENGTH(STRIP(DB2_NAME3)) > 0 THEN DO
+        FROMLIST = FROMLIST "    , "SYSIBMS".SYSPACKLIST T3"
+        CALL MAKE_WHERELIST "T3.PLANNAME", DB2_NAME3
+        CALL MAKE_WHERELIST "", "T3.COLLID = T1.COLLID"
+      END
+   OTHERWISE NOP
+ End
+
+EINGABE.0   = 1
+SQLSTMT    = "SELECT  DISTINCT" ,
+             "        T1.LOCATION" ,
+             "      , t1.COLLID" ,
+             "      , t1.NAME" ,
+             "      , t1.OWNER" ,
+             "      , t1.CREATOR" ,
+             "      , t1.QUALIFIER" ,
+             "      , CASE WHEN t1.VALIDATE  = 'R' THEN 'RUN' " ,
+             "             ELSE 'BIND' " ,
+             "        END VALIDATE" ,
+             "      , CASE WHEN t1.ISOLATION = 'T' THEN 'RS' " ,
+             "             WHEN t1.ISOLATION = 'U' THEN 'UR' " ,
+             "             WHEN t1.ISOLATION = 'R' THEN 'RR' " ,
+             "             ELSE 'CS' " ,
+             "        END ISOLATION  " ,
+             "      , CASE WHEN t1.RELEASE = 'D' THEN 'DEALLOCATE'" ,
+             "             ELSE 'COMMIT'" ,
+             "        END RELEASE" ,
+             "      , CASE WHEN t1.EXPLAIN = 'Y' THEN 'YES'" ,
+             "             ELSE 'NO'" ,
+             "        END EXPLAIN" ,
+             "      , t1.REMOTE" ,
+             "      , t1.VERSION" ,
+             "      , t1.PDSNAME" ,
+             "      , t1.DEGREE" ,
+             "      , CASE WHEN t1.DYNAMICRULES = 'B' THEN 'BIND'" ,
+             "             ELSE 'RUN'" ,
+             "        END DYNAMICRULES" ,
+              FROMLIST ,
+              WHERELIST ,
+             "ORDER BY t1.LOCATION, t1.COLLID, t1.NAME" ,
+             "FOR FETCH ONLY ",
+             ""
+
+CNR = 1
+CALL OPEN_CURSOR_AC2
+
+DO WHILE SQLCODE = 0
+   CNR = 1
+   SQLTEXT = " FETCH C"CNR" INTO "   SQL_FETCH
+   Call EXECUTE_SQL_TEXT_AC2
+
+    Select
+        When SQLCODE = 100 THEN DO
+             CALL CLOSE_CURSOR_AC2 /* CLOSE CURSOR */
+             LEAVE
+          End
+        When SQLCODE <> 0  THEN DO
+             SAY "ERROR ON FETCH C"CNR", RC="RC ,
+                 "SQLCODE="SQLCODE         ,
+                 "SQLERRMC="SQLERRMC       ,
+                 ""
+             Exit 8
+          End
+        Otherwise NOP
+     End
+   PGNAME = STRIP(LOCATION)
+   IF PGNAME <> '' THEN PGNAME = PGNAME'.'
+   PGNAME = STRIP(PGNAME) || STRIP(COLLID)
+   DDLTEXT = DDLTEXT "BIND PACKAGE("STRIP(PGNAME)") - -NL"
+   DDLTEXT = DDLTEXT "     OWNER("STRIP(OWNER)") - -NL"
+   DDLTEXT = DDLTEXT "     QUALIFIER("STRIP(QUALIFIER) ,
+                  || ") - -NL"
+   DDLTEXT = DDLTEXT "     ACTION(REPLACE) "
+   IF STRIP(VERSION) <> '' THEN
+      DDLTEXT = DDLTEXT "     REPLVER("STRIP(VERSION) ,
+                     || ") - -NL"
+   DDLTEXT = DDLTEXT "ENABLE(*)        "
+   DDLTEXT = DDLTEXT "FLAG(I) - -NL"
+
+   DDLTEXT = DDLTEXT "     MEMBER("STRIP(NAME)") "
+   DDLTEXT = DDLTEXT "     LIBRARY('"STRIP(PDSNAME) ,
+                  || "') - -NL"
+   DDLTEXT = DDLTEXT "     VALIDATE("STRIP(VALIDATE) ,
+                  || ") - -NL"
+   DDLTEXT = DDLTEXT "     ISOLATION("ISOLATION") - -NL"
+
+   DDLTEXT = DDLTEXT "     DEGREE("STRIP(DEGREE)") - -NL"
+   DDLTEXT = DDLTEXT "     DYNAMICRULES("STRIP(DYNAMICRULES) ,
+                  || ") - -NL"
+   DDLTEXT = DDLTEXT "     RELEASE("STRIP(RELEASE)") - -NL"
+
+   DDLTEXT = DDLTEXT "     EXPLAIN("STRIP(EXPLAIN)") -NL -NR"
+
+ END /* END DO I = 1 TO DDLTEXT */
+
+RETURN
+
+Create_TABAUTH:
+Komma = ""
+
+WHERELIST    = ""
+CALL MAKE_WHERELIST "TCREATOR", DB2_CREATOR1
+CALL MAKE_WHERELIST "TTNAME", DB2_NAME1
+CALL MAKE_WHERELIST "", "GRANTEE <> '"DB2_CREATOR1"'"
+
+SQLSTMT    = "SELECT DISTINCT GRANTOR   " ,
+             "    ,  GRANTEE            " ,
+             "    ,  GRANTEETYPE        " ,
+             "    ,  DBNAME             " ,
+             "    ,  SCREATOR           " ,
+             "    ,  STNAME             " ,
+             "    ,  TCREATOR           " ,
+             "    ,  TTNAME             " ,
+             "    ,  AUTHHOWGOT         " ,
+             "    ,  UPDATECOLS         " ,
+             "    ,  ALTERAUTH          " ,
+             "    ,  DELETEAUTH         " ,
+             "    ,  INDEXAUTH          " ,
+             "    ,  INSERTAUTH         " ,
+             "    ,  SELECTAUTH         " ,
+             "    ,  UPDATEAUTH         " ,
+             "    ,  GRANTEELOCATION    " ,
+             "    ,  LOCATION           " ,
+             "    ,  COLLID             " ,
+             "    ,  CAPTUREAUTH        " ,
+             "    ,  REFERENCESAUTH     " ,
+             "    ,  REFCOLS            " ,
+             "    ,  TRIGGERAUTH        " ,
+             "    ,  GRANTORTYPE        " ,
+             "FROM "SYSIBMS".SYSTABAUTH TA " ,
+             WHERELIST ,
+             "ORDER BY TCREATOR, TTNAME" ,
+             "FOR FETCH ONLY ",
+             ""
+
+call OPEN_CURSOR_AC2
+KOMMA = " "
+Do  forever
+    SQLTEXT =         " FETCH C"CNR" INTO         ",
+             "       :GRANTOR                     " ,
+             "     , :GRANTEE                     " ,
+             "     , :GRANTEETYPE                 " ,
+             "     , :DBNAME                      " ,
+             "     , :SCREATOR                    " ,
+             "     , :STNAME                      " ,
+             "     , :TCREATOR                    " ,
+             "     , :TTNAME                      " ,
+             "     , :AUTHHOWGOT                  " ,
+             "     , :UPDATECOLS                  " ,
+             "     , :ALTERAUTH                   " ,
+             "     , :DELETEAUTH                  " ,
+             "     , :INDEXAUTH                   " ,
+             "     , :INSERTAUTH                  " ,
+             "     , :SELECTAUTH                  " ,
+             "     , :UPDATEAUTH                  " ,
+             "     , :GRANTEELOCATION             " ,
+             "     , :LOCATION                    " ,
+             "     , :COLLID                      " ,
+             "     , :CAPTUREAUTH                 " ,
+             "     , :REFERENCESAUTH              " ,
+             "     , :REFCOLS                     " ,
+             "     , :TRIGGERAUTH                 " ,
+             "     , :GRANTORTYPE                 " ,
+             ""
+    Call EXECUTE_SQL_TEXT_AC2
+    if sqlcode = 100 then Do
+/*     DDLTEXT = DDLTEXT " -NL"   */
+       Leave
+     End
+    if sqlcode <> 0 then do
+       say "SQLFEHLER " SQLCODE
+       Return
+     End
+
+/*  If Strip(GRANTOR) = STRIP(GRANTEE) Then Iterate */
+
+    USER_GROUP = "      "
+    GRANTEE    = STRIP(GRANTEE)
+    HK ='"'
+    If GRANTEETYPE = "G" Then USER_GROUP = " GROUP "
+    If GRANTEE     = "PUBLIC" Then Do
+       USER_GROUP  = ""
+       HK          = ""
+     End
+    GRANTEE    = HK || STRIP(GRANTEE) || HK
+
+
+    OBJName = Space(TCREATOR "." TTNAME, 0)
+
+
+    keyword = "GRANT "
+    Komma   = " "
+    GOPT    = "N"
+    If SELECTAUTH = 'G'  | SELECTAUTH  = 'Y' Then do
+       DDLTEXT = DDLTEXT Keyword komma "SELECT "
+       DDLTEXT = DDLTEXT " -NL"
+       keyword = "      " ; Komma = "," ;
+       If Selectauth = "G" Then GOPT = "Y"
+     End
+
+    If INSERTAUTH = 'G'  | INSERTAUTH  = 'Y' Then do
+       DDLTEXT = DDLTEXT Keyword komma "INSERT "
+       DDLTEXT = DDLTEXT " -NL"
+       keyword = "      " ; Komma = "," ;
+       If Selectauth = "G" Then GOPT = "Y"
+     End
+
+    If UPDATEAUTH = 'G'  | UPDATEAUTH  = 'Y' Then do
+       DDLTEXT = DDLTEXT Keyword komma "UPDATE "
+       DDLTEXT = DDLTEXT " -NL"
+       keyword = "      " ; Komma = "," ;
+       If Selectauth = "G" Then GOPT = "Y"
+     End
+
+    If DELETEAUTH = 'G'  | DELETEAUTH  = 'Y' Then do
+       DDLTEXT = DDLTEXT Keyword komma "DELETE "
+       DDLTEXT = DDLTEXT " -NL"
+       keyword = "      " ; Komma = "," ;
+       If Selectauth = "G" Then GOPT = "Y"
+     End
+
+    If ALTERAUTH  = 'G'  | ALTERAUTH   = 'Y' Then do
+       DDLTEXT = DDLTEXT Keyword komma "ALTER  "
+       DDLTEXT = DDLTEXT " -NL"
+       keyword = "      " ; Komma = "," ;
+       If Selectauth = "G" Then GOPT = "Y"
+     End
+
+    If INDEXAUTH  = 'G'  | INDEXAUTH   = 'Y' Then do
+       DDLTEXT = DDLTEXT Keyword komma "INDEX  "
+       DDLTEXT = DDLTEXT " -NL"
+       keyword = "      " ; Komma = "," ;
+       If Selectauth = "G" Then GOPT = "Y"
+     End
+
+    If TRIGGERAUTH = 'G'  | TRIGGERAUTH = 'Y' Then do
+       DDLTEXT = DDLTEXT Keyword komma "TRIGGER "
+       DDLTEXT = DDLTEXT " -NL"
+       keyword = "      " ; Komma = "," ;
+       If Selectauth = "G" Then GOPT = "Y"
+     End
+
+    If REFERENCESAUTH = 'G'  | REFERENCESAUTH = 'Y' Then do
+       DDLTEXT = DDLTEXT Keyword komma "REFERENCES "
+       DDLTEXT = DDLTEXT " -NL"
+       keyword = "      " ; Komma = "," ;
+       If Selectauth = "G" Then GOPT = "Y"
+     End
+
+    If KOMMA = ","   Then do
+       DDLTEXT = DDLTEXT " ON TABLE " OBJName "-NL "
+       DDLTEXT = DDLTEXT "TO "USER_GROUP GRANTEE "-NL"
+       If GOPT = "Y"  Then DDLTEXT = DDLTEXT " WITH GRANT OPTION"
+       DDLTEXT = DDLTEXT " -NR -NL "
+     End
+
+ End
+call CLOSE_CURSOR_AC2
+RETURN
+
+
+CREATE_RTA:
+
+WHERELIST    = ""
+CALL MAKE_WHERELIST "SCHEMA", DB2_Creator1
+CALL MAKE_WHERELIST "SPECIFICNAME", DB2_NAME1
+
+SQLSTMT    = "SELECT    GRANTOR         " ,
+             "        , GRANTEE         " ,
+             "        , SCHEMA          " ,
+             "        , SPECIFICNAME    " ,
+             "        , ROUTINETYPE     " ,
+             "        , GRANTEETYPE     " ,
+             "        , AUTHHOWGOT      " ,
+             "        , EXECUTEAUTH     " ,
+             "        , COLLID          " ,
+             "        , GRANTORTYPE     " ,
+             "FROM "SYSIBMS".SYSROUTINEAUTH " ,
+             WHERELIST ,
+             "ORDER BY  SCHEMA, SPECIFICNAME " ,
+             ""
+
+CALL OPEN_CURSOR_AC2
+
+DO WHILE SQLCODE = 0
+    SQLTEXT = " FETCH C"CNR" INTO "   SQL_FETCH
+    Call EXECUTE_SQL_TEXT_AC2
+
+    Select
+        When SQLCODE = 100 THEN DO
+             CALL CLOSE_CURSOR_AC2 /* CLOSE CURSOR */
+             LEAVE
+          End
+        When SQLCODE <> 0  THEN DO
+             SAY "ERROR ON FETCH C"CNR", RC="RC ,
+                 "SQLCODE="SQLCODE         ,
+                 "SQLERRMC="SQLERRMC       ,
+                 ""
+             Exit 8
+          End
+        Otherwise NOP
+     End
+
+   DDLTEXT = DDLTEXT "-NL"
+   Select
+      When   ROUTINETYPE  = 'F' Then do
+           DDLTEXT = DDLTEXT "Grant EXECUTE ON SPECIFIC FUNCTION -NL "
+       End
+       Otherwise Do
+           DDLTEXT = DDLTEXT "Grant EXECUTE ON PROCEDURE -NL"
+        End
+    End
+   DDLTEXT = DDLTEXT "  " space(Schema "." SPECIFICNAME, 0) "-NL"
+   DDLTEXT = DDLTEXT "  TO" GRANTEE "-NL"
+
+   If EXECUTEAUTH = 'G'  Then do
+      DDLTEXT = DDLTEXT "WITH GRANT OPTION  " "-NL"
+    End
+   DDLTEXT = DDLTEXT "-NR"
+
+ END
+
+CALL CLOSE_CURSOR_AC2
+RETURN
+
+
+EXECUTE_SQL_AC2:
+
+If Datatype(CNR) <> "NUM" Then CNR = 1
+If Datatype(SNR) <> "NUM" Then SNR = CNR
+DO STI = 1 TO EINGABE.0
+   SQLSTMT = VALUE(SPACE(RXDB2_GETSTEM, 0) || STI)
+   SQLSTMT = SPACE(SQLSTMT, 1)
+   IF WORD(SQLSTMT, 1) = "CONNECT" & WORD(SQLSTMT, 2) = "TO" THEN DO
+      SQLTEXT =  " "SQLSTMT
+      Call EXECUTE_SQL_TEXT_AC2
+      IF SQLCODE <> 0 THEN DO
+         SAY "Error in "SQLSTMT "SQLCODE: " || SQLCODE
+       END
+      ITERATE
+    END
+
+   SQLTEXT =         " CLOSE C"CNR" "
+   Call EXECUTE_SQL_TEXT_AC2
+   SQLTEXT =  " DECLARE              C"CNR" CURSOR FOR S"SNR
+   Call EXECUTE_SQL_TEXT_AC2
+   IF SQLCODE <> 0 THEN DO
+      SAY "A2 DECLARE     SQLCODE="SQLCODE
+      SAY SQLSTMT
+    END
+   SQLTEXT =  " PREPARE              S"SNR" FROM :SQLSTMT"
+   Call EXECUTE_SQL_TEXT_AC2
+   IF SQLCODE <> 0 THEN DO
+      SAY "A2 PREPARE     SQLCODE="SQLCODE
+      SAY SQLSTMT
+    END
+   SQLTEXT =  " DESCRIBE S"SNR" INTO :OUTSQLDA"
+   Call EXECUTE_SQL_TEXT_AC2
+   IF SQLCODE <> 0 THEN DO
+      SAY "A2 DESCRIBE    SQLCODE="SQLCODE
+      SAY SQLSTMT
+    END
+   SQLTEXT =  " OPEN C"CNR""
+   Call EXECUTE_SQL_TEXT_AC2
+   IF SQLCODE <> 0 THEN DO
+      SAY "A2 OPEN        SQLCODE="SQLCODE
+      SAY SQLSTMT
+    END
+   IVAL = VALUE(SPACE(RXDB2_PUTSTEM, 0) || 0) "= 0"
+   INTERPRET  IVAL
+   DO WHILE SQLCODE = 0
+      SQLTEXT =  " FETCH C"CNR" USING DESCRIPTOR :OUTSQLDA"
+      Call EXECUTE_SQL_TEXT_AC2
+      IF SQLCODE <> 0 THEN LEAVE
+      IVAL = "I = " VALUE(SPACE(RXDB2_PUTSTEM, 0) || 0) "+ 1"
+      INTERPRET  IVAL
+      IVAL = SPACE(RXDB2_PUTSTEM, 0) || 0  " = I"
+      INTERPRET  IVAL
+      DO CI = 1 TO OUTSQLDA.SQLD
+         If ENV = "WIN" & OUTSQLDA.CI.SQLDATA <> "" ,
+          & POS(OUTSQLDA.CI.SQLTYPE, "492 493") > 0 Then do
+            OUTSQLDA.CI.SQLDATA = BIGINT_FUER_OOREXX_AUFBEREITEN( ,
+                                  OUTSQLDA.CI.SQLDATA)
+          End
+         /* AUSGABE.1.DBNAME = "DSNDB07"   */
+         IVAL = VALUE(SPACE(RXDB2_PUTSTEM, 0) || I) || "." ||  ,
+                SPACE(OUTSQLDA.CI.SQLNAME, 0)
+         INTERPRET IVAL"=OUTSQLDA.CI.SQLDATA"
+       END
+    END
+ END
+
+
+RETURN
+
+
+Load_DSNREXX_AC2:
+ "SUBCOM DSNREXX"
+IF RC THEN   S_RC = RXSUBCOM('ADD','DSNREXX','DSNREXX')
+
+ADDRESS DSNREXX "CONNECT "DB2_SSID
+IF SQLCODE <  0 THEN SAY "CONNECT     SQLCODE="SQLCODE "<"DB2_SSID">"
+
+Return
+
+UNLoad_DSNREXX_AC2:
+
+ADDRESS DSNREXX "DISCONNECT"
+S_RC = RXSUBCOM('DELETE','DSNREXX','DSNREXX')
+
+Return
+
+CONNECT_LOCATION_AC2:
+   If Length(SYSUID) > 0 & Length(SYSPWD) > 0 Then do
+       SQLTEXT = " CONNECT TO "ARG(1) ,
+                 "USER :SYSUID USING :SYSPWD "
+    End
+   ELSE Do
+       SQLTEXT = " CONNECT TO "ARG(1)
+    End
+   Call EXECUTE_SQL_TEXT_AC2
+RETURN 0
+
+DISCONNECT_LOCATION_AC2:
+SQLTEXT =  "RELEASE " ARG(1)
+Call EXECUTE_SQL_TEXT_AC2
+SQLTEXT =  "COMMIT  "
+Call EXECUTE_SQL_TEXT_AC2
+SQLTEXT =  " CONNECT RESET"
+Call EXECUTE_SQL_TEXT_AC2
+RETURN 0
+
+EXECUTE_SQL_TEXT_AC2:
+ Select
+    When ENV = 'TSO' Then Do
+         ADDRESS DSNREXX "EXECSQL "SQLTEXT
+         Select
+           When rc =  -2168 Then do
+                SQLCODE    = -99999
+                SQLERRMC   = "Returncode war " RC
+            End
+           Otherwise nop
+          End
+     End
+    When ENV = 'WIN' Then Do
+         CALL SQLEXEC SQLTEXT
+         SQLCODE    = SQLCA.SQLCODE
+         SQLERRMC   = SqlMsg
+     End
+    Otherwise NOP
+  End
+Return
+
+SQLERROR:
+/* process SQLERROR  */
+
+  SAY 'SQLCODE        ='SQLCODE
+  SAY 'SQLERRM        ='SQLERRM
+  SAY 'SQLCA.SQLCAID  ='SQLCA.SQLCAID
+  SAY 'SQLCA.SQLCABC  ='SQLCA.SQLCABC
+  SAY 'SQLCA.SQLCODE  ='SQLCA.SQLCODE
+  SAY 'SQLCA.SQLERRM  ='SQLCA.SQLERRM
+  SAY 'SQLCA.SQLERRP  ='SQLCA.SQLERRP
+  SAY 'SQLCA.SQLERRD.1='SQLCA.SQLERRD.1
+  SAY 'SQLCA.SQLERRD.2='SQLCA.SQLERRD.2
+  SAY 'SQLCA.SQLERRD.3='SQLCA.SQLERRD.3
+  SAY 'SQLCA.SQLERRD.4='SQLCA.SQLERRD.4
+  SAY 'SQLCA.SQLERRD.5='SQLCA.SQLERRD.5
+  SAY 'SQLCA.SQLERRD.6='SQLCA.SQLERRD.6
+  SAY 'SQLCA.SQLWARN0 ='SQLCA.SQLWARN0
+  SAY 'SQLCA.SQLWARN1 ='SQLCA.SQLWARN1
+  SAY 'SQLCA.SQLWARN2 ='SQLCA.SQLWARN2
+  SAY 'SQLCA.SQLWARN3 ='SQLCA.SQLWARN3
+  SAY 'SQLCA.SQLWARN4 ='SQLCA.SQLWARN4
+  SAY 'SQLCA.SQLWARN5 ='SQLCA.SQLWARN5
+  SAY 'SQLCA.SQLWARN6 ='SQLCA.SQLWARN6
+  SAY 'SQLCA.SQLWARN7 ='SQLCA.SQLWARN7
+  SAY 'SQLCA.SQLWARN8 ='SQLCA.SQLWARN8
+  SAY 'SQLCA.SQLWARN9 ='SQLCA.SQLWARN9
+  SAY 'SQLCA.SQLWARNA ='SQLCA.SQLWARNA
+  SAY 'SQLCA.SQLSTATE ='SQLCA.SQLSTATE
+
+RETURN
+
+
+MAKE_WHERELIST: PROCEDURE EXPOSE WHERELIST
+
+COLUMNNAME = ARG(1)
+ARGUMENT   = ARG(2)
+ARGUMENT   = TRANSLATE(ARGUMENT, '%', '*')
+
+IF LENGTH(STRIP(ARGUMENT)) = 0 ,
+ & LENGTH(STRIP(COLUMNNAME)) = 0 THEN RETURN
+
+IF TRANSLATE(WORD(WHERELIST, 1) ) = "WHERE" THEN ANDKZ = "AND"
+ ELSE ANDKZ = "WHERE"
+
+IF LENGTH(STRIP(COLUMNNAME)) = 0 ,
+ & LENGTH(STRIP(ARGUMENT)) > 0 THEN DO
+   WHERELIST = WHERELIST ANDKZ ARGUMENT
+   RETURN
+ END
+
+IF LENGTH(STRIP(ARGUMENT)) = 0 THEN RETURN
+
+
+If ARGTYPE = "NUM" Then do
+   IF POS('%', ARGUMENT) > 0 THEN DO
+      WHERELIST = WHERELIST ANDKZ COLUMNNAME "LIKE "ARGUMENT
+    END
+   Else Do
+      WHERELIST = WHERELIST ANDKZ COLUMNNAME "= "ARGUMENT
+    END
+ End
+Else Do
+   IF POS('%', ARGUMENT) > 0 ,
+    | POS('_', ARGUMENT) > 0 THEN DO
+      WHERELIST = WHERELIST ANDKZ COLUMNNAME "LIKE '"ARGUMENT"'"
+    END
+   Else Do
+      WHERELIST = WHERELIST ANDKZ COLUMNNAME "= '"ARGUMENT"'"
+    END
+ End
+
+RETURN
+
+OPEN_CURSOR_AC2:
+    OUTSQLDA.SQLD  = 0
+    IF DATATYPE(CNR) <> 'NUM' THEN CNR = 1
+    IF DATATYPE(SNR) <> 'NUM' THEN SNR = CNR
+
+    SQLTEXT =         " CLOSE C"CNR
+    Call EXECUTE_SQL_TEXT_AC2
+
+    SQLTEXT =         " PREPARE S"CNR" FROM :SQLSTMT"
+    Call EXECUTE_SQL_TEXT_AC2
+    IF SQLCODE <> 0 THEN DO
+       SAY "ERROR ON PREPARE S"CNR"RC="RC ,
+           "SQLCODE="SQLCODE         ,
+           "SQLERRMC="SQLERRMC       ,
+           ""
+       say sqlstmt
+    END
+
+    SQLTEXT =  " DESCRIBE S"SNR" INTO :OUTSQLDA"
+    Call EXECUTE_SQL_TEXT_AC2
+    IF SQLCODE <> 0 THEN DO
+       SAY "ERROR ON DESCRIBE S"CNR"RC="RC ,
+           "SQLCODE="SQLCODE         ,
+           "SQLERRMC="SQLERRMC       ,
+           ""
+       say sqlstmt
+    END
+
+
+    SQL_FETCH = ""
+    KOMMA     = ""
+    if datatype(OUTSQLDA.SQLD) = NUM THEN DO CI = 1 TO OUTSQLDA.SQLD
+       SQL_FETCH = SQL_FETCH || komma || ":" || OUTSQLDA.CI.SQLNAME
+       If OUTSQLDA.CI.SQLTYPE // 2 = 1 THEN Do
+          SQL_FETCH = SQL_FETCH ":I" || OUTSQLDA.CI.SQLNAME
+        END
+       KOMMA = ","
+     End
+    SQLTEXT =         " DECLARE C"CNR" CURSOR FOR S"CNR
+    Call EXECUTE_SQL_TEXT_AC2
+    IF SQLCODE <> 0 THEN DO
+       SAY "ERROR ON DECLARE, RC="RC ,
+           "SQLCODE="SQLCODE         ,
+           "SQLERRMC="SQLERRMC       ,
+           ""
+    END
+
+    SQLTEXT =         " OPEN C"CNR
+    Call EXECUTE_SQL_TEXT_AC2
+    IF SQLCODE <> 0 THEN DO
+       SAY "ERROR ON OPEN C"CNR" , RC="RC ,
+           "SQLCODE="SQLCODE         ,
+           "SQLERRMC="SQLERRMC       ,
+           ""
+    Call EXECUTE_SQL_TEXT_AC2
+    END
+
+RETURN
+
+CLOSE_CURSOR_AC2:
+
+    SQLTEXT =         " CLOSE C"CNR
+    Call EXECUTE_SQL_TEXT_AC2
+
+RETURN
+
+SQL_BLOB_AUFBEREITEN:
+IF DDLSPUFI <> "Y" Then  SQL_BLOB_TEXT2 = RXSQLFOR(ARG(1) )
+ Else                    SQL_BLOB_TEXT2 = ARG(1) "-NL"
+Return SQL_BLOB_TEXT2
+
+ERSETZEN_STRING:
+    ARG STR_ALTU, VTXT, NTXT
+    str_alt = arg(1)
+    LAENGE = LENGTH(VTXT)
+    POSI = POS(VTXT, STR_ALTU)
+    DO WHILE POSI > 0
+       STR_ALTU = SUBSTR(STR_ALTU, 1, POSI - 1) ||,
+                  SUBSTR(STR_ALTU, POSI + LAENGE )
+       STR_ALT  = SUBSTR(STR_ALT , 1, POSI - 1) ||,
+                  SUBSTR(STR_ALT , POSI + LAENGE )
+
+       STR_ALT  = INSERT(NTXT, STR_ALT , POSI - 1)
+       STR_ALTU = INSERT(NTXT, STR_ALTU, POSI - 1)
+      POSI = POS(VTXT, STR_ALTU, POSI + length(NTXT) )
+    END
+RETURN STR_ALT
+
+Get_Datatype_ID:
+
+SQLTYPE_ID = Arg(1)
+
+rexx_sqltype.0   = 32
+REXX_SQLTYPE.1   = "384 DATE               10 "
+REXX_SQLTYPE.2   = "388 TIME                8 "
+REXX_SQLTYPE.3   = "392 TIMESTAMP          26 "
+REXX_SQLTYPE.4   = "396 DATALINK              "
+REXX_SQLTYPE.5   = "404 BLOB                  "
+REXX_SQLTYPE.6   = "408 CLOB                  "
+REXX_SQLTYPE.7   = "412 DBCLOB                "
+REXX_SQLTYPE.8   = "448 VARCHAR               "
+REXX_SQLTYPE.9   = "452 CHAR                  "
+REXX_SQLTYPE.10  = "456 LONGVARCHAR           "
+REXX_SQLTYPE.11  = "464 VARGRAPHIC            "
+REXX_SQLTYPE.12  = "468 GRAPHIC               "
+REXX_SQLTYPE.13  = "472 LONGVARGRAPHIC        "
+REXX_SQLTYPE.14  = "480 FLOAT                 "
+REXX_SQLTYPE.15  = "484 DECIMAL               "
+REXX_SQLTYPE.16  = "492 BIGINT             19 "
+REXX_SQLTYPE.17  = "496 INTEGER            10 "
+REXX_SQLTYPE.18  = "500 SMALLINT            5 "
+REXX_SQLTYPE.19  = "904 ROWID                 "
+REXX_SQLTYPE.20  = "908 VARBINARY             "
+REXX_SQLTYPE.21  = "912 BINARY                "
+REXX_SQLTYPE.22  = "916 BLOB_FILE             "
+REXX_SQLTYPE.23  = "920 CLOB_FILE             "
+REXX_SQLTYPE.24  = "924 DBCLOB_FILE           "
+REXX_SQLTYPE.25  = "996 DECFLOAD              "
+REXX_SQLTYPE.26  = "988 XML                   "
+REXX_SQLTYPE.27  = "412 DBCLOB                "
+REXX_SQLTYPE.28  = "468 GRAPHIC               "
+REXX_SQLTYPE.29  = "2448 TIMESTAMP WITH TIMEZONE "
+REXX_SQLTYPE.30  = "960  BLOB_LOCATOR            "
+REXX_SQLTYPE.31  = "964  CLOB_LOCATOR            "
+REXX_SQLTYPE.32  = "968  DBCLOB_LOCATOR          "
+
+do ti = 1 to rexx_sqltype.0
+   If SQLTYPE_ID = word(rexx_sqltype.ti, 1) ,
+    | SQLTYPE_ID = word(rexx_sqltype.ti, 1) + 1 Then do
+      Return  Word(rexx_sqltype.ti, 2)
+    end
+end
+Return ''
+
+
+BIGINT_FUER_OOREXX_AUFBEREITEN:
+/* REXX auf WIN/Linunx braucht die db2ar.dll die nicht mehr       */
+/* gepflegt wird, BIGINT wird als Sting Char(8) angezeigt und ist */
+/* nicht verwendbar. Darum muss das aufbereiten manuell laufen    */
+/*  1 = 0100000000000000 muss umgedreht werden 0000000000000001   */
+/* -4 = FCFFFFFFFFFFFFFF wird FFFFFFFFFFFFFFFC                    */
+
+NUMERIC  DIGITS 20
+
+/* Hexwert     = c2x(Reverse(Arg(1))) */
+/* Return x2d(Hexwert, 16)            */
+
+Return x2d(c2x(Reverse(Arg(1))), 16)
+
+error: failure: syntax: novalue: halt:
+say SRC.3":"
+cstr = CONDITION('Condition')         /* Name of trapped condition*/
+istr = CONDITION('Instruction')       /* CALL or SIGNAL           */
+dstr = CONDITION('Description')       /* Description or null      */
+sstr = CONDITION('Status')            /* ON, OFF, or DELAY        */
+Say  'Condition  :'cstr
+say  'Instruction:'istr
+say  'Description:'dstr
+say  'Status     :'sstr
+
+If condition = 'HALT' Then do
+   Say SRC.3 "manually abort " condition condition('C')
+ End
+ Else Do
+   Say SRC.3 condition
+   condition = condition('C')
+   source = strip(sourceline(sigl),"B")
+   say copies('*',79)
+   say left('* 'condition' CONDITION ON LINE 'sigl' OF REXX 'rexx,78)'*'
+   say left('* 'source,78)'*'
+   say left('* RETURN CODE 'rc,78)'*'
+   say left('* 'errortext(rc),78)'*'
+   say copies('*',79)
+ End
+exit 100

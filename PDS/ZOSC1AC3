@@ -1,0 +1,141 @@
+/* REXX */
+/*******************************************************************/
+/*                                                                 */
+/* ProgramNAME      : ZOSC1AC3                                     */
+/* AUSRUF           : AUS Program                                  */
+/* AUTHER           : ULRICH BRAEUER  11.02.2018                   */
+/* FUNKTION         : ANZEIGE DB2/UDB INFORMATIONEN                */
+/*                                                                 */
+/*                                                                 */
+/* AUFRUF           : ZOSC1AC3 ARG1 ARG2 ARG3 ARG4 ARG5 ARG6       */
+/*                    ARG1 MUSS SEIN : SSID                        */
+/*                    ARG2 MUSS SEIN : LOCATION                    */
+/*                    ARG3 KANN SEIN : TS, TB, IX, VW,             */
+/*                                     SY, AL, PG, TR              */
+/*                    ARG4 KANN SEIN : CREATOR.NAME DES OBJEJCT    */
+/*                    ARG5 KANN SEIN : TBCREATOR.TABNAME           */
+/*                    ARG6 KANN SEIN : TABLESPACE NAME             */
+/*                    ARG7 KANN SEIN : DATABASE                    */
+/*   ERKLAERUNG ZU ARG4, ARG5, ARG6 |||                            */
+/*   ES IST MOEGLICH Z.B BEI DER FUNKTION IX ZU SAGEN, ICH WILL    */
+/*   ALLE INDEXES ZU EINER TABLE, ODER ZU EINEM TABLESPACE ODER    */
+/*   ZU EINER DATENBANK.                                           */
+/*   SINNFOLL IST ES AUCH ZU SAGEN, ICH WILL WISSEN, WELCHE PLAENE */
+/*   ODER PACKAGES AUF EINEN TABLESPCE GEHEN, Z.B. FUER REORGS     */
+/*   MIT ANSCHLIESENDEM REBIND. ||                                 */
+/*                                                                 */
+/*                                                                 */
+/*******************************************************************/
+
+MAXBLOBS  = '10K'
+ENV = "WIN"
+ENV = "TSO"
+USER = USERID()
+SYSCATS  = "SYSCAT"
+SYSIBMS  = "SYSIBM"
+SYSIBMA  = "SYSIBMADM"
+SYSPROCA = "SYSPROC"
+DSNRECON   = "N"
+SYSUID  = ""
+SYSPWD  = ""
+MAXRows  = 0
+TBADD_MULT = 1
+MAXFetch = "FETCH FIRST 100 ROWS ONLY"
+MAXFetch = ""
+Fetch_Data = "YES"
+
+If Env = 'TSO' Then do
+   X = MSG('OFF')
+   ADDRESS ISPEXEC 'VGET (DSNRECON) PROFILE'
+   ADDRESS ISPEXEC 'VGET (UDBTRACE) PROFILE'
+   ADDRESS ISPEXEC 'VGET (SYSIBMS) PROFILE'
+   ADDRESS ISPEXEC 'VGET (SYSCATS) PROFILE'
+   ADDRESS ISPEXEC 'VGET (SYSIBMA) PROFILE'
+   ADDRESS ISPEXEC 'VGET (SYSPROCA) PROFILE'
+   ADDRESS ISPEXEC 'VGET (MAXROWS)  PROFILE'
+   ADDRESS ISPEXEC 'VGET (MAXBLOBS) PROFILE'
+   ADDRESS ISPEXEC 'VGET (SYSUID)   PROFILE'
+   ADDRESS ISPEXEC 'VGET (SYSPWD)   PROFILE'
+   ADDRESS ISPEXEC  "VGET (ZSCREENW,ZSCREEND)"
+   ADDRESS ISPEXEC 'VGET (DDLSPUFI) PROFILE'
+   ADDRESS ISPEXEC 'VGET (ACOMMIT) PROFILE'
+   IF UDBTRACE = 'ON' THEN TRACE R
+   ELSE                    TRACE
+ End
+
+If MAXROWS > 0 then do
+   MAXFetch = "FETCH FIRST "MAXROWS" ROWS ONLY"
+   TBADD_MULT = MAXROWS
+ End
+
+DDLTEXT = ""
+DB_ENV  = "DSN"
+
+DB2_SSID       = ARG(1)  /* SSID      */
+DB2_EDITSQL    = ARG(2)  /* EDIT      */
+DB2_LOC        = ARG(3)  /* LOCATION  */
+lnr            = ARG(4)  /* TABLENR   */
+TABNR          = ARG(5)  /* TABLENR   */
+DB2_FUNKTION   = ARG(6)  /* FUNKTION  */
+SUCH1          = ARG(7)  /* OBJECT CREATOR/NAME */
+SUCH2          = ARG(8)  /* TABLE  CREATOR/NAME */
+SUCH3          = ARG(9)  /* TABLE  CREATOR/NAME */
+SUCH4          = ARG(10) /* TABLE  CREATOR/NAME */
+SUCH5          = ARG(11) /* TABLE  CREATOR/NAME */
+DB2_TABLESPACE = ARG(12)
+DB2_DATABASE   = ARG(13)
+DB2_STORAGEGRP = ARG(14)
+DB2_LIST_OBJ   = ARG(15)
+ISPFILE        = ARG(16)
+DB2Vers        = ARG(17) /* DB2 Function Level  */
+DB2CatL        = ARG(18) /* DB2 Catalog  Level  */
+DB2_WHERE_LIKE = ARG(19)
+
+/*  Do i = 1 to arg(); say i Arg(I); end ; */
+
+
+DB_env   = Substr(DB2Vers, 1, 3)
+DB_Vers  = Substr(DB2Vers, 4, 2)
+DB_Rel   = Substr(Db2Vers, 6, 1)
+DB_Mod   = Substr(DB2Vers, 7, 3)
+DBC_env  = Substr(DB2CatL, 1, 3)
+DBC_Vers = Substr(DB2CatL, 4, 2)
+DBC_Rel  = Substr(DB2CatL, 6, 1)
+DBC_Mod  = Substr(DB2CatL, 7, 3)
+
+MODUL   = "ZOSC2AC3"
+select
+       When DBC_Mod < 502 Then MODUL   = "ZOSC2AC3"
+       When DBC_Mod < 504 Then MODUL   = "ZOSC2AC3"
+       When DBC_Mod < 505 Then MODUL   = "ZOSC2AC3"
+       When DBC_Mod < 507 Then MODUL   = "ZOSC2AC3"
+       Otherwise               MODUL   = "ZOSC2AC3"
+ End
+
+DDLTEXT = ""
+
+PARM = " DB2_SSID       ," ,
+       " DB2_EDITSQL    ," ,
+       " DB2_LOC        ," ,
+       " lnr            ," ,
+       " TABNR          ," ,
+       " DB2_FUNKTION   ," ,
+       " SUCH1          ," ,
+       " SUCH2          ," ,
+       " SUCH3          ," ,
+       " SUCH4          ," ,
+       " SUCH5          ," ,
+       " DB2_TABLESPACE ," ,
+       " DB2_DATABASE   ," ,
+       " DB2_STORAGEGRP ," ,
+       " DB2_LIST_OBJ   ," ,
+       " ISPFILE        ," ,
+       " DB2Vers        ," ,
+       " DB2CatL        ," ,
+       " DB2_WHERE_LIKE  " ,
+       ""
+
+INTERPRET  "Call "MODUL PARM
+
+
+RETURN Result

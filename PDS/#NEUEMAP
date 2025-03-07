@@ -1,0 +1,95 @@
+%SG   Storegegroup
+%VO   Volumes (SG)
+%
+%DB   Database
+%TS   TableSpace
+%TP   Tablespart
+%TB   Table
+%IX   Index
+%IP   Indexpart
+%KT   Key Target.
+%PK   Primary Keys
+%FK   Foreign key
+%TG   Trigger
+%IS   Indexspace
+%VW   Views
+%MQT  Mat.Query Table
+%RT   Routines
+%SE   Sequences
+%AL   Alias
+%SY   Synonyme
+%PERM Perm/Mask
+%VAR  Variable
+%DT   Datatypes
+%CK   Checks
+%RO   Role
+%CO   Columns
+%TCO  Trusted Cont.
+%SC   Schema
+%UT   UTILITY
+%PDDL Pending DDL
+%PTS  Pending TS
+%PTB  Pending TB
+%DEP  Dependencies
+%RFS  RestFul Serv.
+%STF  Stats feedback
+%STP  Stats Profile
+%IMU  IX Memory Cont.
+%IXC  Index Cleanup
+%IC   ImageCopy
+%ICO  IC ONLY
+%LFIC Last Full IC
+%LIC  Last ICopy
+%PL   Plans
+%CID  Collection ID
+%PG   Packages
+%PGC  PACKAGE COPY
+%PGLI Packagelist
+%SR   Strings
+%ST   Statements
+%XO   XSD Objects
+%XMLS XML String
+%JAR  JAR Objects
+%IPN  IP-Names
+%LO   Locations
+%LU   LU Names
+%UN   User Names
+%ENV  ENV-VAR-Object
+%OBDS OBDS (RECOVER)
+%DBRM DBRM
+%ATW  AUTOTIMEWINDOW
+%LVU  Level Update
+%
+%
+%Permissions:
+%
+%
+%DBA  Database Auth
+%RA   Recource Auth
+%UA   User Auth.
+%SCA  Schema Auth
+%TBA  Table Auth.
+%RTA  Routine Auth.
+%SEA  Sequence Auth
+%PGA  Package Auth
+%PLA  Plan Austh
+%PRGA Prog Auth
+%
+%
+%PSQL Performance SQL
+%
+%
+%Stored Procedure :
+%
+%
+%BP   Bufferpool
+%THD  Threads
+%DDF  DDF Info
+%DISTS DISPLAY TS
+%DISA DIS ADVISORY
+%DISR DIS RESTRICT
+%DSINFO DS Memberlist
+%GRP    DS Group Info
+%ZPARM Zparm Info.
+%SSIDINFO INFO SSID
+

@@ -1,0 +1,59 @@
+Small program package to make DB2 catalog evaluations
+or to generate DDL for an object.
+ZOS from  91 and LUW from 97 are supported.
+
+You can always find the latest version at www.UBraeuer.de (DOWNLOAD)
+If you have any questions, please email: ulrich_braeuer§t-online.de
+
+
+
+
+start the tool          ex_______ LUWDB2
+
+
+#SSIDINF                control file for  SSID (Steplib, DBRMLIB,...)
+                        This file should be adapted for the individual
+                        subsystems
+
+Nachfolgendes bitte nicht ANDERN |||||||
+
+#STEULB5                Control file for  DB2 LUW V11.5
+#STEULB1                Control file for  DB2 LUW V11.1
+#STEULA5                Control file for  DB2 LUW V10.5
+#STEULA1                Control file for  DB2 LUW V10.1
+#STEUL97                Control file for  DB2 LUW V9.7
+#STEUZB1                Control file for  DB2 ZOS V11
+#STEUZA1                Control file for  DB2 ZOS V10
+#STEUZ91                Control file for  DB2 ZOS V9
+#STEUZ81                Control file for  DB2 ZOS V8
+
+LUWB5*                  REXX'e for DB2 LUW V11.5
+LUWB1*                  REXX'e for DB2 LUW V11.1
+LUWA5*                  REXX'e for DB2 LUW V10.5
+LUWA1*                  REXX'e for DB2 LUW V10.1
+LUW97*                  REXX'e for DB2 LUW V 9.7
+ZOSC1*                  REXX'e for DB2 ZOS V12
+ZOSB1*                  REXX'e for DB2 ZOS V11
+ZOSA1*                  REXX'e for DB2 ZOS V10
+ZOS91*                  REXX'e for DB2 ZOS V 9
+ZOS81*                  REXX'e for DB2 ZOS V 8
+RX*                     REXX'e for other (BATCH)
+
+current number  :
+
+AC1                     generate DDL with DB2LK_GENERATE_DDL (LUW)
+AC2                     generate DDL
+AC3                     generate list for overview panel
+200                     selection list overview
+210                     Manage the object list
+900                     Selection for branches
+905                     Write Panel and Skeleton
+906                     show Dynamic PANEL
+910                     create select/delete, ... statements
+911                     Execute Statement
+915                     generate  Utilety Delete Grant
+920                     create DDL Selection program calls AC2
+925                     Alter Object (DB, TS, TB, .... )
+930                     Explain and create Virtual Indexes too
+935                     create Performance SQL's
+940                     generate DSN1COPY

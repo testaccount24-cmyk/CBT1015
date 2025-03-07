@@ -1,0 +1,878 @@
+/* REXX */
+/*******************************************************************/
+/*                                                                 */
+/* ProgramNAME      : LUWB5915                                     */
+/* AUSRUF           : Procedure  x=LUWB5915(ssid,loc,ausw,obj)     */
+/* AUTHER           : ULRICH BRAEUER                               */
+/* FUNKTION         : AG : Build Statements (UTILITIES oder delete)*/
+/*                                                                 */
+/*                                                                 */
+/*******************************************************************/
+
+ENV        = "TSO"
+X          = MSG('OFF')
+USER       = USERID()
+ADDRESS ISPEXEC 'VGET (UDBTRACE) PROFILE'
+IF UDBTRACE = 'ON' THEN TRACE I
+ELSE                    TRACE
+RECLEN  = 4096
+ADDRESS ISPEXEC 'VGET (RECLEN) PROFILE'
+TRACKS  = 60
+ADDRESS ISPEXEC 'VGET (TRACKS) PROFILE'
+
+stmt       = ''
+ddltext    = ""
+
+ssid        = arg(1)
+location    = arg(2)
+auswkz      = arg(3)
+LUWTABLE    = arg(4)
+Do_All      = arg(5)
+EINGABE     = arg(6)
+EINGABE2    = arg(7)
+STATEMENT   = arg(8)
+object1     = arg(9)
+object2     = arg(10)
+object3     = arg(11)
+object4     = arg(12)
+object5     = arg(13)
+EDIT        = arg(14)
+Object_list = arg(15)
+LNR         = arg(16)
+DB2Vers     = arg(17)
+proclib     = arg(18)
+obj         = ""
+tablespace  = ""
+
+parse value DB2Vers with DBENV 4 DBVers 6 DBRel 8 DBMod
+parse value Object1 with DB2_CREATOR1 '.' DB2_NAME1
+parse value Object2 with DB2_CREATOR2 '.' DB2_NAME2
+parse value Object3 with DB2_CREATOR3 '.' DB2_NAME3
+parse value Object4 with DB2_CREATOR4 '.' DB2_NAME4
+parse value Object5 with DB2_CREATOR5 '.' DB2_NAME5
+
+
+crlf  = "0a0d"x
+red   = '01'x                              /* Assign colors to       */
+blue  = '02'x                              /*   Attribute bytes      */
+green = '03'x                              /*   found in the data    */
+white = '04'x
+in1   = '05'x
+in2   = '06'x
+in3   = '07'x
+uid   = '08'x
+pwd   = '09'x
+endin = '3a'x
+keyw  = '3b'x
+keytab.0 = 5
+keytab.1 = in1
+keytab.2 = in2
+keytab.3 = in3
+keytab.4 = uid
+keytab.5 = pwd
+maxlines = 0                               /* set max number of lines*/
+dyndata  = ''                              /* initialize data        */
+cmddata  = ''                              /* initialize data        */
+curline = 1                                /* set current line #     */
+USEDOT  = "N"                              /* set current line #     */
+
+select
+  when eingabe   = "REFRESH" Then do
+       CALL REFRESH_MQT
+   End
+  when eingabe   = "DROP" Then do
+       CALL Drop_Auswahl
+   End
+  when eingabe   = "REVOKE" Then do
+       CALL revoke_Auswahl
+   End
+  when eingabe   = "UP" Then do
+       CALL Update_DBM_CFG
+   End
+  when eingabe   = "PRUNE" Then Do
+       CALL Gen_Prune
+   End
+  when auswkz  = 'PERM' & object3  = "R"        Then Do
+       Select
+         when eingabe  = "ACTIVATE" Then Do
+              OK = NextSl("Alter Table " Object1)
+              OK = NextSl("      ACTIVATE ROW ACCESS CONTROL;")
+          End
+         when eingabe = "DEACTIVATE" Then Do
+              OK = NextSl("Alter Table " Object1)
+              OK = NextSl("      DEACTIVATE ROW ACCESS CONTROL;")
+          End
+         when eingabe  = "ENABLE" Then Do
+              OK = NextSl("Alter permission" Object1 "ENABLE; ")
+          End
+         when eingabe  = "DISABLE" Then Do
+              OK = NextSl("Alter permission" Object1 "DISABLE; ")
+          End
+         when eingabe  = "REGENERATE" Then Do
+              OK = NextSl("Alter permission" Object1 "REGENERATE; ")
+          End
+          Otherwise NOP
+         End
+   End
+  when auswkz  = 'PERM' & object3  = "C"        Then Do
+       Select
+         when eingabe  = "ACTIVATE" Then Do
+              OK = NextSl("Alter Table " Object1)
+              OK = NextSl("      ACTIVATE COLUMN ACCESS CONTROL; ")
+          End
+         when eingabe = "DEACTIVATE" Then Do
+              OK = NextSl("Alter Table " Object1)
+              OK = NextSl("      DEACTIVATE COLUMN ACCESS CONTROL; ")
+          End
+         when eingabe  = "ENABLE" Then Do
+              OK = NextSl("Alter MASK  " OBject1 "ENABLE;")
+          End
+         when eingabe  = "DISABLE" Then Do
+              OK = NextSl("Alter MASK  " OBject1 "DISABLE;")
+          End
+         when eingabe  = "REGENERATE" Then Do
+              OK = NextSl("Alter MASK  " OBject1 "REGENERATE;")
+          End
+          Otherwise NOP
+         End
+   End
+  when eingabe = 'GRANT'   & auswkz = 'DB'   Then do
+       CALL GRANT_SYS
+   End
+  when eingabe = 'GRANT'   & auswkz = 'TS'   Then do
+       CALL GRANT_TS
+   End
+  when eingabe = 'GRANT' ,
+     & (auswkz = 'TB' | auswkz = 'VW' | auswkz = 'NN' ) Then do
+       CALL GRANT_Table
+   End
+  when eingabe = 'GRANT'   & auswkz = 'SC'  Then do
+       Call Grant_Schema
+   End
+  Otherwise do
+       CALL Utility_Auswahl
+   End
+ End
+
+if anzcols = 0 THEN RETURN 12
+if EDIT = "YES" THEN Call Edit_Stmt  /* Anzeige Erwuenscht */
+
+
+Return Stmt
+
+Utility_Auswahl:
+
+drop sl.
+sl.0 = 0
+select
+  when eingabe = "RUNSTATS" Then do
+       OK = NextSl("Call ADMIN_CMD ('" )
+       OK = NextSl("   RUNSTATS ON TABLE " ,
+                       DB2_CREATOR1 || '.' || DB2_NAME1 )
+       OK = NextSl("   WITH DISTRIBUTION ON ALL COLUMNS")
+       OK = NextSl("   ALLOW WRITE ACCESS ")
+       OK = NextSl("   ') " )
+       OK = NextSl(" ; ")
+   End
+  when eingabe = "INTEGRITY" Then do
+       OK = NextSl("   SET INTEGRITY FOR " ,
+                       DB2_CREATOR1 || '.' || DB2_NAME1 )
+       OK = NextSl("   IMMEDIATE CHECKED ")
+       OK = NextSl(" ; ")
+   End
+   Otherwise Nop
+  end
+
+return
+
+Gen_Prune:
+
+parse value Object2 with DB2_CREATOR2 ':' DB2_NAME2
+drop sl.
+sl.0 = 0
+select
+  when eingabe2 = "LOGS" Then do
+       OK = NextSl("Call ADMIN_CMD ('" )
+       OK = NextSl("   PRUNE LOGFILE PRIOR TO " DB2_CREATOR2 )
+       OK = NextSl("   ') " )
+       OK = NextSl(" ; ")
+   End
+  Otherwise Do
+       OK = NextSl("Call ADMIN_CMD ('" )
+       OK = NextSl("   PRUNE HISTORY " DB2_CREATOR1 )
+       OK = NEXTSL("         WITH FORCE OPTION AND DELETE  ")
+       OK = NextSl("               ')" )
+       OK = NextSl(" ; ")
+   End
+  end
+
+return
+
+Update_DBM_CFG:
+
+drop sl.
+sl.0 = 0
+select
+  when auswkz  = "DBMCFG" Then do
+       OK = NextSl("Call ADMIN_CMD ('" )
+       OK = NextSl("   UPDATE DBM CFG USING " )
+       OK = NextSl("  "OBJECT1 OBJECT2)
+       OK = NextSl("   ') " )
+       OK = NextSl(" ; ")
+   End
+  when auswkz  = "DBCFG" Then do
+       OK = NextSl("Call ADMIN_CMD ('" )
+       OK = NextSl("   UPDATE DB CFG USING " )
+       OK = NextSl("  "OBJECT1 OBJECT2)
+       OK = NextSl("   ') " )
+       OK = NextSl(" ; ")
+   End
+   Otherwise Nop
+  end
+
+return
+
+Drop_Auswahl:
+
+drop sl.
+sl.0 = 0
+select
+  when auswkz = "BP"   THEN DO
+       OK = NextSl("DROP BUFFERPOOL "Object1 ";" )
+   End
+  when auswkz = "SG"   THEN DO
+       OK = NextSl("DROP STOGROUP   "Object1 ";" )
+   End
+  when auswkz = "TS"   THEN DO
+       OK = NextSl("DROP TABLESPACE "Object1 ";" )
+   End
+  when auswkz = "TB"   THEN DO
+       OK = NextSl("DROP TABLE "Object1 ";" )
+   End
+  when auswkz = "VW"   THEN DO
+       OK = NextSl("DROP VIEW  "Object1 ";" )
+   End
+  when auswkz = "IX"   THEN DO
+       OK = NextSl("DROP INDEX "Object1 ";" )
+   End
+  when auswkz = "TG"   THEN DO
+       OK = NextSl("DROP TRIGGER "Object1 ";" )
+   End
+  when auswkz = "NN"   THEN DO
+       OK = NextSl("DROP NICKNAME "Object1 ";" )
+   End
+  when auswkz = "FN"   THEN DO
+       OK = NextSl("DROP SPECIFIC FUNCTION " Object1 " ;"  )
+   End
+  when auswkz = "PR"   THEN DO
+       OK = NextSl("DROP SPECIFIC PROCEDURE " Object1 " ;"  )
+   End
+  when auswkz = "SE"   THEN DO
+       OK = NextSl("DROP SEQUENCE " Object1 " ;"  )
+   End
+  when auswkz = "EM"   THEN DO
+       OK = NextSl("DROP EVENT MONITOR " Object1 " ;"  )
+   End
+  when auswkz = "WR"   THEN DO
+       OK = NextSl("DROP WRAPPER " Object1 " ;"  )
+   End
+  when auswkz = "SV"   THEN DO
+       OK = NextSl("DROP SERVER  " Object1 " ;"  )
+   End
+  when auswkz = "WL"   THEN DO
+       OK = NextSl("DROP WORKLOAD " Object1 " ;"  )
+   End
+  when auswkz = "PG"   THEN DO
+       OK = NextSl("DROP PACKAGE  " Object1 " ;"  )
+   End
+  when auswkz = "AL"   THEN DO
+       OK = NextSl("DROP ALIAS    " Object1 " ;"  )
+   End
+  when auswkz = "SC"   THEN DO
+       OK = NextSl("DROP SCHEMA   " Object1 " RESTRICT  ; ")
+   End
+  when auswkz = "RO"   THEN DO
+       OK = NextSl("DROP ROLE     " Object1 " ;"  )
+   End
+  when auswkz = "FK"   THEN DO
+       OK = NextSl("ALTER TABLE  " Object1       )
+       OK = NextSl("       DROP FOREIGN KEY" Object2 ";"   )
+   End
+   Otherwise OK = NextSl('-- "DROP " Nicht erlaubt '  )
+  end
+
+return
+
+Revoke_Auswahl:
+
+drop sl.
+sl.0 = 0
+AW.1 = "SELECT"
+AW.2 = "INSERT"
+AW.3 = "UPDATE"
+AW.4 = "DELETE"
+AW.5 = "CONTROL"
+AW.6 = "ALTER"
+AW.7 = "INDEX"
+AW.8 = "REFERENCE"
+aw.0 = 8
+Do awi = 1 to aw.0
+   check = Substr(object3, awi, 1)
+   If Check = 'N' Then Iterate
+   OK = NextSl("REVOKE "aw.awi" ON TABLE "OBJECT2 )
+   OK = NextSl("       FROM "DB2_NAME1" BY " DB2_CREATOR1" ;")
+ End
+
+return
+
+REFRESH_MQT:
+
+drop sl.
+sl.0 = 0
+
+OK = NextSl("REFRESH TABLE "OBJECT1 )
+OK = NextSl("--      INCREMENTAL " )
+OK = NextSl("--      NOT INCREMENTAL " )
+OK = NextSl(";  " )
+
+return
+
+
+GRANT_Table:
+CR      = DB2_CREATOR1
+NM      = DB2_NAME1
+drop sl.
+sl.0 = 0
+
+All         = " "
+Select      = " "
+Insert      = " "
+Update      = " "
+Delete      = " "
+Alter       = " "
+Index       = " "
+Trigger     = " "
+References  = " "
+TYPE        = " "
+
+area.0 = 22
+area.1  = white"Grant Table/View/Nickname                    "
+area.2  = white"                   G WITH GRANT     "
+area.3  = white"                   other  YES       "
+area.4  = white"                                             "
+area.5  = white"                                              "
+area.6  = white" Grant "keyw"All        "in1|| All        || endin
+area.7  = white"       "keyw"Select     "in1|| Select     || endin
+area.8  = white"       "keyw"Insert     "in1|| Insert     || endin
+area.9  = white"       "keyw"Update     "in1|| Update     || endin
+area.10 = white"       "keyw"Delete     "in1|| Delete     || endin
+area.11 = white"       "keyw"Alter      "in1|| Alter      || endin
+area.12 = white"       "keyw"Index      "in1|| Index      || endin
+area.13 = white"       "keyw"Trigger    "in1|| Trigger    || endin
+area.14 = white"       "keyw"References "in1|| References || endin
+area.15 = white"                                             "
+area.16 = white"    "keyw"ON_TABLE      "in1"" object1
+area.17 =      "                                             "
+area.18 =      "                                             "
+area.19 = endin White "       UGR  U=USER G=GROUP R=ROLE      "
+area.20 = endin""white"     "keyw"TO_UGR "IN1""TYPE || endin " ",
+               keyw"TO "in1
+area.21 =      "                                             "
+area.22 =      "                                             "endin
+
+Call Anzeige_Dyn_Panel
+
+keyw    = "GRANT  "
+komma   = " "
+ende    = "N"
+GOPT    = "N"
+If All_Val <> "" Then do
+   If All_Val = "G" Then GOPT  = "Y"
+   Select_Val     = All_Val
+   Insert_Val     = All_Val
+   Update_Val     = All_Val
+   Delete_Val     = All_Val
+   Alter_Val      = All_Val
+   Index_Val      = All_Val
+   Trigger_Val    = All_Val
+   References_Val = All_Val
+ End
+If Select_Val <> "" Then do
+   If Select_Val = "G" Then GOPT  = "Y"
+   OK = NextSl(keyw komma "Select ")
+   komma = "," ; keyw    = "       " ;
+ End
+If Insert_Val <> "" Then do
+   If Insert_Val = "G" Then GOPT  = "Y"
+   OK = NextSl(keyw komma "Insert ")
+   komma = "," ; keyw    = "       " ;
+ End
+If Update_Val <> "" Then do
+   If Update_Val = "G" Then GOPT  = "Y"
+   OK = NextSl(keyw komma "Update ")
+   komma = "," ; keyw    = "       " ;
+ End
+If Delete_Val <> "" Then do
+   If Delete_Val = "G" Then GOPT  = "Y"
+   OK = NextSl(keyw komma "Delete ")
+   komma = "," ; keyw    = "       " ;
+ End
+If Alter_Val <> "" Then do
+   If Alter_Val = "G" Then GOPT   = "Y"
+   OK = NextSl(keyw komma "Alter ")
+   komma = "," ; keyw    = "       " ;
+ End
+If index_Val <> "" Then do
+   If index_Val = "G" Then GOPT   = "Y"
+   OK = NextSl(keyw komma "index ")
+   komma = "," ; keyw    = "       " ;
+ End
+If Trigger_Val <> "" Then do
+   If Trigger_Val = "G" Then GOPT = "Y"
+   OK = NextSl(keyw komma "Trigger ")
+   komma = "," ; keyw    = "       " ;
+ End
+If References_Val <> "" Then do
+   If References_Val = "G" Then GOPT = "Y"
+   OK = NextSl(keyw komma "References ")
+   komma = "," ; keyw    = "       " ;
+ End
+OK = NextSl("ON Table " ON_TABLE_VAL)
+Select
+   When TO_UGR_Val = 'U' Then grto = "USER "
+   When TO_UGR_Val = 'G' Then grto = "GROUP "
+   When TO_UGR_Val = 'R' Then grto = "ROLE "
+   Otherwise                  grto = ""
+ End
+
+OK = NextSl("TO       " grto || TO_Val )
+If GOPT = "Y" Then OK = NextSl("WITH GRANT OPTION ")
+OK = NextSl(";")
+
+Return
+
+Grant_TS:
+
+OW      = DB2_CREATOR1
+TS      = DB2_NAME1
+TYPE    = " "
+
+drop sl.
+sl.0 = 0
+
+area.0 = 14
+area.1  = white"                   G WITH GRANT     "
+area.2  = white"                   other            "
+area.3  = white"                                             "
+area.4  = white"Grant "keyw"USE       "IN1" "endin
+area.5  = white"      "keyw"OF TABLESPACE "in1 || TS
+area.6  =      "                                             "
+area.7  = endin White "       UGR  U=USER G=GROUP R=ROLE      "
+area.8  = endin""white"     "keyw"TO_UGR "IN1""TYPE || endin " ",
+               keyw"TO "in1
+area.9  =      "                                             "
+area.10 =      "                                             "
+area.11 =      "                                             "
+area.12 =      "                                             "
+area.13 = endin"                                             "
+area.14 =      "                                             "
+
+Call Anzeige_Dyn_Panel
+
+Opt   = ""
+komma = ""
+
+Select
+   When TO_UGR_Val = 'U' Then grto = "USER "
+   When TO_UGR_Val = 'G' Then grto = "GROUP "
+   When TO_UGR_Val = 'R' Then grto = "ROLE "
+   Otherwise                  grto = ""
+ End
+
+If USE_VAL <> "" Then do
+   Opt   = opt || komma || " USE "
+   If USE_VAL = "G" Then GOPT = "Y"
+   komma = ","
+ End
+
+If Opt <> "" Then do
+   OK = NextSl("Grant " opt " OF TABLESPACE "OF_Val )
+   OK = NextSl("   TO "grto TO_Val        )
+   If GOPT = "Y" Then OK = NextSl("WITH GRANT OPTION ")
+   OK = NextSl(";")
+ End
+
+Return
+
+
+Grant_Schema:
+
+SCH     = DB2_CREATOR1
+
+drop sl.
+sl.0 = 0
+
+area.0 = 10
+area.1  = white"                   G WITH GRANT     "
+area.2  = white"                   other            "
+area.3  = white"                                             "
+area.4  = white"Grant "keyw"CreateIN  "IN1" "endin
+area.5  = white"      "keyw"AlterIN   "IN1" "endin
+area.6  = white"      "keyw"DropIN    "IN1" "endin
+area.7  = white"      "keyw"ON Schema "in1 || SCH
+area.8  = endin""white"     "keyw"TO         "IN1"               "
+area.9  = endin"                                             "
+area.10 =      "                                             "
+
+Call Anzeige_Dyn_Panel
+
+Opt   = ""
+komma = ""
+If Create_Val <> "" Then do
+   Opt   = opt || komma || " CREATEIN"
+   If Create_Val = "G" Then GOPT = "Y"
+   komma = ","
+ End
+If Alter_Val <> "" Then do
+   Opt   = opt || komma || " ALTERIN"
+   If Alter_Val = "G" Then GOPT = "Y"
+   komma = ","
+ End
+If Drop_Val <> "" Then do
+   Opt   = opt || komma || " DROPIN"
+   If Drop_Val = "G" Then GOPT = "Y"
+   komma = ","
+ End
+If Opt <> "" Then do
+   OK = NextSl("Grant        " opt      )
+   OK = NextSl("   ON SCHEMA "ON_Val )
+   OK = NextSl("   TO "TO_Val        )
+   If GOPT = "Y" Then OK = NextSl("WITH GRANT OPTION ")
+   OK = NextSl(";")
+ End
+
+Return
+
+Grant_SYS:
+
+drop sl.
+sl.0    = 0
+
+TYPE    = " "
+
+area.0 = 18
+area.1  = white"                   G WITH GRANT              "
+area.2  = white"                   other                     "
+area.3  = white"                                             "
+area.4  = white"Grant  "keyw" DBADM      "IN1" "endin ,
+                     " "keyw" SECADM     "IN1" "endin ,
+                     " "keyw" SQLADM     "IN1" "endin ,
+                     " "keyw" WLMADM     "IN1" "endin
+area.5  = white"Grant  "keyw" ACCESSCTRL "IN1" "endin ,
+                     " "keyw" BINDADD    "IN1" "endin ,
+                     " "keyw" CONNECT    "IN1" "endin ,
+                     " "keyw" CREATETAB  "IN1" "endin
+area.6  = white"       "keyw" DATAACCESS "IN1" "endin ,
+                     " "keyw" EXPLAIN    "IN1" "endin ,
+                     " "keyw" LOAD       "IN1" "endin
+area.7  = white"       "keyw" IMPLICIT_SCHEMA "IN1" "endin
+area.8  = white"       "keyw" QUIESCE_CONNECT "IN1" "endin
+area.9  = white"       "keyw" CREATE_EXTERNAL_ROUTINE "IN1" "endin
+area.10 = white"       "keyw" CREATE_NOT_FENCED_ROUTINE "IN1" "endin
+area.11 = white"       "keyw" CREATE_SECURE_OBJECT    "IN1" "endin
+area.12 = white"                                             "
+area.13 = white"                                             "
+area.14 = endin White "       UGR  U=USER G=GROUP R=ROLE      "
+area.15 = endin""white"     "keyw"TO_UGR "IN1""TYPE || endin " ",
+               keyw"TO "in1
+area.16 =      "                                             "
+area.17 =      "                                             "
+area.18 = endin
+
+Call Anzeige_Dyn_Panel
+
+keyw    = "GRANT  "
+komma   = " "
+ende    = "N"
+GOPT    = "N"
+
+Select
+   When TO_UGR_Val = 'U' Then grto = "USER "
+   When TO_UGR_Val = 'G' Then grto = "GROUP "
+   When TO_UGR_Val = 'R' Then grto = "ROLE "
+   Otherwise                  grto = ""
+ End
+
+TO_Val = Strip(TO_Val)
+
+If ACCESSCTRL_Val <> "" Then do
+   If ACCESSCTRL_Val = "G" Then GOPT  = "Y"
+   OK = NextSl(keyw komma "ACCESSCTRL ")
+   OK = NextSl("ON DATABASE TO "grto " " TO_Val      )
+   OK = NextSl(" ; " )
+  End
+If BINDADD_Val <> "" Then do
+   If BINDADD_Val = "G" Then GOPT  = "Y"
+   OK = NextSl(keyw komma "BINDADD ")
+   OK = NextSl("ON DATABASE TO "grto " " TO_Val      )
+   OK = NextSl(" ; " )
+  End
+If CONNECT_Val <> "" Then do
+   If CONNECT_Val = "G" Then GOPT    = "Y"
+   OK = NextSl(keyw komma "CONNECT ")
+   OK = NextSl("ON DATABASE TO "grto " " TO_Val      )
+   OK = NextSl(" ; " )
+  End
+
+If CREATETAB_Val <> "" Then do
+   If CREATETAB_Val = "G" Then GOPT    = "Y"
+   OK = NextSl(keyw komma "CREATETAB ")
+   OK = NextSl("ON DATABASE TO "grto " " TO_Val      )
+   OK = NextSl(" ; " )
+ End
+If DATAACCESS_Val <> "" Then do
+   If DATAACCESS_Val = "G" Then GOPT  = "Y"
+   OK = NextSl(keyw komma "DATAACCESS ")
+   OK = NextSl("ON DATABASE TO "grto " " TO_Val      )
+   OK = NextSl(" ; " )
+ End
+If DBADM_Val <> "" Then do
+   If DBADM_Val = "G" Then GOPT  = "Y"
+   OK = NextSl(keyw komma "DBADM ")
+   OK = NextSl("ON DATABASE TO "grto " " TO_Val      )
+   OK = NextSl(" ; " )
+ End
+If SECADM_Val <> "" Then do
+   If SECADM_Val = "G" Then GOPT  = "Y"
+   OK = NextSl(keyw komma "SECADM ")
+   OK = NextSl("ON DATABASE TO "grto " " TO_Val      )
+   OK = NextSl(" ; " )
+ End
+If SQLADM_Val <> "" Then do
+   If SQLADM_Val = "G" Then GOPT  = "Y"
+   OK = NextSl(keyw komma "SQLADM ")
+   OK = NextSl("ON DATABASE TO "grto " " TO_Val      )
+   OK = NextSl(" ; " )
+ End
+If WLMADM_Val <> "" Then do
+   If SECADM_Val = "G" Then GOPT  = "Y"
+   OK = NextSl(keyw komma "WLMADM ")
+   OK = NextSl("ON DATABASE TO "grto " " TO_Val      )
+   OK = NextSl(" ; " )
+ End
+If IMPLICIT_SCHEMA_Val <> "" Then do
+   If IMPLICIT_SCHEMA_Val = "G" Then GOPT = "Y"
+   OK = NextSl(keyw komma "IMPLICIT_SCHEMA ")
+   OK = NextSl("ON DATABASE TO "grto " " TO_Val      )
+   OK = NextSl(" ; " )
+ End
+If EXPLAIN_Val <> "" Then do
+   If EXPLAIN_Val = "G" Then GOPT  = "Y"
+   OK = NextSl(keyw komma "EXPLAIN ")
+   OK = NextSl("ON DATABASE TO "grto " " TO_Val      )
+   OK = NextSl(" ; " )
+ End
+
+If LOAD_Val <> "" Then do
+   If LOAD_Val = "G" Then GOPT      = "Y"
+   OK = NextSl(keyw komma "LOAD ")
+   OK = NextSl("ON DATABASE TO "grto " " TO_Val      )
+   OK = NextSl(" ; " )
+ End
+If QUIESCE_CONNECT_Val <> "" Then do
+   If QUIESCE_CONNECT_Val = "G" Then GOPT = "Y"
+   OK = NextSl(keyw komma "QUIESCE_CONNECT ")
+   OK = NextSl("ON DATABASE TO "grto " " TO_Val      )
+   OK = NextSl(" ; " )
+ End
+If CREATE_EXTERNAL_ROUTINE_Val <> "" Then do
+   If CREATE_EXTERNAL_ROUTINE_Val = "G" Then GOPT = "Y"
+   OK = NextSl(keyw komma "CREATE_EXTERNAL_ROUTINE ")
+   OK = NextSl("ON DATABASE TO "grto " " TO_Val      )
+   OK = NextSl(" ; " )
+ End
+If CREATE_NOT_FENCED_ROUTINE_Val <> "" Then do
+   If CREATE_NOT_FENCED_ROUTINE_Val = "G" Then GOPT = "Y"
+   OK = NextSl(keyw komma "CREATE_NOT_FENCED_ROUTINE ")
+   OK = NextSl("ON DATABASE TO "grto " " TO_Val      )
+   OK = NextSl(" ; " )
+ End
+If CREATE_SECURE_OBJECT_Val <> "" Then do
+   If CREATE_SECURE_OBJECT_Val = "G" Then GOPT = "Y"
+   OK = NextSl(keyw komma "CREATE_SECURE_OBJECT ")
+   OK = NextSl("ON DATABASE TO "grto " " TO_Val      )
+   OK = NextSl(" ; " )
+ End
+
+
+Return
+
+Anzeige_Dyn_Panel:
+
+Zeile = 0
+DROP ausgabe.
+ausgabe.0 = 0
+MaxLines = area.0
+curline = 1                                /* set current line #     */
+dyndata  = ""
+ADDRESS ISPEXEC  "VGET (ZSCREENW,ZSCREEND)"
+Do ai = 1 to area.0
+   dyndata = dyndata || Left(area.ai, ZSCREENW, ' ')
+ end
+dyndata = dyndata || endin
+dynarea = substr(dyndata,1+(curline-1)*ZSCREENW) /*set dyn var  */
+dynarea = dyndata
+
+MaxScreenLines = ZSCREEND-5
+dyndata_len = Length(dyndata)
+trenner = in1
+START   = Pos(keyw, dyndata, 1)
+If START  < 1 Then START = 1
+DYNPOS  = START + 1
+Do ki = 1 to keytab.0
+   Found    = Pos(keytab.ki, dyndata, START )
+   If Found > 0  Then Do
+      SELECT
+        When  DYNPOS =  START + 1   Then dynpos = Found + 1
+        When  Found  <  DYNPOS      Then dynpos = Found + 1
+        Otherwise NOP
+       END
+    End
+ End
+znr     = 1
+
+If EnterBack = "Y" Then PFTASTEN = "ENTER=GO PF03=RETURN PF04=Cancel"
+else                    PFTASTEN = "      PF03=GO    PF04=Cancel "
+
+Do Until disprc > 0
+
+  start   = 1+(curline-1)*ZSCREENW
+  dynarea = substr(dyndata, Start)
+  size = length(dynarea)                   /* Set a scalar variable  */
+  ADDRESS ISPEXEC "DISPLAY PANEL(PDYNPNL1)"
+  MaxScreenLines = DYNDPTH
+  DynArea_len = MaxScreenLines*ZSCREENW
+  dyndata1= Substr(dyndata, 1,  1+(curline-1)*ZSCREENW-1)
+  start   = Length(dyndata1) + Length(dynarea) + 1
+  Dyndata = Dyndata1 || dynarea || Substr(Dyndata, start)
+  Eingabe = dynarea
+
+  disprc = rc                              /* save return code       */
+  ADDRESS ISPEXEC "VGET (ZVERB,ZSCROLLA,ZSCROLLN, ZSCROLLD) "
+  ADDRESS ISPEXEC "VGET (ZXSMAX, ZXSMIN) "
+  dynrc = rc
+  SELECT                                   /* Process scrolling      */
+    When(zverb  = 'UP')   Then Do          /* Scroll up              */
+     If zscrolla = 'MAX' Then Do           /*  if scroll was max     */
+        curline = 1                       /*    scroll to top       */
+      End
+     Else Do                               /*  else a number is known*/
+      curline = curline - MaxScreenLines        /* (max is bottom)   */
+      if curline < 1 then Curline = 1
+      End
+     End
+    When(zverb  = 'DOWN') Then Do          /* Scroll down            */
+     If zscrolla = 'MAX' Then Do           /*  if scroll was max     */
+      curline = maxlines                   /*    scroll to bottom    */
+     end
+     Else do                               /*  else a number is known*/
+      curline = curline + MaxScreenLines        /* (max is bottom)   */
+      If curline > maxlines Then Curline = maxlines
+      if DynArea_len >= dyndata_len Then Do  /* NUR EINE SEITE */
+         curline = 1
+       End
+      end
+     end
+    Otherwise;                      /* could use left & right too    */
+  End
+  if dynrc > 8 then Do
+     say "Display RC="RC
+     say "ZEDSMSG="ZEDSMSG
+     say "ZERRLM="ZERRLM
+     say "ZERRMSG="ZERRMSG
+     say "ZERRSM="ZERRSM
+     say rc object1
+   End
+
+  DO While Length(eingabe) > 0
+     Zeile = zeile + 1
+     trenner = in1
+     FoundL = 0
+     Do ki = 1 to keytab.0
+        Found    = Pos(keytab.ki, eingabe, 1)
+        If Found = 0 Then Iterate
+        Select
+          When FoundL = 0 Then Do
+               Trenner = keytab.KI
+               FoundL  = Found
+           End
+          When FoundL > 0 & Found < FoundL Then Do
+               Trenner = keytab.KI
+               FoundL  = Found
+           End
+          Otherwise NOP
+         End
+      End
+
+     /*    Keyword Finden   */
+     epos     = Pos(keyw, eingabe, 1)
+     xpos     = Pos(Trenner, eingabe, epos+1)
+     elen     = xpos - epos -1
+     If    elen < 0 Then Leave
+     Keyword  =  Substr(eingabe, epos+1, elen  )
+     Keyword  =  Word(Keyword, 1)
+
+     /*    EINGABE Finden   */
+     epos    = Pos(Trenner, eingabe, 1)
+     if epos < 1 then leave
+     xpos     = Pos(endin, eingabe, epos+1)
+     elen     = xpos - epos -1
+     if elen < 1 then leave
+     evalue   = Substr(eingabe, epos+1, elen  )
+     eingabe  = Substr(eingabe, xpos+ 1)
+
+     Interpret Strip(Keyword) || "_VAL" "= evalue"
+   End
+   If PF   = 'PF03'               THEN LEAVE
+   If PF   = 'PF04'               THEN EXIT 4
+   If RESP = "ENTER" & EnterBack = "Y" Then return
+End                                        /* End of display loop    */
+
+Return
+
+NextSl: Procedure Expose sl.
+ If Datatype(sl.0) /= "NUM" Then Do
+    Drop Sl.
+    Sl.0 = 0
+  End
+ sl.0   = sl.0 + 1
+ sli    = sl.0
+ sl.sli = Arg(1)
+return 0
+
+Edit_Stmt:
+
+DSNAME = LUWB5900("LUWB5","DSNAME", "STMT", LNR)
+LRECL   = RECLEN
+
+IF LISTDSI(DSNAME) = 0 THEN do
+    ADDRESS "TSO" "ALLOC F(SELDD) DA("DSNAME") SHR"
+ end
+else do
+    ADDRESS "TSO" "ALLOC F(SELDD) DA("DSNAME") NEW CATALOG ,
+          SPACE("TRACKS","TRACKS") TRACKS REUSE,
+          LRECL("RECLEN") UNIT(SYSDA)"
+ end
+
+
+ADDRESS "TSO" "EXECIO * DISKW SELDD ( STEM SL. FINIS"
+ADDRESS "TSO" "FREE FI(SELDD)"
+
+ok   = LUWB5911(SSID,     ,
+                LOCATION,  ,
+                EINGABE,   ,
+                OBJ,       ,
+                DSNAME,    ,
+                LNR   )
+
+return

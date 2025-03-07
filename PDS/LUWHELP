@@ -1,0 +1,389 @@
+/* REXX */
+/*******************************************************************/
+/*                                                                 */
+/* ProgramNAME      : LUWHELP                                      */
+/* AUSRUF           : AUS ISPF                                     */
+/* FUNKTION         : HILFE Anzeigen                               */
+/*                                                                 */
+/*******************************************************************/
+
+ENV = "TSO"
+X = MSG('OFF')
+"DELSTACK"
+USER = USERID()
+
+SIGNAL ON FAILURE
+SIGNAL ON ERROR
+SIGNAL OFF FAILURE
+SIGNAL OFF ERROR
+
+art     = arg(1)                       /* LUW / ZOS             */
+lnr     = arg(2)                       /* table nummer          */
+tabnr   = arg(3)                       /* table nummer          */
+auswahl = arg(4)                       /* TS/TB/VW/IX/..        */
+ausw1   = arg(5)                       /* HILFE FUER azeile     */
+ausw2   = arg(6)                       /* HILFE FUER hzeile     */
+Anzeige = arg(7)                       /* Columns               */
+Version = arg(8)                       /* DB2 Version           */
+helpzeile = ausw1 ausw2
+auswahl_O = Auswahl
+SGR       = "*"
+
+select
+  When Version <> "" Then do
+       CallPGM = Strip(Substr(Version, 1, 5)) || "900"
+       PGMPARM = Strip(Substr(Version, 1, 5)) || "210"
+   End
+  When art = "ZOS" Then do
+       CallPGM = "ZOSC1900"
+       PGMPARM = "ZOSC1210"
+   End
+  When art = "LUW" Then do
+       CallPGM = "LUWB5900"
+       PGMPARM = "LUWB5210"
+   End
+  Otherwise Do
+       CallPGM = "LUWB1900"
+       PGMPARM = "LUWB1210"
+   End
+ End
+
+
+Anwendungs_anzeige = auswahl
+UZeile = "Hilfe fuer "art " auswahl="auswahl
+
+AZeile = ""
+drop help_tab.
+help_tab.0  = 0
+
+HELPTAB        = "HELP"tabnr
+address ispexec  'TBERASE 'HELPTAB
+If RC >  8  Then do
+   say "Error on TBERASE RC="RC "TABLE="HELPTAB
+ End
+address ispexec  'TBOPEN 'HELPTAB
+if rc /= 0 then Do
+   address ispexec 'TBCREATE 'HELPTAB' NAMES(LZEILE,SORTKEY)'
+ End
+
+Do helpI = 1 to Words(helpzeile)
+   auswahl = Word(helpzeile, helpi)
+
+   CallString = CallPGM PGMPARM "," "CHKFKAW" "," auswahl"," lnr
+   Interpret "Call " CallString
+   If Result = "" Then  AWOK = Auswahl "-NW" Auswahl
+    Else                AWOK = Result
+
+   HidenFunktions = 'N'
+   If Length(AWOK) < 1 Then Do
+      AWOK = Hidden_Functions(auswahl)
+      If Length(AWOK) < 1 Then Iterate
+      HidenFunktions = 'Y'
+    End
+   Do While length(AwOK) > 0
+      parse value AwOk with auswkz '-NW' ,
+                            auswtext '-NW' ,
+                            AwOK
+
+      sortkey = Left(auswkz, 10, ' ')
+      auswkz  = Left(auswkz, 10, ' ')
+      lzeile  = auswkz auswtext
+      call ADD_TABLE
+      If HidenFunktions = 'N' Then Leave
+    End
+
+ End
+
+Call Anzeige_Columns
+
+Do Auswi = 1 to anz_col.0
+   If Word(Anz_col.Auswi, 1) = art ,
+    & Word(Anz_col.Auswi, 2) = Anwendungs_anzeige Then do
+      lzeile = " "
+      call ADD_TABLE
+      lzeile = "Columns in der !bersicht "
+      call ADD_TABLE
+      lzeile = " "
+      call ADD_TABLE
+      Do coli = 1 to Anz_col.Auswi.0
+         lzeile = "       " || Anz_col.Auswi.coli
+         call ADD_TABLE
+       End
+    End
+ End
+
+
+If art = "ZOS" Then do
+      sortkey = Left("Z"   , 10, 'Z')
+      lzeile = "        "   "                   "     ;call ADD_TABLE ;
+      text = "--- Aufruf ueber die Commandline ---"
+      lzeile = "        "   text                      ;call ADD_TABLE ;
+      lzeile = "        "   "                   "     ;call ADD_TABLE ;
+      sortkey = Left("9"   , 10, '9')
+      lzeile = "EXPLAIN "   "EXPLAIN Statement auch mit Virtual Index"
+               call ADD_TABLE ;
+      lzeile = "DSNTIAD "   "JCL Fuer DSNTIAD"        ;call ADD_TABLE ;
+      lzeile = "DSNTIAUL"   "JCL Fuer DSNTIAUL"       ;call ADD_TABLE ;
+      lzeile = "DSNTEP2 "   "JCL Fuer DSNTEP2"        ;call ADD_TABLE ;
+      lzeile = "DSNTEP4 "   "JCL Fuer DSNTEP4"        ;call ADD_TABLE ;
+      lzeile = "DSNJU003"   "JCL Fuer DSNJU003"       ;call ADD_TABLE ;
+      lzeile = "DSNJU004"   "JCL Fuer DSNJU004"       ;call ADD_TABLE ;
+      lzeile = "DSN1LOGP"   "JCL Fuer DSN1LOGP"       ;call ADD_TABLE ;
+      lzeile = "DSN1PRNT"   "JCL Fuer DSN1PRNT"       ;call ADD_TABLE ;
+      lzeile = "DSN1SDMP"   "DSN1SDMP Utility Job "   ;call ADD_TABLE ;
+      lzeile = "DIAGNOSE"   "DIAGNOSE online utility" ;call ADD_TABLE ;
+      lzeile = "SQLERR  "   "SQLCODES anzeigen      " ;call ADD_TABLE ;
+      lzeile = "SQLID   "   "Setzen SQLID (SQLID XXX)";call ADD_TABLE ;
+      lzeile = "OPT     "   "Options fur LUWDB2     " ;call ADD_TABLE ;
+      lzeile = "ZPARM   "   "ZPARM anzeigen         " ;call ADD_TABLE ;
+      lzeile = "EDIT    "   "EDIT anzeige im Editor " ;call ADD_TABLE ;
+      lzeile = "PSQL    "   "Performans SQL         " ;call ADD_TABLE ;
+ End
+
+
+address ISPEXEC 'TBSORT  'HELPTAB' FIELDS(SORTKEY)'
+address ispexec 'TBCLOSE 'HELPTAB
+CURSOR = 'CURSOR( )'
+CSRROW = 'CSRROW(1)'
+RETCODE = RC
+MESSAGE = 'MSG( )'
+ZTDSELS = 0
+ZTDTOP = 0
+LNR    = 1
+Auswahl = ""
+
+
+DO FOREVER
+   address ispexec  'TBOPEN 'HELPTAB
+   CURSOR = 'CURSOR(LZeile)'
+   CSRROW = 'CSRROW(1)'
+   address ISPEXEC 'TBTOP  'HELPTAB
+   address ISPEXEC 'TBSKIP 'HELPTAB' NUMBER('ZTDTOP')'
+   Call Search_TABLE
+   address ispexec 'TBDISPL 'HELPTAB' PANEL(PLUWOBJH)',
+                   MESSAGE CURSOR 'CSRROW('LNR')' ,
+                   'AUTOSEL(NO) POSITION(CRP)'
+   If rc > 4 then do
+      Say "*** Error on Display HELP RC="rc
+      Return
+    End
+   COMMAND = ZCMD
+
+   /* PF Tasten Pruefen  */
+   Select
+      WHEN SUBSTR(COMMAND,1,3) = "CAN"  THEN DO
+           Leave
+       end
+      When PF                  = 'PF03' THEN DO
+           Leave
+       end
+      When PF                  = 'PF04' THEN DO
+           Leave
+       end
+      Otherwise NOP
+     End
+    LZeile = Translate(LZeile)
+    if Word(LZeile, 1) = "S" THEN Do
+       Auswahl = Word(LZeile, 2)
+       Leave
+     End
+ End
+
+address ispexec 'TBCLOSE 'HELPTAB
+return Auswahl
+
+ADD_TABLE:
+
+LZEILE = "       " || LZEILE
+ADDRESS ISPEXEC 'TBADD 'HELPTAB
+return
+
+Search_TABLE:
+
+if ZTDSELS > 0 Then    LAUFNR = crp
+if OSGR <> SGR Then Do
+   ZTDTOP = 1
+ End
+OSGR  = SGR
+
+if SGR  = "" Then SGR  = "*"
+
+If SGR = "*" Then do
+   SCAVAR = "ALL"
+ End
+Else Do
+   SCAVAR = "SCAN"
+   ADDRESS ISPEXEC 'TBTOP 'HELPTAB
+   ADDRESS ISPEXEC 'TBVCLEAR 'HELPTAB
+   IF POS("*", SGR)  = 0 THEN SGR  = SGR  || "*"
+   LZEILE  = "       " || SGR
+   ADDRESS ISPEXEC 'TBSARG   'HELPTAB ,
+           ' NAMECOND(LZEILE,EQ)'
+ End
+
+ADDRESS ISPEXEC
+Return
+
+Hidden_Functions:
+
+AWOK = ""
+fkaw.0    = 75
+fkaw.1    = "PART    Tablespace Partition   SNAPTBSP_PART  "
+fkaw.2    = "TBSP    SNAP Tablespace Info   SNAPTBSP       "
+fkaw.3    = "TSPU    Tablespace UTILIZATION TBSP_UTILIZATION "
+fkaw.4    = "MTSP    MON Tablespace Utilization MON_TBSP_UTILIZATION "
+fkaw.5    = "HIT     Bufferpool Hit Ratio     BP_HITRATIO            "
+fkaw.6    = "RIO     Bufferpool Read  IO      BP_READ_IO             "
+fkaw.7    = "WIO     Bufferpool Write IO      BP_WRITE_IO            "
+fkaw.8    = "MONBP   Monitor BP Utilization   MON_BP_UTILIZATION     "
+fkaw.9    = "SNBP    Snap Bufferpool          SNAPBP                 "
+fkaw.10   = "SNBPP   Snap Bufferpool Part     SNAPBP_PART            "
+fkaw.11   = "TC      Table Compare (Vergleichen zweier Tabellen)     "
+fkaw.12   = "ATI     Table Admininfo          ADMINTABINFO           "
+fkaw.13   = "STAB    Snap  Table              SNAPTAB                "
+fkaw.14   = "SRO     Table Reorg Info         SNAPTAB_REORG          "
+fkaw.15   = "COMP    Index Compress Info  ADMIN_GET_INDEX_COMPRESS_INFO"
+fkaw.16   = "IXI     Index Info           ADMIN_GET_INDEX_INFO       "
+fkaw.17   = "OPT     Wrapper Option           WRAPOPTIONS            "
+fkaw.18   = "SO      Server  Option           SERVEROPTIONS          "
+fkaw.19   = "FP      Function Parms           FUNCPARMS              "
+fkaw.20   = "FD      Function Dependency      FUNCDEP                "
+fkaw.21   = "APPL    Application Detail       SNAPAPPL               "
+fkaw.22   = "LG      List User Group                                 "
+fkaw.23   = "PT      Primary Table                                   "
+fkaw.24   = "UP      Update DB CFG oder DBM CFG                      "
+fkaw.25   = "DIS     Display object  (USE, LOCKS)                    "
+fkaw.26   = "DDL     DDL fuer Object erzeugen                        "
+fkaw.27   = "HDDL    DDL fuer Object und untergeordnete erzeugen     "
+fkaw.28   = "DDLE    HDDL mit Auswahl Aenderung                      "
+fkaw.29   = "RS      Runstats                                        "
+fkaw.30   = "SETINT  SET INTEGRITY IMMEDIATE CHECKED                 "
+fkaw.31   = "RUNSTATS RUNSTATS Tablespace oder Index                 "
+fkaw.32   = "REORG   Reorg TABLESPCE oder Index                      "
+fkaw.33   = "REBUILD Rebuild Index                                   "
+fkaw.34   = "COPY    Image Copy Tablespace                           "
+fkaw.35   = "REPORT  REPORT Recovery                                 "
+fkaw.36   = "REPORT  REPORT TABLESPACESET                            "
+fkaw.37   = "UNLOAD  UNLOAD Tablespace oder Table                    "
+fkaw.38   = "CHECK   Check Index oder Check Data                     "
+fkaw.39   = "QUIESCE QUIESCE Tablespace                              "
+fkaw.40   = "DSNTEP2 JOB FUER DSNTEP2                                "
+fkaw.41   = "DSNTEP4 JOB FUER DSNTEP4                                "
+fkaw.42   = "DSNTIAD JOB FUER DSNTIAD                                "
+fkaw.43   = "DSNTIAUL JOB FUER DSNTIAUL                              "
+fkaw.44   = "RECOVER  JOB FUER Recover tablespace                    "
+fkaw.45   = "MODRECOVER MODIFY RECOVERY                              "
+fkaw.46   = "MODHIST    MODIFY History                               "
+fkaw.47   = "MODIFY     HISTORY   Modify History Job                 "
+fkaw.48   = "MODIFY     Recovery  Modify Recovery Job                "
+fkaw.49   = "MODIFY     Recovery ALL  Bereinigen SYSCOPY und SYSLGRNX"
+fkaw.50   = "MODIFY     Eingabe (Modfy Recovery ALL)                 "
+fkaw.51   = "START      Start DB / TS / IX                           "
+fkaw.52   = "STOP       Stop  DB / TS / IX                           "
+fkaw.53   = "PRUNE      Prune History ODER Prune LOGS  Prune Logfiles"
+fkaw.54   = "MERGECOPY  Merge Incremental to Full Copy               "
+fkaw.55   = "COPYTOCOPY Neue Image Copy aus Image Copy erstellen     "
+fkaw.56   = "ALTER      Alter Object und generate a JOB              "
+fkaw.57   = "ICINFO     Header Satz eines Imagecopy  (JOB)           "
+fkaw.58   = "SELECT     Oeffnet eine SQL (SELECT)                    "
+fkaw.59   = "INSERT     Oeffnet eine SQL (INSERT)                    "
+fkaw.60   = "UPDATE     Oeffnet eine SQL (UPDATE)                    "
+fkaw.61   = "DELETE     Oeffnet eine SQL (DELETE)                    "
+fkaw.62   = "TRUNCATE   Truncate Table                               "
+fkaw.63   = "COUNT      Oeffnet eine SQL (COUNT )                    "
+fkaw.64   = "GRANT      Grant user to an Object )                    "
+fkaw.65   = "DOC        COMPONENT  aus XSROBJECTCOMPONENTS           "
+fkaw.66   = "DOCU       COMPONENT  aus XSROBJECTCOMPONENTS ASCII 2",
+            "EBCDIC"
+fkaw.67   = "DTG        dependent Trigger                            "
+fkaw.68   = "DIX        dependent Index                              "
+fkaw.69   = "DCO        dependent Column                             "
+fkaw.70   = "DRT        dependent Stored procedures / Function       "
+fkaw.71   = "DMQT       dependent Materialized Query Table           "
+fkaw.72   = "DVW        dependent View                               "
+fkaw.73   = "DPERM      dependent Perm/Mask                          "
+fkaw.74   = "BR         BROWSE TABLE                                 "
+fkaw.75   = "REFRESH    REFRESH MQT                                 "
+
+If auswahl_O   = "THD" Then Do
+   fkaw.0 = fkaw.0 + 1; fki = fkaw.0 ;
+   fkaw.fki  = "DIS        DISPLAY THREAD                           "
+   fkaw.0 = fkaw.0 + 1; fki = fkaw.0 ;
+   fkaw.fki  = "CAN        CANCEL THREAD                            "
+   fkaw.0 = fkaw.0 + 1; fki = fkaw.0 ;
+   fkaw.fki  = "RESET      RESET INDOUBT THREAD                     "
+   fkaw.0 = fkaw.0 + 1; fki = fkaw.0 ;
+   fkaw.fki  = "RECOVER    RECOVER INDOUBT/POSTPONED THREAD         "
+
+ End
+
+Do AWI = 1 to fkaw.0
+   If Word(fkaw.awi, 1) = Arg(1) Then Do
+      AWOK = AWOK  ||  Word(fkaw.awi, 1) || "-NW"
+      AWOK = AWOK SubWord(fkaw.awi, 2) || "-NW"
+/*    return AWOK */
+    End
+ End
+
+return AWOK
+
+Anzeige_Columns:
+
+AWOK = ""
+anz_Col.0  = 4
+anz_col.1     = "LUW TS "
+anz_col.1.0   = 11
+anz_col.1.1   = "TBSPACE      Tablespace Name                  "
+anz_col.1.2   = "ID           Tablespace ID                    "
+anz_col.1.3   = "TY           TYPE S=SMS D=DMS                 "
+anz_col.1.4   = "DT           DATATYPE L=LARGE, ...            "
+anz_col.1.5   = "EXTS         Extend size                      "
+anz_col.1.6   = "PGSZ         Page Size                        "
+anz_col.1.7   = "BPID         Bufferpool ID                    "
+anz_col.1.8   = "Status       Tablespace Status (NORMAL iss schoen) "
+anz_col.1.9   = "USED         Bei DMS Benutzter Speicher in %       "
+anz_col.1.10  = "AS           Automatc Storage                      "
+anz_col.1.11  = "AR           Automatc Resize                       "
+
+anz_col.2     = "LUW TB "
+anz_col.2.0   = 9
+anz_col.2.1   = "TBName       Tablename                        "
+anz_col.2.2   = "TY           Table Type                       "
+anz_col.2.3   = "TBSPACE      Tablespace                       "
+anz_col.2.4   = "PCS          Parent, Children, Selfrefs       "
+anz_col.2.5   = "CARD         Anzahl Rows                      "
+anz_col.2.6   = "LASTUSED     Table wurde zuletzt benutzt (DATUM) "
+anz_col.2.7   = "S            Table Status C=Check Integrity, X=INOP"
+anz_col.2.8   = "RS           Runstats                         "
+anz_col.2.9   = "SETINT       SET INTEGRITY IMMEDIATE CHECKED  "
+
+anz_col.3     = "LUW VW "
+anz_col.3.0   = 4
+anz_col.3.1   = "View Name    Name der View                    "
+anz_col.3.2   = "VAL          Valid Y/N                        "
+anz_col.3.3   = "CH           VIEWCHECK Y/N                    "
+anz_col.3.4   = "Objects      Objekte die verwendet werden Function, .."
+
+anz_col.4     = "LUW TBS"
+anz_col.4.0   = 15
+anz_col.4.1   = "TBNAME       Table Name                       "
+anz_col.4.2   = "AV           Available  wenn nein dann kaputt "
+anz_col.4.3   = "IT           Index Type balnk oder 2          "
+anz_col.4.4   = "RP           Reorg Pending                    "
+anz_col.4.5   = "RO           Read Access Only (nur lesen)     "
+anz_col.4.6   = "LE           No Load restart                  "
+anz_col.4.7   = "IB           Index require Rebuild            "
+anz_col.4.8   = "LR           Large Rids                       "
+anz_col.4.9   = "LS           Large Slots                      "
+anz_col.4.10  = "RS           Statstype (U=USER, ...)          "
+anz_col.4.11  = "NR           Anzahl ge{nderte spaten (alter Drop) "
+anz_col.4.12  = "IR           Implace Reorg Status             "
+anz_col.4.13  = "LS           Load Status                      "
+anz_col.4.14  = "TB           Tabellen Status X=kaputt, C=Integrety"
+anz_col.4.15  = "ST           Status allgeimen OK alles paletti"
+
+
+return
+
+error: failure: syntax: novalue:
+return

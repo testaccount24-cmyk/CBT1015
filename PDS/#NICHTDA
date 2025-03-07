@@ -1,0 +1,157 @@
+/* REXX */
+/*******************************************************************/
+/*                                                                 */
+/* ProgramNAME      : LUWX1200 / ZOSX1200                          */
+/* AUSRUF           : AUS ISPF                                     */
+/* AUTHER           : ULRICH BRAEUER                               */
+/* FUNKTION         : Meldung dass die version nicht vorhanden ist */
+/*                                                                 */
+/*                                                                 */
+/*******************************************************************/
+
+"DELSTACK"
+ENV      = "TSO"
+X        = MSG('OFF')
+USER     = USERID()
+SMFID    = MVSVAR('SYSNAME')
+
+ADDRESS ISPEXEC "CONTROL ERRORS RETURN"
+
+ADDRESS ISPEXEC 'VGET (UDBAUSW2 UDBOBJ UDBTRACE) PROFILE'
+IF UDBTRACE = 'ON' THEN TRACE I
+ELSE                    TRACE
+
+DSNRECON   = "N"
+ADDRESS ISPEXEC 'VGET (DSNRECON) PROFILE'
+
+
+ssid     = arg(1)
+location = arg(2)
+lnr      = arg(3)
+tabnr    = arg(4)
+db2vers  = arg(5)
+proclib  = arg(6)
+auswahl  = UDBAUSW2
+Object   = UDBOBJ
+editsql  = ""
+STATEMENT= ""
+
+parse value db2vers with DB_ENV 4 DB_Vers 6 DB_Rel 8 DB_Mod
+
+IF DB_ENV = "DSN" THEN ENV = "z/OS"
+ELSE                   ENV = "LUW "
+Call Init_Menu
+
+DO FOREVER
+   ADDRESS ISPEXEC 'VGET (UDBTRACE) PROFILE'
+   IF UDBTRACE = 'ON' THEN TRACE I
+   ELSE                    TRACE
+
+   dynarea = substr(dyndata,1+(curline-1)*80) /*set dynamic variable */
+   size = length(dynarea)                     /*Set scalar variable  */
+   ADDRESS ISPEXEC "DISPLAY PANEL(PDYNPNL1)"
+   COMMAND = ZCMD
+   ADDRESS ISPEXEC "VGET (ZVERB,ZSCROLLA,ZSCROLLN)"
+   MaxScreenLines = DYNDPTH
+
+   /* PF Tasten Pruefen  */
+   Select
+      When zverb  = 'UP'   Then Do     /* Scroll up              */
+           If zscrolla = 'MAX' Then Do          /*  if scroll was max */
+              curline = 1                       /*    scroll to top   */
+           End
+           Else Do
+              curline = curline - MaxScreenLines    /* (max bottom)   */
+              if curline < 1 then Curline = 1
+            End
+           ZCMD    = ""
+           Iterate
+       End
+      When zverb  = 'DOWN'  Then Do
+           If zscrolla = 'MAX' Then Do
+            curline = maxlines
+           end
+           Else do
+            curline_Act = curline
+            curline = curline + MaxScreenLines
+            If curline > maxlines Then Curline = curline_Act
+            if DynArea_len >= dyndata_len Then Do
+               curline = 1
+             End
+            end
+           ZCMD    = ""
+           Iterate
+       End
+      When SUBSTR(COMMAND,1,3) = "CAN"  THEN LEAVE
+      WHEN WORD(COMMAND,1) = "TRACE" then do
+           IF WORD(COMMAND, 2) = "ON"  Then trace('I')
+           IF WORD(COMMAND, 2) = "OFF" Then trace('O')
+           UDBTRACE = word(COMMAND, 2)
+           UDBAUSW2 = auswahl
+           UDBOBJ   = Object
+           ADDRESS ISPEXEC 'VPUT (UDBTRACE) PROFILE'
+           ZCMD = ''
+           Iterate
+       end
+      When PF                  = 'PF03' THEN LEAVE
+      When PF                  = 'PF04' THEN LEAVE
+      Otherwise NOP
+     End
+
+
+ end
+
+
+Return 0
+
+/* -------------------------------------------------------------*/
+
+
+
+Init_Menu:
+
+red   = '01'x                              /* Assign colors to       */
+blue  = '02'x                              /*   Attribute bytes      */
+green = '03'x                              /*   found in the data    */
+white = '04'x
+maxlines = 0                               /* set max number of lines*/
+dyndata  = ''                              /* initialize data        */
+cmddata  = ''                              /* initialize data        */
+wl     = 21
+curline = 1                                /* set current line #     */
+
+
+area.0 = 18
+area.1  = white"                                                      "
+area.2  = "  This Version for LUWDB2 for DB2 "ENV" V"DB_Vers"        "
+area.3  = "  is not includet in the dataset.                          "
+area.4  = "                                                           "
+area.5  = "  download the Files for "ENV" V"DB_VERS" from             "
+area.6  = "  www.ubraeuer.de or send me a mail Mail§UBraeuer.de       "
+area.7  = "                                                           "
+area.8  = "                                                           "
+area.9  = "                                                           "
+area.10 = "                                                           "
+area.11 = "  kind regards                                             "
+area.12 = "  Uli                                                      "
+area.13 = "                                                           "
+area.14 = "                                                           "
+area.15 = "                                                           "
+area.16 = "                                                           "
+area.17 = "                                                           "
+area.18 = "                                                           "
+
+PFTASTEN = "PF03=RETURN PF04=Cancel"
+MaxLines = area.0
+FUNC     = "Function: "
+Do ai = 1 to area.0
+   dyndata = dyndata || left(area.ai, 80, ' ' )
+ end
+
+ADDRESS ISPEXEC  "VGET (ZSCREENW,ZSCREEND)"
+MaxScreenLines = ZSCREEND-5
+dyndata_len = Length(dyndata)
+znr     = 1
+
+Return
+

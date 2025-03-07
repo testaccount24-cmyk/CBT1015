@@ -1,0 +1,114 @@
+/* REXX */
+/*******************************************************************/
+/*                                                                 */
+/* ProgramNAME      : ZOSC1AC2 CATLEVEL 502 - 503                  */
+/* AUSRUF           : AUS Program                                  */
+/* AUTHER           : ULRICH BRAEUER  11.02.2018                   */
+/* FUNKTION         : ERSTELLEN DDL FUER OBJEKTE /DB2 ZOS V12      */
+/* AUFRUF           : ZOSC1AC2 ARG1 ARG2 ARG3 ARG4 ARG5 ARG6       */
+/*                    ARG1 MUSS SEIN : SSID                        */
+/*                    ARG2 KANN SEIN : DB, TS, TB, IX, VW,         */
+/*                                     SY, AL, PG, TR, ....        */
+/*                    ARG3 KANN SEIN : CREATOR.NAME DES OBJEJCT    */
+/*                    ARG4 KANN SEIN : TBCREATOR.TABNAME           */
+/*                    ARG5 KANN SEIN : TABLESPACE NAME             */
+/*                    ARG6 KANN SEIN : DATABASE NAME               */
+/*   ERKLAERUNG ZU ARG4, ARG5, ARG6 |||                            */
+/*   ES IST MOEGLICH Z.B BEI DER FUNKTION IX ZU SAGEN, ICH WILL    */
+/*   ALLE INDEXES ZU EINER TABLE, ODER ZU EINEM TABLESPACE ODER    */
+/*   ZU EINER DATENBANK.                                           */
+/*   SINNFOLL IST ES AUCH ZU SAGEN, ICH WILL WISSEN, WELCHE PLAENE */
+/*   ODER PACKAGES AUF EINEN TABLESPCE GEHEN, Z.B. FUER REORGS     */
+/*   MIT ANSCHLIESENDEM REBIND. ||                                 */
+/*                                                                 */
+/*   Aufpassen auf rexx_Win mus | in ] geaendert werden            */
+/*                                                                 */
+/*******************************************************************/
+
+
+PARSE SOURCE SRC.1 SRC.2 SRC.3 SRC.4 SRC.5 SRC.6 SRC.7 SRC.8 SRC.9
+
+IF SRC.2 = "SUBROUTINE" Then SUBROUTINE    = 'Y'
+ Else                        SUBROUTINE    = 'N'
+ispf_env = SRC.8
+parse Upper version rexxType level date
+ENV = "WIN"
+ENV = "TSO"
+IF SRC.1 <> "TSO" & Substr(rexxType, 1, 11) = "REXX-OOREXX" Then Do
+   ENV = "WIN"
+ End
+
+Select
+   WHEN ispf_env = 'ISPF' THEN Do
+        RUNENV = "TSO"
+        ADDRESS TSO
+     End
+   WHEN ispf_env = 'MVS' THEN Do
+        RUNENV = "MVS"
+        ADDRESS MVS
+     End
+   OTHERWISE NOP
+ END
+
+USER = USERID()
+
+DB2_SSID       = ARG(1)  /* SSID      */
+DB2_LOC        = ARG(2)  /* LOCATION  */
+DB2_FUNKTION   = ARG(3)  /* FUNKTION  */
+SUCH1          = ARG(4)  /* OBJECT CREATOR/NAME */
+SUCH2          = ARG(5)  /* TABLE  CREATOR/NAME */
+SUCH3          = ARG(6)  /* TABLE  CREATOR/NAME */
+SUCH4          = ARG(7)  /* TABLE  CREATOR/NAME */
+SUCH5          = ARG(8)  /* TABLE  CREATOR/NAME */
+DB2_TABLESPACE = ARG(9)
+DB2_DATABASE   = ARG(10)
+DB2_GRANT      = ARG(11)
+DB2_CALLTYPE   = ARG(12)
+DB2vers        = ARG(13)
+DB2CatL        = ARG(14)
+DB2_WHERE_LIKE = ARG(15)
+
+DB_env   = Substr(DB2Vers, 1, 3)
+DB_Vers  = Substr(DB2Vers, 4, 2)
+DB_Rel   = Substr(Db2Vers, 6, 1)
+DB_Mod   = Substr(DB2Vers, 7, 3)
+DBC_env  = Substr(DB2CatL, 1, 3)
+DBC_Vers = Substr(DB2CatL, 4, 2)
+DBC_Rel  = Substr(DB2CatL, 6, 1)
+DBC_Mod  = Substr(DB2CatL, 7, 3)
+
+MODUL   = "ZOSC2AC2"
+select
+       When DBC_Mod < 502 Then MODUL   = "ZOSC2AC2"
+       When DBC_Mod < 504 Then MODUL   = "ZOSC2AC2"
+       When DBC_Mod < 505 Then MODUL   = "ZOSC2AC2"
+       When DBC_Mod < 507 Then MODUL   = "ZOSC2AC2"
+       Otherwise               MODUL   = "ZOSC2AC2"
+ End
+
+PARM = " DB2_SSID       ," ,
+       " DB2_LOC        ," ,
+       " DB2_FUNKTION   ," ,
+       " SUCH1          ," ,
+       " SUCH2          ," ,
+       " SUCH3          ," ,
+       " SUCH4          ," ,
+       " SUCH5          ," ,
+       " DB2_TABLESPACE ," ,
+       " DB2_DATABASE   ," ,
+       " DB2_GRANT      ," ,
+       " DB2_CALLTYPE   ," ,
+       " DB2vers        ," ,
+       " DB2CatL        ," ,
+       " DB2_WHERE_LIKE  "
+
+select
+  When ispf_env = "MVS" Then do
+       INTERPRET  "CALL "MODUL PARM
+   End
+  Otherwise Do
+       INTERPRET  "Call "MODUL PARM
+   End
+ End
+
+RETURN Result
