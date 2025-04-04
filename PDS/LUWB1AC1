@@ -1,0 +1,1181 @@
+/* REXX */
+/*******************************************************************/
+/*                                                                 */
+/* ProgramNAME      : LUWB1AC1                                     */
+/* AUFRUF           : AUS Program                                  */
+/* AUTHER           : ULRICH BRAEUER  08.02.2015                   */
+/* FUNKTION         : ERSTELLEN DDL MIT DB2LK_GENERATE_DDL         */
+/* AUFRUF           : LUWB1AC2 ARG1 ARG2 ARG3 ARG4 ARG5 ARG6       */
+/*                    ARG1 MUSS SEIN : SSID                        */
+/*                    ARG2 KANN SEIN : TS, TB, IX, VW,             */
+/*                                     SY, AL, PG, TR              */
+/*                    ARG3 KANN SEIN : CREATOR.NAME DES OBJEJCT    */
+/*                    ARG4 KANN SEIN : TBCREATOR.TABNAME           */
+/*                    ARG5 KANN SEIN : TABLESPACE NAME             */
+/*                    ARG6 KANN SEIN : DATABASE NAME               */
+/*   ERKLAERUNG ZU ARG4, ARG5, ARG6 |||                            */
+/*                                                                 */
+/*   Aufpassen auf rexx_Win mus | in ] geaendert werden            */
+/*                                                                 */
+/*                                                                 */
+/*******************************************************************/
+
+PARSE SOURCE SRC.1 SRC.2 SRC.3 SRC.4 SRC.5 SRC.6 SRC.7 SRC.8 SRC.9
+IF SRC.2 = "SUBROUTINE" Then SUBROUTINE    = 'Y'
+ Else                        SUBROUTINE    = 'N'
+ispf_env = SRC.8
+parse Upper version rexxType level date
+ENV = "WIN"
+ENV = "TSO"
+IF SRC.1 <> "TSO" & Substr(rexxType, 1, 11) = "REXX-OOREXX" Then Do
+   ENV = "WIN"
+ End
+
+USER = USERID()
+SYSCATS = "SYSCAT"
+SYSIBMS = "SYSIBM"
+SYSIBMA = "SYSIBMADM"
+SYSPROCA= "SYSPROC"
+DSNRECON   = "N"
+CURSQLID= ""
+DDLTEXT = ""
+SYSUID  = ""
+SYSPWD  = ""
+Select
+   When Env = 'TSO' Then do
+        X = MSG('OFF')
+        ADDRESS ISPEXEC 'VGET (DSNRECON) PROFILE'
+        ADDRESS ISPEXEC 'VGET (UDBTRACE) PROFILE'
+        ADDRESS ISPEXEC 'VGET (SYSIBMS) PROFILE'
+        ADDRESS ISPEXEC 'VGET (SYSCATS) PROFILE'
+        ADDRESS ISPEXEC 'VGET (SYSIBMA) PROFILE'
+        ADDRESS ISPEXEC 'VGET (SYSPROCA) PROFILE'
+        ADDRESS ISPEXEC 'VGET (SYSUID)   PROFILE'
+        ADDRESS ISPEXEC 'VGET (SYSPWD)   PROFILE'
+        IF UDBTRACE = 'ON' THEN TRACE R
+        ELSE                    TRACE
+    End
+   When Env = "WIN" Then Do
+/*      oq = RXQUEUE('Set',"LUWB1AC2U") */
+        Do QUEUED()
+           Parse PULL ZEILE
+           INTERPRET  ZEILE
+         End
+        oq = RXQUEUE('Set',"SESSION")
+     END
+    Otherwise NOP
+ End
+
+DDLTEXT = ""
+
+DB2_SSID       = ARG(1)  /* SSID      */
+DB2_LOC        = ARG(2)  /* LOCATION  */
+DB2_FUNKTION   = ARG(3)  /* FUNKTION  */
+SUCH1          = ARG(4)  /* OBJECT CREATOR/NAME */
+SUCH2          = ARG(5)  /* TABLE  CREATOR/NAME */
+SUCH3          = ARG(6)  /* TABLE  CREATOR/NAME */
+SUCH4          = ARG(7)  /* TABLE  CREATOR/NAME */
+SUCH5          = ARG(8)  /* TABLE  CREATOR/NAME */
+DB2_TABLESPACE = ARG(9)
+DB2_DATABASE   = ARG(10)
+DB2_GRANT      = ARG(11)
+DB2_CALLTYPE   = ARG(12)
+DB2_CREATOR1   = ""
+DB2_NAME1      = ""
+DB2_CREATOR2   = ""
+DB2_NAME2      = ""
+DB2_CREATOR3   = ""
+DB2_NAME3      = ""
+DB2_CREATOR4   = ""
+DB2_NAME4      = ""
+DB2_CREATOR5   = ""
+DB2_NAME5      = ""
+DB2_TYPE       = ""
+
+If Env = "WIN"  Then Do
+   If DB2_LOC = "" Then DB2_LOC = DB2_SSID
+ End
+
+IF POS('.', SUCH1) > 0 THEN
+   PARSE VALUE SUCH1 WITH DB2_CREATOR1 '.' DB2_NAME1
+ ELSE DB2_NAME1 = SUCH1
+
+IF POS('.', SUCH2) > 0 THEN
+   PARSE VALUE SUCH2 WITH DB2_CREATOR2 '.' DB2_NAME2
+ ELSE DB2_NAME2 = SUCH2
+
+IF POS('.', SUCH3) > 0 THEN
+   PARSE VALUE SUCH3 WITH DB2_CREATOR3 '.' DB2_NAME3
+ ELSE DB2_NAME3 = SUCH3
+
+IF POS('.', SUCH4) > 0 THEN
+   PARSE VALUE SUCH4 WITH DB2_CREATOR4 '.' DB2_NAME4
+ ELSE DB2_NAME4 = SUCH4
+
+IF POS('.', SUCH5) > 0 THEN
+   PARSE VALUE SUCH5 WITH DB2_CREATOR5 '.' DB2_NAME5
+ ELSE DB2_NAME5 = SUCH5
+
+If DSNRECON = "Y" Then Do
+   Call Load_DSNREXX_AC1
+ End
+RXDB2_SSID        = DB2_SSID
+RXDB2_GETSTEM     = 'EINGABE.'
+RXDB2_PUTSTEM     = 'AUSGABE.'
+RXDB2_MAXROWS     = 0
+RXDB2_IGNORE_SQLERR = 'N'
+OK = CONNECT_LOCATION_AC1(DB2_LOC)
+
+WHERELIST = ""
+sOBJ_TYPE      =""
+sOBJ_SUBTYPE   =""
+sOBJ_SCHEMA    =""
+sOBJ_NAME      =""
+
+
+SELECT
+   WHEN DB2_FUNKTION = "SG"   THEN CALL A1CREATE_SG  /* Storgroup */
+   WHEN DB2_FUNKTION = "DB"   THEN CALL A1CREATE_DB  /* DATABASE  */
+   WHEN DB2_FUNKTION = "BP"   THEN CALL A1CREATE_BP  /* BUFFERPOOL   */
+   WHEN DB2_FUNKTION = "TS"   THEN CALL A1CREATE_TS  /* TABLE        */
+   WHEN DB2_FUNKTION = "TB"   THEN CALL A1CREATE_TB  /* TABLE        */
+   WHEN DB2_FUNKTION = "VW"   THEN CALL A1CREATE_VW  /* VIEW         */
+   WHEN DB2_FUNKTION = "IX"   THEN CALL A1CREATE_IX  /* INDEX        */
+   WHEN DB2_FUNKTION = "SC"   THEN CALL A1CREATE_SC  /* SCHEMA       */
+   WHEN DB2_FUNKTION = "WL"   THEN CALL A1CREATE_WL  /* WLM INFO     */
+   WHEN DB2_FUNKTION = "XSR"  THEN CALL A1CREATE_XSR /* XSR OBJECT   */
+   WHEN DB2_FUNKTION = "RT"   THEN CALL A1CREATE_RT  /* ROUTINES     */
+   WHEN DB2_FUNKTION = "PR"   THEN CALL A1CREATE_PR  /* PROCEDURE    */
+   WHEN DB2_FUNKTION = "VA"   THEN CALL A1CREATE_GVA /* Glob. Var.   */
+   WHEN DB2_FUNKTION = "FN"   THEN CALL A1CREATE_FN  /* FUNCTION     */
+   WHEN DB2_FUNKTION = "WR"   THEN CALL A1CREATE_WR  /* Wrapper      */
+   OTHERWISE NOP
+ END
+
+OK = DISCONNECT_LOCATION_AC1(DB2_LOC)
+If DSNRECON = "Y" Then Do
+   Call UNLoad_DSNREXX_AC1
+ End
+
+RETURN DDLTEXT
+
+A1Create_SG:
+WHERELIST = ""
+CALL MAKE_WHERELIST "OBJ_TYPE", 'BUFFERPOOL'
+CALL MAKE_WHERELIST "OBJ_NAME", DB2_NAME1
+WHERELIST = ""
+
+Parms = '-l -ct'
+AUSGABE.0 = 0
+SQLSTMT    = "",
+             "CALL "SYSPROCA".DB2LK_GENERATE_DDL('"Parms"', 0)"  ,
+             " ; "
+
+CALL Stored_Procedure_AC1
+CALL CLOSE_CURSOR_AC1
+
+Call Lesen_DB2LOOK_INFO
+
+RETURN
+A1CREATE_DB:
+WHERELIST = ""
+
+RXDB2_PUTSTEM  = 'AUSGABE1. AUSGABE. AUSGABE3. AUSGABE4.'
+Anzeige_stem   = 2
+AUSGABE.0      = 0
+AUSGABE1.0     = 0
+AUSGABE2.0     = 0
+AUSGABE3.0     = 0
+AUSGABE4.0     = 0
+
+Parms = '-e -createdb -printdbcfg'
+Parms = '-e -printdbcfg'
+Parms = '-createdb '
+Parms = '-createdb '
+AUSGABE.0 = 0
+SQLSTMT    = "",
+             "CALL "SYSPROCA".DB2LK_GENERATE_DDL('"Parms"', 0)"  ,
+             " ; "
+
+CALL Stored_Procedure_AC1
+CALL CLOSE_CURSOR_AC1
+
+Call Lesen_DB2LOOK_INFO
+
+RETURN
+
+A1Create_BP:
+WHERELIST = ""
+CALL MAKE_WHERELIST "OBJ_TYPE", 'BUFFERPOOL'
+CALL MAKE_WHERELIST "OBJ_NAME", DB2_NAME1
+
+Parms = '-l -ct'
+AUSGABE.0 = 0
+SQLSTMT    = "",
+             "CALL "SYSPROCA".DB2LK_GENERATE_DDL('"Parms"', 0)"  ,
+             " ; "
+
+CALL Stored_Procedure_AC1
+CALL CLOSE_CURSOR_AC1
+
+Call Lesen_DB2LOOK_INFO
+
+RETURN
+
+A1Create_TS:
+WHERELIST = ""
+CALL MAKE_WHERELIST "OBJ_TYPE", 'TABLESPACE'
+CALL MAKE_WHERELIST "OBJ_NAME", DB2_NAME1
+
+Parms = '-e -l -z "ULI"   '
+Parms = '-e -createdb -printdbcfg'
+Parms = '-l -ct'
+AUSGABE.0 = 0
+SQLSTMT    = "",
+             "CALL "SYSPROCA".DB2LK_GENERATE_DDL('"Parms"', 0)"  ,
+             " ; "
+
+CALL Stored_Procedure_AC1
+CALL CLOSE_CURSOR_AC1
+
+Call Lesen_DB2LOOK_INFO
+
+RETURN
+
+A1Create_TB:
+WHERELIST = ""
+
+Parms = '-e -xd -z "'db2_creator1'" -tw "'db2_name1'" -ct '
+AUSGABE.0 = 0
+SQLSTMT    = "",
+             "CALL "SYSPROCA".DB2LK_GENERATE_DDL('"Parms"', 0)"  ,
+             " ; "
+
+CALL Stored_Procedure_AC1
+CALL CLOSE_CURSOR_AC1
+
+Call Lesen_DB2LOOK_INFO
+
+RETURN
+
+A1Create_VW:
+WHERELIST = ""
+
+Parms = '-e -createdb -printdbcfg'
+Parms = '-e -xd -z "'db2_creator1'" -v "'db2_name1'" -ct '
+AUSGABE.0 = 0
+SQLSTMT    = "",
+             "CALL "SYSPROCA".DB2LK_GENERATE_DDL('"Parms"', 0)"  ,
+             " ; "
+
+CALL Stored_Procedure_AC1
+CALL CLOSE_CURSOR_AC1
+
+Call Lesen_DB2LOOK_INFO
+
+RETURN
+
+A1Create_IX:
+
+WHERELIST = ""
+select
+  When db2_name3 = 'P' Then do   /* Primary Key */
+       CALL MAKE_WHERELIST "SQL_OPERATION", 'ALTER'
+       CALL MAKE_WHERELIST "OBJ_TYPE", 'PKEY'
+       CALL MAKE_WHERELIST "OBJ_SCHEMA", DB2_Creator1
+       CALL MAKE_WHERELIST "OBJ_NAME", DB2_NAME1
+   End
+  Otherwise Do
+       CALL MAKE_WHERELIST "OBJ_TYPE", 'INDEX'
+       CALL MAKE_WHERELIST "OBJ_SCHEMA", DB2_Creator2
+       CALL MAKE_WHERELIST "OBJ_NAME", DB2_NAME2
+   End
+ End
+
+Parms = '-e -z "'db2_creator1'" -tw "'db2_name1'" -ct '
+AUSGABE.0 = 0
+SQLSTMT    = "",
+             "CALL "SYSPROCA".DB2LK_GENERATE_DDL('"Parms"', 0)"  ,
+             " ; "
+
+CALL Stored_Procedure_AC1
+CALL CLOSE_CURSOR_AC1
+
+Call Lesen_DB2LOOK_INFO
+
+RETURN
+
+A1Create_SC:
+WHERELIST = ""
+
+Parms = '-e -createdb -printdbcfg'
+Parms = '-e -mod -cor -z "'DB2_NAME1'" -ct '
+Parms = '-e -z "'DB2_NAME1'" -ct '
+Parms = '-e -z 'DB2_NAME1' -tw % -l -ct '
+Parms = '-e -z "'DB2_NAME1'" -mod -ct '
+
+AUSGABE.0 = 0
+SQLSTMT    = "CALL "SYSPROCA".DB2LK_GENERATE_DDL('"Parms"', 0)"  ,
+             " ; "
+CALL Stored_Procedure_AC1
+CALL CLOSE_CURSOR_AC1
+
+Call Lesen_DB2LOOK_INFO
+
+RETURN
+
+A1Create_WL:
+WHERELIST = ""
+
+Parms = '-e -wlm -ct '
+AUSGABE.0 = 0
+SQLSTMT    = "",
+             "CALL "SYSPROCA".DB2LK_GENERATE_DDL('"Parms"', 0)"  ,
+             " ; "
+
+CALL Stored_Procedure_AC1
+CALL CLOSE_CURSOR_AC1
+
+Call Lesen_DB2LOOK_INFO
+
+RETURN
+
+A1Create_XSR:
+WHERELIST = ""
+
+Parms = '-e -xs -xdir -ct '
+AUSGABE.0 = 0
+SQLSTMT    = "",
+             "CALL "SYSPROCA".DB2LK_GENERATE_DDL('"Parms"', 0)"  ,
+             " ; "
+
+CALL Stored_Procedure_AC1
+CALL CLOSE_CURSOR_AC1
+
+Call Lesen_DB2LOOK_INFO
+
+RETURN
+
+A1Create_RT:
+WHERELIST = ""
+
+Parms = '-e -mod -cor -ct '
+Parms = '-e -z "'db2_creator1'" -ct '
+AUSGABE.0  = 0
+SQLSTMT    = "",
+             "CALL "SYSPROCA".DB2LK_GENERATE_DDL('"Parms"', 0)"  ,
+             " ; "
+Select
+  When db2_name3 = "F" Then sOBJ_TYPE = "FUNCTION"
+  When db2_name3 = "P" Then sOBJ_TYPE = "PROCEDURE"
+  Otherwise                  sOBJ_TYPE = "PROCEDURE"
+ End
+sOBJ_NAME = db2_name2
+
+CALL Stored_Procedure_AC1
+CALL CLOSE_CURSOR_AC1
+
+Call Lesen_DB2LOOK_INFO
+
+RETURN
+
+A1Create_PR:
+WHERELIST = ""
+
+Parms = '-e -mod -cor -ct '
+Parms = '-e -z "'db2_creator1'" -ct '
+AUSGABE.0  = 0
+SQLSTMT    = "",
+             "CALL "SYSPROCA".DB2LK_GENERATE_DDL('"Parms"', 0)"  ,
+             " ; "
+sOBJ_TYPE = "PROCEDURE"
+sOBJ_NAME = db2_name2
+
+CALL Stored_Procedure_AC1
+CALL CLOSE_CURSOR_AC1
+
+Call Lesen_DB2LOOK_INFO
+
+RETURN
+
+A1Create_GVA:
+WHERELIST = ""
+
+Parms = '-e -z "'db2_creator1'" -tw "'db2_name1'" -ct '
+Parms = '-e -z "'db2_creator1'" -ct '
+AUSGABE.0  = 0
+SQLSTMT    = "",
+             "CALL "SYSPROCA".DB2LK_GENERATE_DDL('"Parms"', 0)"  ,
+             " ; "
+
+sOBJ_TYPE = "VARIABLE"
+sOBJ_NAME = db2_name1
+
+CALL Stored_Procedure_AC1
+CALL CLOSE_CURSOR_AC1
+
+Call Lesen_DB2LOOK_INFO
+
+RETURN
+
+A1Create_FN:
+WHERELIST = ""
+
+Parms = '-e -z "'db2_creator1'" -tw "'db2_name1'" -ct '
+Parms = '-e -z "'db2_creator1'" -ct '
+AUSGABE.0  = 0
+SQLSTMT    = "",
+             "CALL "SYSPROCA".DB2LK_GENERATE_DDL('"Parms"', 0)"  ,
+             " ; "
+sOBJ_TYPE = "FUNCTION"
+sOBJ_NAME = db2_name2   /*Specific name */
+
+CALL Stored_Procedure_AC1
+CALL CLOSE_CURSOR_AC1
+
+Call Lesen_DB2LOOK_INFO
+
+RETURN
+
+
+A1Create_WR:
+WHERELIST = ""
+
+Parms = '-e -wrapper  "'db2_creator1'" -ct '
+AUSGABE.0  = 0
+SQLSTMT    = "",
+             "CALL "SYSPROCA".DB2LK_GENERATE_DDL('"Parms"', 0)"  ,
+             " ; "
+sOBJ_TYPE = "FUNCTION"
+sOBJ_NAME = db2_name2   /*Specific name */
+
+CALL Stored_Procedure_AC1
+CALL CLOSE_CURSOR_AC1
+
+Call Lesen_DB2LOOK_INFO
+
+RETURN
+
+
+Lesen_DB2LOOK_INFO:
+
+Parse value OP_TOKEN With OP_TOKEN ")" .
+
+
+CALL MAKE_WHERELIST "","OP_TOKEN = "OP_TOKEN
+
+CALL MAKE_WHERELIST "OBJ_TYPE ", sOBJ_TYPE
+CALL MAKE_WHERELIST "OBJ_SUBTYPE ", sOBJ_SUBTYPE
+CALL MAKE_WHERELIST "OBJ_SCHEMA ", sOBJ_SCHEMA
+CALL MAKE_WHERELIST "Upper(OBJ_NAME) ", sOBJ_NAME
+
+EINGABE.0  = 1
+SQLSTMT    = "SELECT OP_TOKEN                       " ,
+             "    ,  OP_SEQUENCE                    " ,
+             "    ,  SQL_OPERATION                  " ,
+             "    ,  OBJ_ID                         " ,
+             "    ,  OBJ_TYPE                       " ,
+             "    ,  OBJ_SUBTYPE                    " ,
+             "    ,  OBJ_SCHEMA                     " ,
+             "    ,  OBJ_NAME                       " ,
+             "    ,  OBJ_DEFINER                    " ,
+             "    ,  OBJ_QUALIFIER                  " ,
+             "    ,  OBJ_ATTRIBUTE                  " ,
+             "    ,  RELATED_OBJ_INFO               " ,
+             "    ,  CREATION_TIME                  " ,
+             "    ,  SQL_STMT                       " ,
+             "FROM  SYSTOOLS.DB2LOOK_INFO           " ,
+              WHERELIST ,
+             "ORDER BY OP_TOKEN, OP_SEQUENCE, CREATION_TIME ",
+             "FOR FETCH ONLY ",
+             ""
+
+CNR = 11
+SNR = CNR
+CALL OPEN_CURSOR_AC1
+SQL_FETCH_SAVE =  SQL_FETCH
+DO WHILE SQLCODE = 0
+   CNR = 11
+   SNR = CNR
+   SQL_FETCH   = SQL_FETCH_SAVE
+   SQLTEXT = " FETCH C"CNR" INTO "   SQL_FETCH
+   Call EXECUTE_SQL_TEXT_AC1
+/* say sqlcode OP_TOKEN OP_SEQUENCE  */
+
+   Select
+       When SQLCODE = 100 THEN DO
+            CALL CLOSE_CURSOR_AC1 /* CLOSE CURSOR */
+            LEAVE
+         End
+       When SQLCODE <> 0  THEN DO
+            SAY "ERROR ON FETCH C"CNR", RC="RC ,
+                "SQLCODE="SQLCODE         ,
+                "SQLERRMC="SQLERRMC       ,
+                ""
+            Exit 8
+         End
+       Otherwise NOP
+    End
+
+   SQL_STMT = ERSETZEN_STRING_MC(SQL_STMT, '25'x, '-NL' )
+   SQL_STMT = ERSETZEN_STRING_MC(SQL_STMT, '05'x, '   ' )
+   DDLTEXT  = DDLTEXT SQL_STMT "-NR"
+
+ END /* END DO WHILE SQLCODE = 0   */
+
+/*  LOESCHEN DER ERSTELLTEN SAETZE */
+SQLSTMT = "DELETE FROM  SYSTOOLS.DB2LOOK_INFO ",
+          "WHERE OP_TOKEN = "OP_TOKEN
+
+   CALL EXECUTE_IMMEDIATE_AC1
+
+RETURN
+
+EXECUTE_SQL_AC1:
+
+DO STI = 1 TO EINGABE.0
+   SQLSTMT = VALUE(SPACE(RXDB2_GETSTEM, 0) || STI)
+   SQLSTMT = SPACE(SQLSTMT, 1)
+   IF WORD(SQLSTMT, 1) = "CONNECT" & WORD(SQLSTMT, 2) = "TO" THEN DO
+      SQLTEXT = " "SQLSTMT
+      Call EXECUTE_SQL_TEXT_AC1
+      IF SQLCODE <> 0 THEN DO
+         SAY "Error in "SQLSTMT "SQLCODE: " || SQLCODE
+       END
+      ITERATE
+    END
+
+   SQLTEXT =         " CLOSE C1 "
+   Call EXECUTE_SQL_TEXT_AC1
+   SQLTEXT = " DECLARE               C1 CURSOR FOR S1"
+   Call EXECUTE_SQL_TEXT_AC1
+   IF SQLCODE <> 0 THEN DO
+      SAY "A2 DECLARE     SQLCODE="SQLCODE
+      SAY SQLSTMT
+    END
+   SQLTEXT = " PREPARE               S1 FROM :SQLSTMT"
+   Call EXECUTE_SQL_TEXT_AC1
+   IF SQLCODE <> 0 THEN DO
+      SAY "A2 PREPARE     SQLCODE="SQLCODE
+      SAY SQLSTMT
+    END
+   SQLTEXT = " DESCRIBE S1 INTO :OUTSQLDA"
+   Call EXECUTE_SQL_TEXT_AC1
+   IF SQLCODE <> 0 THEN DO
+      SAY "A2 DESCRIBE    SQLCODE="SQLCODE
+      SAY SQLSTMT
+    END
+   SQLTEXT = " OPEN C1"
+   Call EXECUTE_SQL_TEXT_AC1
+   IF SQLCODE <> 0 THEN DO
+      SAY "A2 OPEN        SQLCODE="SQLCODE
+      SAY SQLSTMT
+    END
+   IVAL = VALUE(SPACE(RXDB2_PUTSTEM, 0) || 0) "= 0"
+   INTERPRET  IVAL
+   DO WHILE SQLCODE = 0
+      SQLTEXT = " FETCH C1 USING DESCRIPTOR :OUTSQLDA"
+      Call EXECUTE_SQL_TEXT_AC1
+      IF SQLCODE  = 100 THEN LEAVE
+      IF SQLCODE <> 0 THEN Do
+         Call SQLERROR_AC1
+          LEAVE
+       End
+      IVAL = "I = " VALUE(SPACE(RXDB2_PUTSTEM, 0) || 0) "+ 1"
+      INTERPRET  IVAL
+      IVAL = SPACE(RXDB2_PUTSTEM, 0) || 0  " = I"
+      INTERPRET  IVAL
+      DO CI = 1 TO OUTSQLDA.SQLD
+         /* AUSGABE.1.DBNAME = "DSNDB07"   */
+         IVAL = VALUE(SPACE(RXDB2_PUTSTEM, 0) || I) || "." ||  ,
+                SPACE(OUTSQLDA.CI.SQLNAME, 0)
+         INTERPRET IVAL"=OUTSQLDA.CI.SQLDATA"
+       END
+    END
+ END
+
+
+RETURN
+
+OPEN_CURSOR_AC1:
+
+    IF DATATYPE(CNR) <> 'NUM' THEN CNR = 1
+    IF DATATYPE(SNR) <> 'NUM' THEN SNR = CNR
+    SQLTEXT =         " CLOSE C"CNR
+    Call EXECUTE_SQL_TEXT_AC1
+    SQLTEXT =         " DECLARE C"CNR" CURSOR FOR S"SNR
+    Call EXECUTE_SQL_TEXT_AC1
+    IF SQLCODE <> 0 THEN DO
+       SAY "ERROR ON DECLARE, RC="RC ,
+           "SQLCODE="SQLCODE         ,
+           "SQLERRMC="SQLERRMC       ,
+           ""
+    END
+    SQLTEXT =         " PREPARE S"SNR" FROM :SQLSTMT"
+    Call EXECUTE_SQL_TEXT_AC1
+    IF SQLCODE <> 0 THEN DO
+       SAY "ERROR ON PREPARE S"SNR"RC="RC ,
+           "SQLCODE="SQLCODE         ,
+           "SQLERRMC="SQLERRMC       ,
+           ""
+    END
+
+   SQLTEXT = " DESCRIBE S"SNR" INTO :OUTSQLDA"
+   Call EXECUTE_SQL_TEXT_AC1
+   COLS   = ""
+   RXCOLS = ""
+   If COLTAB_BUILD <> "N" Then do
+      COLS      = ""
+      RXCOLS    = ""
+      SQL_FETCH = ""
+      KOMMA     = ""
+      if datatype(OUTSQLDA.SQLD) = NUM THEN DO CI = 1 TO OUTSQLDA.SQLD
+         cols   = cols OUTSQLDA.CI.SQLNAME
+         rxcols = cols OUTSQLDA.CI.SQLNAME
+         SQL_FETCH = SQL_FETCH || komma || ":" || OUTSQLDA.CI.SQLNAME
+         If OUTSQLDA.CI.SQLTYPE // 2 = 1 THEN Do
+            SQL_FETCH = SQL_FETCH ":I" || OUTSQLDA.CI.SQLNAME
+          END
+         KOMMA = ","
+       End
+    End
+
+
+    SQLTEXT =         " OPEN C"CNR
+    Call EXECUTE_SQL_TEXT_AC1
+    IF SQLCODE <> 0 THEN DO
+       SAY "ERROR ON OPEN C"CNR" , RC="RC ,
+           "SQLCODE="SQLCODE         ,
+           "SQLERRMC="SQLERRMC       ,
+           ""
+    END
+
+RETURN
+
+CLOSE_CURSOR_AC1:
+
+    IF DATATYPE(CNR) <> 'NUM' THEN CNR = 1
+    SQLTEXT = "CLOSE C"CNR
+    Call EXECUTE_SQL_TEXT_AC1
+
+RETURN
+
+CONNECT_LOCATION_AC1:
+   If Length(SYSUID) > 0 & Length(SYSPWD) > 0 Then do
+       SQLTEXT = " CONNECT TO "ARG(1) ,
+                 "USER :SYSUID USING :SYSPWD "
+    End
+   ELSE Do
+       SQLTEXT = " CONNECT TO "ARG(1)
+    End
+   Call EXECUTE_SQL_TEXT_AC1
+   parse value sqlerrp with DB_ENV 4 DB_Vers 6 DB_Rel 8 DB_Mod
+RETURN 0
+
+DISCONNECT_LOCATION_AC1:
+ SQLTEXT =  "RELEASE " ARG(1)
+ Call EXECUTE_SQL_TEXT_AC1
+ SQLTEXT =  "COMMIT  "
+ Call EXECUTE_SQL_TEXT_AC1
+SQLTEXT = " CONNECT RESET"
+Call EXECUTE_SQL_TEXT_AC1
+RETURN 0
+
+EXECUTE_SQL_TEXT_AC1:
+ Select
+    When ENV = 'TSO' Then Do
+         ADDRESS DSNREXX "EXECSQL "SQLTEXT
+     End
+    When ENV = 'WIN' Then Do
+         CALL SQLEXEC SQLTEXT
+         SQLCODE    = SQLCA.SQLCODE
+         SQLERRMC   = SqlMsg
+     End
+    Otherwise NOP
+  End
+Return
+
+
+SQLERROR_AC1:
+/* process SQLERROR_AC1  */
+
+  SAY 'SQLCODE        ='SQLCODE
+  SAY 'SQLERRM        ='SQLERRMC
+  SAY 'SQLCAID  ='SQLCAID
+  SAY 'SQLCABC  ='SQLCABC
+  SAY 'SQLCODE  ='SQLCODE
+  SAY 'SQLERRM  ='SQLERRMC
+  SAY 'SQLERRP  ='SQLERRP
+  SAY 'SQLERRD.1='SQLERRD.1
+  SAY 'SQLERRD.2='SQLERRD.2
+  SAY 'SQLERRD.3='SQLERRD.3
+  SAY 'SQLERRD.4='SQLERRD.4
+  SAY 'SQLERRD.5='SQLERRD.5
+  SAY 'SQLERRD.6='SQLERRD.6
+  SAY 'SQLWARN0 ='SQLWARN0
+  SAY 'SQLWARN1 ='SQLWARN1
+  SAY 'SQLWARN2 ='SQLWARN2
+  SAY 'SQLWARN3 ='SQLWARN3
+  SAY 'SQLWARN4 ='SQLWARN4
+  SAY 'SQLWARN5 ='SQLWARN5
+  SAY 'SQLWARN6 ='SQLWARN6
+  SAY 'SQLWARN7 ='SQLWARN7
+  SAY 'SQLWARN8 ='SQLWARN8
+  SAY 'SQLWARN9 ='SQLWARN9
+  SAY 'SQLWARNA ='SQLWARNA
+  SAY 'SQLSTATE ='SQLSTATE
+
+RETURN
+
+
+MAKE_WHERELIST: PROCEDURE EXPOSE WHERELIST
+
+COLUMNNAME = ARG(1)
+ARGUMENT   = ARG(2)
+ARGUMENT   = TRANSLATE(ARGUMENT, '%', '*')
+IF LENGTH(STRIP(ARGUMENT)) = 0 ,
+ & LENGTH(STRIP(COLUMNNAME)) = 0 THEN RETURN
+
+IF TRANSLATE(WORD(WHERELIST, 1) ) = "WHERE" THEN ANDKZ = "AND"
+ ELSE ANDKZ = "WHERE"
+
+IF LENGTH(STRIP(COLUMNNAME)) = 0 ,
+ & LENGTH(STRIP(ARGUMENT)) > 0 THEN DO
+   WHERELIST = WHERELIST ANDKZ ARGUMENT
+   RETURN
+ END
+
+IF LENGTH(STRIP(ARGUMENT)) = 0 THEN RETURN
+
+
+IF POS('%', ARGUMENT) > 0 ,
+ | POS('_', ARGUMENT) > 0 THEN DO
+   WHERELIST = WHERELIST ANDKZ COLUMNNAME "LIKE '"ARGUMENT"'"
+   RETURN
+ END
+
+WHERELIST = WHERELIST ANDKZ COLUMNNAME "= '"ARGUMENT"'"
+
+RETURN
+
+Load_DSNREXX_AC1:
+ADDRESS TSO "SUBCOM DSNREXX"
+IF RC THEN   S_RC = RXSUBCOM('ADD','DSNREXX','DSNREXX')
+
+ADDRESS DSNREXX "CONNECT "DB2_SSID
+IF SQLCODE <  0 THEN SAY "CONNECT     SQLCODE="SQLCODE "<"DB2_SSID">"
+
+Return
+
+UNLoad_DSNREXX_AC1:
+
+ADDRESS DSNREXX "DISCONNECT"
+S_RC = RXSUBCOM('DELETE','DSNREXX','DSNREXX')
+
+Return
+
+Stored_Procedure_AC1:
+
+rexx_sqltype.0   = 27
+REXX_SQLTYPE.1   = "384 DATE               10 "
+REXX_SQLTYPE.2   = "388 TIME                8 "
+REXX_SQLTYPE.3   = "392 TIMESTAMP          26 "
+REXX_SQLTYPE.4   = "396 DATALINK              "
+REXX_SQLTYPE.5   = "404 BLOB                  "
+REXX_SQLTYPE.6   = "408 CLOB                  "
+REXX_SQLTYPE.7   = "412 DBCLOB                "
+REXX_SQLTYPE.8   = "448 VARCHAR               "
+REXX_SQLTYPE.9   = "452 CHAR                  "
+REXX_SQLTYPE.10  = "456 LONGVARCHAR           "
+REXX_SQLTYPE.11  = "464 VARGRAPHIC            "
+REXX_SQLTYPE.12  = "468 GRAPHIC               "
+REXX_SQLTYPE.13  = "472 LONGVARGRAPHIC        "
+REXX_SQLTYPE.14  = "480 FLOAT                 "
+REXX_SQLTYPE.15  = "484 DECIMAL               "
+REXX_SQLTYPE.16  = "492 BIGINT             19 "
+REXX_SQLTYPE.17  = "496 INTEGER            10 "
+REXX_SQLTYPE.18  = "500 SMALLINT            5 "
+REXX_SQLTYPE.19  = "904 ROWID                 "
+REXX_SQLTYPE.20  = "908 VARBINARY             "
+REXX_SQLTYPE.21  = "912 BINARY                "
+REXX_SQLTYPE.22  = "916 BLOB                  "
+REXX_SQLTYPE.23  = "924 DBCLOB                "
+REXX_SQLTYPE.24  = "996 DECFLOAD              "
+REXX_SQLTYPE.25  = "988 XML                   "
+REXX_SQLTYPE.26  = "412 DBCLOB                "
+REXX_SQLTYPE.27  = "468 GRAPHIC               "
+DROP OU.
+OU.0 = 0
+
+maxrc         = 0
+COLDEL        = ';'
+CHARDEL       = '"'
+SQLTERM       = ';'
+SPROCPARSER   = ','
+END_SQL_TERM  = SPACE(SQLTERM SQLTERM, 0)
+
+
+     SQLSTMT = STRIP(SQLSTMT)
+     If DB2_EDITSQL = "Y" | DB2_EDITSQL = "J" Then do
+        SQLSTMT = Edit_SQL(SQLSTMT)
+        DB2_EDITSQL = 'N'
+      End
+
+     parse value sqlstmt with proc "(" command
+     command = reverse(command)
+     command = Strip(command, 'L')
+     command = Strip(command, 'L', ')' )
+     command = reverse(command)
+
+     callstmt  = sqlstmt
+
+     parse value PROC WITH cl PROC_CREATOR '.' PROC_NAME
+     PROC_CREATOR  = Strip(Translate(PROC_CREATOR))
+     PROC_NAME     = Strip(Translate(PROC_NAME))
+
+     CNR     = 10
+     SNR     = 10
+     If DB_ENV = "SQL" Then Do  /* DB2 LUW */
+        SQLSTMT = "SELECT    DISTINCT                            ",
+                  "        P.ROUTINENAME                         ",
+                  "     ,  P.ROUTINESCHEMA                       ",
+                  "     ,  P.SPECIFICNAME                        ",
+                  "     ,  P.ROWTYPE                             ",
+                  "     ,  P.PARMNAME                            ",
+                  "     ,  P.LOCATOR                             ",
+                  "     ,  P.ORDINAL                             ",
+                  "     ,  P.TYPENAME                            ",
+                  "     ,  P.LENGTH                              ",
+                  "     ,  P.SCALE                               ",
+                  "     ,  P.ROUTINETYPE                         ",
+                  "     ,  R.RESULT_SETS                         ",
+                  "FROM "SYSIBMS".SYSROUTINEPARMS P              ",
+                  "INNER JOIN "SYSIBMS".SYSROUTINES R            ",
+                  "  ON  P.ROUTINESCHEMA = R.ROUTINESCHEMA       ",
+                  "  AND P.ROUTINENAME   = R.ROUTINENAME         ",
+                  "  AND P.SPECIFICNAME  = R.SPECIFICNAME        ",
+                  "WHERE P.ROUTINESCHEMA = '"PROC_CREATOR"'      ",
+                  "AND   P.ROUTINENAME   = '"PROC_NAME"'         ",
+                  "ORDER BY ORDINAL                              ",
+                  ""
+      End
+     Else Do                    /* DB2 zOS */
+        SQLSTMT = "SELECT    DISTINCT                            ",
+                  "        P.SCHEMA       AS ROUTINENAME         ",
+                  "     ,  P.NAME         AS ROUTINESCHEMA       ",
+                  "     ,  P.SPECIFICNAME AS SPECIFICNAME        ",
+                  "     ,  P.ROWTYPE      AS ROWTYPE             ",
+                  "     ,  P.PARMNAME     AS PARMNAME            ",
+                  "     ,  P.LOCATOR      AS LOCATOR             ",
+                  "     ,  P.ORDINAL      AS ORDINAL             ",
+                  "     ,  P.TYPENAME     AS TYPENAME            ",
+                  "     ,  P.LENGTH       AS LENGTH              ",
+                  "     ,  P.SCALE        AS SCALE               ",
+                  "     ,  P.ROUTINETYPE  AS ROUTINETYPE         ",
+                  "     ,  R.RESULT_SETS                         ",
+                  "FROM "SYSIBMS".SYSPARMS P                     ",
+                  "INNER JOIN "SYSIBMS".SYSROUTINES R            ",
+                  "  ON  P.SCHEMA       = R.SCHEMA               ",
+                  "  AND P.NAME         = R.NAME                 ",
+                  "  AND P.SPECIFICNAME = R.SPECIFICNAME         ",
+                  "WHERE P.SCHEMA        = '"PROC_CREATOR"'      ",
+                  "AND   P.NAME          = '"PROC_NAME"'         ",
+                  "ORDER BY ORDINAL                              ",
+                  ""
+      End
+     SQLSTMT = SPACE(SQLSTMT, 1)
+
+     SQL_FETCH_OLD = SQL_FETCH
+     Call OPEN_CURSOR_AC1
+     OUTSQLDA.SQLD = 0
+     cmd          = command
+     cmdi         = 0
+     cmdstring    = ""
+     komma        = ""
+     DO WHILE SQLCODE = 0
+        SQLTEXT = " FETCH C"CNR" INTO "   SQL_FETCH
+        Call EXECUTE_SQL_TEXT_AC1
+
+          IF SQLCODE = 100 THEN LEAVE
+          If sqlcode < 0 Then Do
+             call SQLERROR_AC1
+             return 8
+           End
+
+          cmdi         = cmdi + 1
+          Do sqlti = 1 to rexx_sqltype.0
+             If TYPENAME <>  WORD(rexx_sqltype.sqlti, 2) Then Iterate
+             sqltype = WORD(rexx_sqltype.sqlti, 1)
+             sqltype = sqltype + 1
+             LEAVE
+           End
+
+          If Words(rexx_sqltype.sqlti) > 2 Then Do
+             Length = Word(rexx_sqltype.sqlti, 3)
+           End
+
+          SPROCPARSER = Strip(SPROCPARSER)
+          I1    =   "parse value cmd with DATA '"SPROCPARSER"' cmd"
+          INTERPRET I1
+
+          Data = Strip(Data)
+          If Strip(Data) = "?" Then DATA = ""
+          If Strip(Data) = "''"  Then DATA = ""
+          Ind = 0
+          If Length(data) = 0 Then Do
+             Ind = -1
+             Select
+               When TYPENAME = "BIGINT"   THEN Do
+                    DATA = Right(DATA, LENGTH, '0')
+                End
+               When TYPENAME = "INTEGER"  THEN Do
+                    DATA = Right(DATA, LENGTH, '0')
+                End
+               When TYPENAME = "SMALLINT" THEN Do
+                    DATA = Right(DATA, LENGTH, '0')
+                End
+               When TYPENAME = "DECIMAL"  THEN Do
+                    DATA = Right(DATA, LENGTH, '0')
+                    DATA = "0.0"
+                End
+               Otherwise Do
+                    If length > 32000 Then Length = 32000
+                    DATA = "'" || Left(DATA, LENGTH, ' ') || "'"
+                End
+              End
+           End
+
+
+/*        INTERPRET "CM"cmdi "= DATA"                              */
+/*        cmdstring = cmdstring || komma ":" || "CM" || cmdi       */
+          PARMNAME  = Translate(PARMNAME, '_', '-')
+          INTERPRET PARMNAME "= DATA"
+          cmdstring = cmdstring || komma ":" || PARMNAME
+
+          Interpret PARMNAME || "_I" || CMDI "= "IND
+          cmdstring = cmdstring ":" || PARMNAME || "_I" || CMDI
+
+          komma     = ","
+
+          OUTSQLDA.SQLD          = OUTSQLDA.SQLD + 1
+          SQLDI                  = OUTSQLDA.SQLD
+          OUTSQLDA.SQLDI.SQLTYPE = sqltype
+          OUTSQLDA.SQLDI.SQLLEN  = LENGTH
+          OUTSQLDA.SQLDI.SQLIND  = 0
+          OUTSQLDA.SQLDI.SQLDATA = DATA
+      END
+
+     Call CLOSE_CURSOR_AC1
+     Proc = Subword(Proc, 2)
+     If Length(Strip(cmdstring)) = 0 Then do
+        cmdstring = cmd
+        cmdstring = ":CM1"
+        CM1       = Strip(cmd)
+        cm1 = strip(cm1)
+      End
+
+     SQLTEXT = " Call " Proc "(" || cmdstring ||")"
+     Call EXECUTE_SQL_TEXT_AC1
+
+     If SQLCODE = 0   ,
+      | SQLCODE = 466 Then do
+        Ausgabe = cmdstring
+        Do while length(Ausgabe) > 0
+           Parse value Ausgabe With parm "," Ausgabe
+           ausi = 0
+           If Words(Parm) > 1 Then Parm = Word(Parm, 1)
+           If Words(Parm) > 1 Then IND  = Word(Parm, 2)
+           Parm = Translate(Parm, ' ', ':')
+           Interpret "Ausx = "Parm
+           Interpret "Ausi = "ind
+/*
+           If ausi < 0 Then Ausx = ""
+*/
+           ou.0 = ou.0 + 1 ; oui = ou.0;
+           ou.oui = parm "=" Ausx
+         End
+           ou.0 = ou.0 + 1 ; oui = ou.0;
+           ou.oui = "RESULTS =" RESULTS
+      End
+
+     If sqlcode = 466 Then do
+        Call Lesen_SProc_Data_AC1
+      End
+
+     SQL_FETCH     = SQL_FETCH_OLD
+return
+
+Lesen_SProc_Data_AC1:
+  SAVE_PUTSTEM  = RXDB2_PUTSTEM
+  RXDB2_PUTSTEM = Word(RXDB2_PUTSTEM, 1)
+  SQLTEXT = "DESCRIBE PROCEDURE :PROC INTO :OUTSQLDA"
+  Call EXECUTE_SQL_TEXT_AC1
+  if sqlcode <> 0 Then do
+     Say "Warning SQLERROR_AC1="SQLERROR_AC1
+     If sqlcode < 0 Then Do
+        call SQLERROR_AC1
+        return 8
+      End
+   End
+
+  /* Problem war SQLCODE=-423 SQLSTATE=0F001 */
+  If OUTSQLDA.SQLD < RESULT_SETS Then RESULT_SETS = OUTSQLDA.SQLD
+
+  /* Allocatte RESULT SET                                         */
+  Loc_GES = ":RS_LoC1"
+  if RESULT_SETS > 1 Then do
+     Loc_GES = ""
+     Komma = ''
+     do loci = 1 to RESULT_SETS
+        Loc_GES = Loc_Ges || Komma || ":" || "RS_Loc" || Loci" "
+        Komma = ','
+      End
+   End
+  Else Do
+   End
+
+  SQLTEXT = "ASSOCIATE LOCATORS ("Loc_Ges") WITH PROCEDURE "Proc
+  Call EXECUTE_SQL_TEXT_AC1
+  if sqlcode <> 0 Then do
+     Say "Warning SQLERROR_AC1="SQLERROR_AC1
+     SQLSTMT = SQLTEXT
+     If sqlcode < 0 Then Do
+        call SQLERROR_AC1
+        return 8
+      End
+   End
+
+  CNR    = "100"
+  Do RESI = 1 to RESULT_SETS  /* Anzahl Resut_Sets (Anzahl Tables) */
+     Loc     = ":" || "RS_Loc" || RESI
+     CNR     = CNR + 1
+     cursor  = "C"CNR
+     SQLTEXT = "ALLOCATE C"CNR" CURSOR FOR RESULT SET "Loc
+     Call EXECUTE_SQL_TEXT_AC1
+     if sqlcode <> 0 Then do
+        say SQLCODE  sqltext
+        SQLSTMT = SQLTEXT
+        If sqlcode < 0 Then Do
+           call SQLERROR_AC1
+           return 8
+         End
+      End
+
+     /* Describe the Cursor                                          */
+     SQLTEXT = "DESCRIBE CURSOR :CURSOR INTO :OUTSQLDA"
+     Call EXECUTE_SQL_TEXT_AC1
+     If sqlcode <> 0 Then do
+        Say "Warning SQLERROR_AC1="SQLERROR_AC1
+       If sqlcode < 0 Then Do
+          SQLSTMT = SQLTEXT
+          call SQLERROR_AC1
+          return 8
+        End
+      End
+
+   RXDB2_PUTSTEM = Word(SAVE_PUTSTEM, resi)
+   If datatype(Anzeige_stem) = "NUM" ,
+    & Anzeige_stem = resi Then Do
+        COLS      = ""
+        RXCOLS    = ""
+        SQL_FETCH = ""
+        KOMMA     = ""
+        if datatype(OUTSQLDA.SQLD) = NUM THEN DO CI = 1 TO OUTSQLDA.SQLD
+           cols   = cols OUTSQLDA.CI.SQLNAME
+           rxcols = rxcols  SPACE(RXDB2_PUTSTEM, 0) || I || "." ||  ,
+                            SPACE(OUTSQLDA.CI.SQLNAME, 0)
+           SQL_FETCH = SQL_FETCH || komma || ":" || OUTSQLDA.CI.SQLNAME
+           If OUTSQLDA.CI.SQLTYPE // 2 = 1 THEN Do
+              SQL_FETCH = SQL_FETCH ":I" || ci
+            END
+           KOMMA = ","
+         End
+    End
+
+      /* Fetch Data                                                   */
+     call Fetch_Dynamic_data_AC1
+  End /* END DO */
+
+Return 0
+
+Fetch_Dynamic_data_AC1:
+
+   DO WHILE SQLCODE = 0
+      SQLTEXT =  " FETCH C"CNR" USING DESCRIPTOR :OUTSQLDA"
+      Call EXECUTE_SQL_TEXT_AC1
+      IF SQLCODE =  100 THEN LEAVE      /* UB       13.06.2013 */
+      IF SQLCODE <    0 THEN Do         /* UB       13.06.2013 */
+         SQLSTMT = SQLTEXT              /* UB       13.06.2013 */
+         LEAVE
+       End
+      If sqlcode > 0 then sqlcode = 0   /* Warnings 13.06.2013 */
+      IVAL = "IVAL_I = " VALUE(SPACE(RXDB2_PUTSTEM, 0) || 0) "+ 1"
+      INTERPRET  IVAL
+      IVAL = SPACE(RXDB2_PUTSTEM, 0) || 0  " = IVAL_I"
+      INTERPRET  IVAL
+      DO CI = 1 TO OUTSQLDA.SQLD
+         /* AUSGABE.1.DBNAME = "DSNDB07"   */
+         IVAL = VALUE(SPACE(RXDB2_PUTSTEM, 0) || IVAL_I) || "." ||  ,
+                SPACE(OUTSQLDA.CI.SQLNAME, 0)
+         INTERPRET IVAL"=OUTSQLDA.CI.SQLDATA"
+
+         IVAL = value(SPACE(OUTSQLDA.CI.SQLNAME, 0))
+       END
+    END
+SQLTEXT = "CLOSE C"CNR
+Call EXECUTE_SQL_TEXT_AC1
+
+Return
+
+
+EXECUTE_IMMEDIATE_AC1:
+    SQLSTMT = STRIP(SQLSTMT)
+
+    SELECT
+       WHEN WORD(SQLSTMT, 1) = 'CONNECT' THEN DO
+            SQLTEXT = " "SQLSTMT
+            Call EXECUTE_SQL_TEXT_AC1
+            sqlc = sqlcode
+        END
+       OTHERWISE DO
+          SQLTEXT = " EXECUTE IMMEDIATE :SQLSTMT"
+          Call EXECUTE_SQL_TEXT_AC1
+          IF RC <> 0 || SQLCODE < 0   THEN DO
+             SQLTEXT = " "SQLSTMT
+             Call EXECUTE_SQL_TEXT_AC1
+             sqlc = sqlcode
+           END
+          IF SQLCODE <  0 THEN DO
+             SAY "'"SQLSTMT"'"
+             CALL SQL_ERROR
+             Call SET_RC(4)
+             sqlc = sqlcode
+             SQLTEXT = " ROLLBACK"
+             Call EXECUTE_SQL_TEXT_AC1
+             sqlcode  = sqlc
+           END
+        END
+     END
+    If SUBROUTINE    = 'Y' Then do
+       OK = NOU("-- SQLCODE = "SQLC, 1)
+     End
+
+RETURN MaxRC
+
+ERSETZEN_STRING_MC:   /* MIxEd CaSe */
+    ARG STR_ALTU, VTXT, NTXT
+    str_alt = arg(1)
+    LAENGE = LENGTH(VTXT)
+    POSI = POS(VTXT, STR_ALTU)
+    DO WHILE POSI > 0
+       STR_ALTU = SUBSTR(STR_ALTU, 1, POSI - 1) ||,
+                  SUBSTR(STR_ALTU, POSI + LAENGE )
+       STR_ALT  = SUBSTR(STR_ALT , 1, POSI - 1) ||,
+                  SUBSTR(STR_ALT , POSI + LAENGE )
+
+       STR_ALT  = INSERT(NTXT, STR_ALT , POSI - 1)
+       STR_ALTU = INSERT(NTXT, STR_ALTU, POSI - 1)
+      POSI = POS(VTXT, STR_ALTU, POSI + length(NTXT) )
+    END
+/*  say str_alt  */
+RETURN STR_ALT

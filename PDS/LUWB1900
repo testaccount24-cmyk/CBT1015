@@ -1,0 +1,423 @@
+/* REXX */
+/*******************************************************************/
+/*                                                                 */
+/* ProgramNAME      : LUWB1900  (fuer LUW V11.1                    */
+/* AUTHER           : ULRICH BRAEUER                               */
+/* FUNKTION         : AG : Parameter zurueckgeben.                 */
+/*                  :      Z.B LISTDSN  oa                         */
+/*                                                                 */
+/*                                                                 */
+/*******************************************************************/
+
+ENV        = "TSO"
+X          = MSG('OFF')
+USER       = USERID()
+ADDRESS ISPEXEC 'VGET (UDBTRACE) PROFILE'
+IF UDBTRACE = 'ON' THEN TRACE I
+ELSE                    TRACE
+
+RWert      = ''
+
+PRG        = arg(1)
+Auswahl    = arg(2)
+OBJ        = arg(3)
+LNR        = arg(4)
+
+PRG        = strip(Translate(PRG))
+Auswahl    = strip(Translate(Auswahl))
+OBJ        = strip(Translate(OBJ))
+
+Select
+  When PRG = 'LUWB1210' Then do
+       Call LUWB1210      /* Parameter fuer LUWB1210 */
+   end
+  When PRG = 'LUWB1' Then do
+       Call LUWB1         /* Allgemeine Parameter    */
+   end
+  Otherwise Return ''
+ End  /* END SELECT */
+
+Return RWert
+
+/* Parameter fuer LUWB1210    */
+LUWB1210:
+
+fkaw.0    = 98
+fkaw.1    = "TS      Tablespace        "
+fkaw.2    = "TB      Table             "
+fkaw.3    = "VW      View              "
+fkaw.4    = "IX      Index/Primary Key "
+fkaw.5    = "FK      Foreing Key       "
+fkaw.6    = "TG      Trigger           "
+fkaw.7    = "AL      Alias/Synonym     "
+fkaw.8    = "PG      Packages          "
+fkaw.9    = "DT      Data Types        "
+fkaw.10   = "BP      Buffer Pool       "
+fkaw.11   = "TA      Tab  Authorety   "
+fkaw.12   = "NN      NICK Names       "
+fkaw.13   = "SE      Sequence         "
+fkaw.14   = "PK      Primary Keys     "
+fkaw.15   = "FN      Functions        "
+fkaw.16   = "RT      ROUTINES         "
+fkaw.17   = "ST      STATEMENT        "
+fkaw.18   = "SV      SERVER           "
+fkaw.19   = "WR      WRAPPER          "
+fkaw.20   = "CO      COLUMNS          "
+FKAW.21   = "D       DISPLAY DETAIL   "
+FKAW.22   = "WL      Workloads        "
+FKAW.23   = "CK      Checks           "
+FKAW.24   = "VA      Variables        "
+FKAW.25   = "CD      Coldist          "
+FKAW.26   = "KC      Keyclouse        "
+FKAW.27   = "IA      Indexauth        "
+FKAW.28   = "EV      Event            "
+FKAW.29   = "ET      Eventtable       "
+FKAW.30   = "EM      Eventmonitor     "
+FKAW.31   = "COPT    Coloptions      "
+FKAW.32   = "TSPI    Tableapce Info  "
+FKAW.33   = "SI      System Info      "
+FKAW.34   = "DBCFG   DB  Config    "
+FKAW.35   = "DBMCFG  DBM Config    "
+FKAW.36   = "LICM    db2 licm      "
+FKAW.37   = "LEVEL   db2 level     "
+FKAW.38   = "VADEP   VA DEP.       "
+FKAW.39   = "VAAUTH  VA Auth.      "
+FKAW.40   = "CG      COLGROUPCOLS  "
+FKAW.41   = "RO      ROLES         "
+FKAW.42   = "MQT     Materialized query table"
+FKAW.43   = "TABOPT  Tableoptions NichNames  "
+FKAW.44   = "ID      Identity Columns        "
+FKAW.45   = "OI      Invalid Objects         "
+FKAW.46   = "DA      DBAUTH                  "
+FKAW.47   = "PR      Procedures              "
+FKAW.48   = "PPARM   Procedures Parms        "
+FKAW.49   = "DP      Data Partitions         "
+FKAW.50   = "UT      Utilities               "
+FKAW.51   = "REMARKS TABLES REMARKS         "
+FKAW.52   = "HIST    History Load/Backup ... "
+FKAW.53   = "MSG     Message LOG             "
+FKAW.54   = "SDB     Snap DB                 "
+FKAW.55   = "SDBM    Snap DBM                "
+FKAW.56   = "LOCKS   Snap Locks              "
+FKAW.57   = "APPLI   Snap Appl Info          "
+FKAW.58   = "REG     Registrierdatenbank"
+FKAW.59   = "UOPT    User Options Server"
+FKAW.60   = "TBS     Table Status       "
+FKAW.61   = "CUTIL   Container Utilization "
+FKAW.62   = "FEAT    Installet Feature "
+FKAW.63   = "USER    User Liste        "
+FKAW.64   = "PRIV    Privileges eines Objectes "
+FKAW.65   = "LOCKHOLD Locking von Applicationen "
+FKAW.66   = "SG      Storage Group "
+FKAW.67   = "SGPATH  Storage Group PATH "
+FKAW.68   = "SC      Schemata           "
+FKAW.69   = "MEM     Sharing Member     "
+FKAW.70   = "PERM    Permission         "
+FKAW.71   = "VER     Versions           "
+FKAW.72   = "PSQL    Performance SQL    "
+FKAW.73   = "NG      Nodegroup          "
+FKAW.74   = "DPG     Partition Group    "
+FKAW.75   = "DB      DATABASE           "
+FKAW.76   = "TSA     TS AUTH            "
+FKAW.77   = "TBA     Table AUTH         "
+FKAW.78   = "COLA    COL AUTH           "
+FKAW.79   = "DBA     DB AUTH            "
+FKAW.80   = "IXA     Index AUTH         "
+FKAW.81   = "LIBA    Library AUTH       "
+FKAW.82   = "MODA    Modul AUTH         "
+FKAW.83   = "PGA     Package AUTH       "
+FKAW.84   = "PTHA    Passthru AUTH      "
+FKAW.85   = "ROA     Role Auth          "
+FKAW.86   = "RTA     Routine AUTH       "
+FKAW.87   = "SCA     Schema AUTH        "
+FKAW.88   = "SEA     Sequence AUTH      "
+FKAW.89   = "SUGA    Surrogate AUTH     "
+FKAW.90   = "VARA    Variable AUTH      "
+FKAW.91   = "WLA     Workload AUTH      "
+FKAW.92   = "XSRA    XSRObject AUTH     "
+FKAW.93   = "AID     Authorization IDS  "
+FKAW.94   = "LDDL    DDL MIT DB2LOOK    "
+FKAW.95   = "XSR     XSR Objects        "
+FKAW.96   = "RTS     Realtime Statistics"
+FKAW.97   = "RCK     REORGCHK           "
+FKAW.98   = "ROS     REORG STATUS       "
+
+fkaw.1.1  = "BP SG TB IX PART TSPI TBSP TSPU MTSP CUTIL HIST D "
+fkaw.1.2  = "ALTER PRIV DROP DDL HDDL LDDL TSA A GRANT "
+fkaw.2.1  = "TS VW IX CO TG AL PG TA FK TC DP TBS KC SPACE "
+fkaw.2.1  = fkaw.2.1 || "ATI HIST STAB SRO PERM D "
+fkaw.2.2  = "PRIV DROP RS RUNSTATS SETINT INTEGRITY "
+fkaw.2.2  = fkaw.2.2 || "SELECT INSERT UPDATE DELETE COUNT TRUNCATE "
+fkaw.2.2  = fkaw.2.2 || "DDL HDDL DDLE LDDL ALTER A GRANT BR RCK SC "
+fkaw.2.2  = fkaw.2.2 || "TBA "
+fkaw.3.1  = "TB VW FN CO TG AL PG TA TC D BR "
+fkaw.3.2  = "PRIV SELECT INSERT UPDATE DELETE COUNT DROP "
+fkaw.3.2  = fkaw.3.2 ||  "DDL HDDL DDLE LDDL GRANT ALTER "
+fkaw.4.1  = "TB TS KC IA COMP IXI D IXA RCK"
+fkaw.4.2  = "PRIV DROP DDL HDDL DDLE LDDL ALTER A "
+fkaw.5.1  = "TB PT D DROP "
+fkaw.5.2  = "DDL HDDL "
+fkaw.6.1  = "TB VW D    "
+fkaw.6.2  = "PRIV DROP DDL HDDL"
+fkaw.7.1  = "TB VW D "
+fkaw.7.2  = "DROP DDL HDDL"
+fkaw.8.1  = "TB VW ST D PGA "
+fkaw.8.2  = "DROP DDL HDDL A"
+fkaw.9.1  = "D       "
+fkaw.9.2  = ""
+fkaw.10.1 = "TS D HIT RIO WIO MONBP SNBP SNBPP"
+fkaw.10.2  = "DROP DDL HDDL DDLE LDDL ALTER "
+fkaw.11.1 = "LG D    "
+fkaw.11.2  = "REVOKE"
+fkaw.12.1 = "TB VW CO SV COPT TABOPT D"
+fkaw.12.2  = "PRIV DROP DDL HDDL SELECT INSERT UPDATE DELETE GRANT "
+fkaw.13.1 = "D SEA      "
+fkaw.13.2  = "PRIV DROP DDL HDDL A"
+fkaw.14.1 = "TB KC D     "
+fkaw.14.2 = ""
+fkaw.15.1 = "FP FD D    "
+fkaw.15.2 = "PRIV DROP DDL HDDL DDLE ALTER LDDL "
+fkaw.16.1 = "D RTA      "
+fkaw.16.2 = "PRIV DROP DDL HDDL LDDL A"
+fkaw.17.1 = "D DIS      "
+fkaw.17.2 = ""
+fkaw.18.1 = "WR NN SO UOPT D    "
+fkaw.18.2 = "DROP DDL HDDL"
+fkaw.19.1 = "SV OPT D       "
+fkaw.19.2 = "DROP DDL HDDL LDDL"
+fkaw.20.1 = "TB VW NN CD COPT SE ID D ALTER COLA "
+fkaw.20.2 = " DDL HDDL A"
+fkaw.21.1 = "D       "
+fkaw.21.2 = " DDL HDDL"
+fkaw.22.1 = "D WLA   "
+fkaw.22.2 = "DROP DDL HDDL DDLE LDDL A"
+fkaw.23.1 = "TB D    "
+fkaw.23.2 = " DDL HDDL"
+fkaw.24.1 = "D VADEP VAAUTH VARA "
+fkaw.24.2 = "LDDL DDL HDDL A"
+fkaw.25.1 = "        "
+fkaw.25.2 = ""
+fkaw.26.1 = "TB IX CO D "
+fkaw.26.2 = "DDL HDDL"
+fkaw.27.1 = "D       "
+fkaw.27.2 = ""
+fkaw.28.1 = "ET EM D    "
+fkaw.28.2 = "DDL HDDL"
+fkaw.29.1 = "EV EM TB D       "
+fkaw.29.2 = "DDL HDDL"
+fkaw.30.1 = "ET EV D       "
+fkaw.30.2 = "DROP DDL HDDL"
+fkaw.31.1 = "D             "
+fkaw.31.2 = ""
+fkaw.32.1 = "TS D          "
+fkaw.32.2 = ""
+fkaw.33.1 = "DBCFG DBMCFG REG LEVEL LICM FEAT SDB SDBM D"
+fkaw.33.2 = ""
+fkaw.34.1 = "UP D                   "
+fkaw.34.2 = ""
+fkaw.35.1 = "UP D                   "
+fkaw.35.2 = ""
+fkaw.36.1 = "D                      "
+fkaw.36.2 = ""
+fkaw.37.1 = "D                      "
+fkaw.37.2 = ""
+fkaw.38.1 = "D                      "
+fkaw.38.2 = ""
+fkaw.39.1 = "D                      "
+fkaw.39.2 = ""
+fkaw.40.1 = "D                      "
+fkaw.40.2 = " DDL HDDL"
+fkaw.41.1 = "D ROA                  "
+fkaw.41.2 = " DROP DDL HDDL A"
+fkaw.42.1 = "CO TA D             "
+fkaw.42.2 = "DDL HDDL DDLE SELECT INSERT UPDATE DELETE COUNT DROP "
+fkaw.42.2 = fkaw.42.2 || "REFRESH "
+fkaw.43.1 = "D                      "
+fkaw.43.2 = ""
+fkaw.44.1 = "TB CO SE D             "
+fkaw.44.2 = " "
+fkaw.45.1 = "D                "
+fkaw.45.2 = " "
+fkaw.46.1 = "D                "
+fkaw.46.2 = ""
+fkaw.47.1 = "PPARM D          "
+fkaw.47.2 = "PRIV DROP DDL HDDL LDDL "
+fkaw.48.1 = "PR D             "
+fkaw.48.2 = ""
+fkaw.49.1 = "TB D             "
+fkaw.49.2 = " DDL HDDL"
+fkaw.50.1 = "PROG D           "
+fkaw.50.2 = ""
+fkaw.51.1 = "TB               "
+fkaw.51.1 = ""
+fkaw.52.1 = "D                "
+fkaw.52.2 = "PRUNE "
+fkaw.53.1 = "D                "
+fkaw.53.2 = ""
+fkaw.54.1 = "D                "
+fkaw.54.2 = ""
+fkaw.55.1 = "D                "
+fkaw.55.2 = ""
+fkaw.56.1 = "APPLI APPL D     "
+fkaw.56.2 = ""
+fkaw.57.1 = "LOCKS APPL D     "
+fkaw.57.2 = ""
+fkaw.58.1 = "D    "
+fkaw.58.2 = ""
+fkaw.59.1 = "D    "
+fkaw.59.2 = ""
+fkaw.60.1 = "TB IX VW D "
+fkaw.60.2 = ""
+fkaw.61.1 = "TS D         "
+fkaw.61.2 = ""
+fkaw.62.1 = "D         "
+fkaw.62.2 = ""
+fkaw.63.1 = ""
+fkaw.63.2 = ""
+fkaw.64.1 = "D "
+fkaw.64.2 = ""
+fkaw.65.1 = "HAPP RAPP HLOCKS RLOCKS D "
+fkaw.65.2 = "APPLI LOCKS "
+fkaw.66.1 = "TS SGPATH D "
+fkaw.66.2 = "DDL HDDL DDLE LDDL DROP "
+fkaw.67.1 = "D "
+fkaw.67.2 = ""
+fkaw.68.1 = "TB IX VW D SCA RCK "
+fkaw.68.2 = "DDL HDDL DDLE LDDL DROP A GRANT"
+fkaw.69.1 = "D"
+fkaw.69.2 = ""
+fkaw.70.1 = "D TB VW CO ACTIVATE DEACTIVATE ENABLE DISABLE "
+fkaw.70.2 = "DROP DDL HDDL"
+fkaw.71.1 = "D                                             "
+fkaw.71.2 = ""
+fkaw.72.1 = "                                              "
+fkaw.72.2 = ""
+fkaw.73.1 = "                                              "
+fkaw.73.2 = ""
+fkaw.74.1 = "                                              "
+fkaw.74.2 = ""
+fkaw.75.1 = "LDDL DBA                                      "
+fkaw.75.2 = "A GRANT LDDL "
+fkaw.76.1 = "                                              "
+fkaw.77.1 = ""
+fkaw.77.2 = "                                              "
+fkaw.78.1 = "                                              "
+fkaw.78.2 = ""
+fkaw.79.1 = "                                              "
+fkaw.79.2 = ""
+fkaw.80.1 = "                                              "
+fkaw.80.2 = ""
+fkaw.81.1 = "                                              "
+fkaw.81.2 = ""
+fkaw.82.1 = "                                              "
+fkaw.82.2 = ""
+fkaw.83.1 = "                                              "
+fkaw.83.2 = ""
+fkaw.84.1 = "                                              "
+fkaw.84.2 = ""
+fkaw.85.1 = "                                              "
+fkaw.85.2 = ""
+fkaw.86.1 = "                                              "
+fkaw.86.2 = ""
+fkaw.87.1 = "                                              "
+fkaw.87.2 = ""
+fkaw.88.1 = "                                              "
+fkaw.88.2 = ""
+fkaw.89.1 = "                                              "
+fkaw.89.2 = ""
+fkaw.90.1 = "                                              "
+fkaw.90.2 = ""
+fkaw.91.1 = "                                              "
+fkaw.91.2 = ""
+fkaw.92.1 = "                                              "
+fkaw.92.2 = ""
+fkaw.93.1 = "                                              "
+fkaw.93.2 = ""
+fkaw.94.1 = "                                              "
+fkaw.94.2 = ""
+fkaw.95.1 = "                                              "
+fkaw.95.2 = "LDDL  "
+fkaw.96.1 = "D                                             "
+fkaw.96.2 = "      "
+fkaw.97.1 = "                                              "
+fkaw.97.2 = "      "
+fkaw.98.1 = "D                                             "
+fkaw.98.2 = "      "
+
+obj1 = ''
+obj2 = ''
+
+if words(Obj) = 2 Then do
+   obj1 = word(Obj, 2)
+   obj2 = word(Obj, 1)
+   obj  = obj2
+ end
+ Select
+      when Auswahl = "CHKFKAW" Then do  i = 1 to fkaw.0
+           If Word(fkaw.i, 1) /= Obj Then Iterate
+           RWERT = WORD(FKAW.I, 1) "-NW"
+           if length(obj1) > 0 Then do
+              if wordpos(obj1, fkaw.i.1, 1) = 0 ,
+               & wordpos(obj1, fkaw.i.2, 1) = 0 Then do
+                 Return
+               End
+              RWERT = obj1 "-NW"
+              obj   = obj1
+            end
+           Found = 'N'
+           do y = 1 to fkaw.0
+              If Word(fkaw.y, 1) /= Obj Then Iterate
+              RWERT = RWERT SUBWORD(FKAW.Y, 2)"-NW"
+              RWERT = RWERT STRIP(FKAW.Y.1)"-NW"
+              RWERT = RWERT STRIP(FKAW.Y.2)"-NW"
+              Found = 'Y'
+              leave
+            end
+           if Found = 'N' then  RWERT = RWERT "-NW-NW-NW"
+           Return
+       end
+      Otherwise NOP
+  end   /* End Select */
+
+Return
+
+/* Allgemeine Parameter  */
+LUWB1:
+DDLList = ""
+DDLList = DDLLIST || "DB BP SG TS TB VW IX PK AL SY TG FK "
+DDLList = DDLLIST || "NN WR SV UOPT SE RO PR FN RT CK MQT SC "
+DDLList = DDLLIST || "PERM WL XSR VA "
+
+SMFID   = MVSVAR("SYSNAME")
+IF DATATYPE(LNR) = 'NUM' THEN DO
+   LNR = "NR" || RIGHT(LNR, 4, '0')
+ End
+select
+   when Auswahl = "DDL" Then do
+        if wordpos(obj, DDLList, 1) = 0 Then RWert = ''
+        Else RWert = 'OK'
+    end
+   when Auswahl = "HDDL" Then do
+        if wordpos(obj, DDLList, 1) = 0 Then RWert = ''
+        Else RWert = 'OK'
+    end
+   when Auswahl = "DDLE" Then do
+        if wordpos(obj, DDLList, 1) = 0 Then RWert = ''
+        Else RWert = 'OK'
+    end
+   when Auswahl = "LDDL" Then do
+        if wordpos(obj, DDLList, 1) = 0 Then RWert = ''
+        Else RWert = 'OK'
+    end
+   when Auswahl = "DSNAME" & Obj = 'STMT' Then do
+        RWert = "'"USER"."LNR"."SMFID".UDBSTMT'"
+        RWert = "'"USER".UDBSTMT."SMFID"."LNR"'"
+    end
+   when Auswahl = "DSNAME" & Obj = 'LISTE' Then do
+        RWert = "'"USER"."LNR"."SMFID".UDBLISTE'"
+        RWert = "'"USER".UDBLISTE."SMFID"."LNR"'"
+    end
+   Otherwise NOP
+ end
+
+Return

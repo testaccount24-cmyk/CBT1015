@@ -1,0 +1,262 @@
+/* REXX */
+/*******************************************************************/
+/*                                                                 */
+/* ProgramNAME      : AUFRUF MIT DYNAMISCHEM ALLOC                 */
+/* AUSRUF           : AUS ISPF                                     */
+/* AUTHER           : ULRICH BRAEUER                               */
+/* FUNKTION         : Alloc datasets                               */
+/*                                                                 */
+/*                    ULI BRAEUER                                  */
+/*                                                                 */
+/*******************************************************************/
+
+ENV     = "TSO"
+USER    = USERID()
+X       = MSG('OFF')
+SMFID   = MVSVAR("SYSNAME")
+
+PARSE SOURCE SRC.1  , /* ENVIRONMENT  (TSO)            */
+             SRC.2  , /* AUFRUF ALS (COMMAND)          */
+             SRC.3  , /* Program NAME (LUW97000)       */
+             SRC.4  , /* SYS00186 (TEMP FILE)          */
+             SRC.5  , /* AUFRUF AUS LIB (X.X.CLISTUDB) */
+             SRC.6  , /* ?                             */
+             SRC.7  , /* TSO                           */
+             SRC.8  , /* ISPF                          */
+             SRC.9  , /* ?                             */
+             .
+
+LIBDEFON = "YES"                    /* YES ODER NO FUER LIBDEF    */
+
+SYSCATS  = "SYSCAT"
+SYSIBMS  = "SYSIBM"
+SYSIBMA  = "SYSIBMADM"
+SYSPROCA = "SYSPROC"
+SYSUID   = ""
+SYSPWD   = ""
+UDBTRACE = "OFF"
+MAXBLOBS = ""
+ADDRESS ISPEXEC 'VPUT (SYSIBMS,SYSCATS,SYSIBMA,SYSPROCA) PROFILE'
+ADDRESS ISPEXEC 'VPUT (SYSUID)   PROFILE'
+ADDRESS ISPEXEC 'VPUT (SYSPWD)   PROFILE'
+ADDRESS ISPEXEC 'VPUT (UDBTRACE) PROFILE'
+
+ADDRESS ISPEXEC 'VGET (MAXBLOBS) PROFILE'
+if RC <> 0 then do
+   MAXBLOBS = "1M"
+   ADDRESS ISPEXEC 'VPUT (MAXBLOBS) PROFILE'
+ end
+
+/* Defaultwerte setzen */
+ADDRESS ISPEXEC 'VGET (ZSCREEN)' /* SCREEN kann man als LNR nutzen */
+ADDRESS ISPEXEC 'VGET (RECLEN)  PROFILE'
+ADDRESS ISPEXEC 'VGET (TRACKS)  PROFILE'
+ADDRESS ISPEXEC 'VGET (MAXROWS) PROFILE'
+ADDRESS ISPEXEC 'VGET (STMTLEN) PROFILE'
+
+if Datatype(Reclen) <> "NUM" | Reclen < 10 Then do
+   Reclen  = 4096
+   ADDRESS ISPEXEC 'VPUT (RECLEN) PROFILE'
+ End
+if Datatype(STMTLEN) <> "NUM" | STMTLEN < 10 Then do
+   STMTLEN = 4096
+   ADDRESS ISPEXEC 'VPUT (STMTLEN) PROFILE'
+ End
+if Datatype(Tracks) <> "NUM" | Tracks < 1  Then do
+   Tracks  = 300
+   ADDRESS ISPEXEC 'VPUT (TRACKS) PROFILE'
+ End
+if Datatype(MAXROWS) <> "NUM" | MAXROWS < 1  Then do
+   MAXROWS = 2000
+   ADDRESS ISPEXEC 'VPUT (MAXROWS) PROFILE'
+ End
+
+if Strip(MAXBLOBS)   =  ""                   Then do
+   MAXBLOBS = "100K"
+   ADDRESS ISPEXEC 'VPUT (MAXBLOBS) PROFILE'
+ End
+
+LNR = 1
+Do forever
+   TABLIB  = USER || ".ISPF" || SMFID || "." ||  ,
+            "NR" || RIGHT(LNR, 4, '0') || "."
+   check_tab = "'"TABLIB || "TABLEUDB'"
+   FF =  LISTDSI(Check_tab)
+   IF FF = 0 THEN Do
+      ADDRESS "TSO"   "DELETE "check_tab
+      If RC = 0 Then leave    /* WAR UEBERBLEIBSEL ANDERE SESSION */
+      LNR = LNR + 1           /* POBIERE DIE NAECHSTE NUMMER      */
+      If LNR > 100 THEN Do    /* DA STIMMT WAS NICHT              */
+         say "aufr{umen  ist angesagt " check_tab
+         say "Program wird beendet    "
+         EXIT 8
+       End
+      Iterate
+    End
+   LEAVE
+ End
+
+
+deflib = SRC.5                  /* DEFLIB auf richtig Library setzen */
+
+CLIB1 = "'"DEFLIB"'"
+CLIB2 = ""
+CLIB3 = ""
+
+PLIB1 = "'"DEFLIB"'"
+PLIB2 = "'"TABLIB || "OBJECT'"
+PLIB3 = ""
+
+SLIB1 = "'"DEFLIB"'"
+SLIB2 = "'"TABLIB || "OBJECT'"
+SLIB3 = ""
+
+TLIB1 = "'"TABLIB || "TABLEUDB'"
+TLIB2 = ""
+TLIB3 = ""
+
+LLIB1 = ""
+LLIB2 = ""
+LLIB3 = ""
+
+
+TLIB    = TLIB1
+SPFILE  = "'"TABLIB"ISPFILE'"
+OBJFILE = SLIB2
+
+ADDRESS "TSO" "FREE FI(TLIBDD)"
+ADDRESS "TSO" "FREE FI(OBJECT)"
+ADDRESS "TSO" "FREE FI(ISPFILE)"
+
+IF LISTDSI(TLIB) <> 0 THEN do
+   ADDRESS "TSO" "FREE  FI(TLIB)"
+   ADDRESS "TSO" "ALLOC FI(TLIBDD) DA("TLIB") NEW CATALOG ,
+         SPACE(10,10) CYL DIR(100) ,
+         LRECL(80) UNIT(SYSDA) RECFM(F,B)"
+ end
+
+IF LISTDSI(OBJFILE) <> 0 THEN do
+   ADDRESS "TSO" "FREE  FI(OBJECT)"
+   ADDRESS "TSO" "ALLOC FI(OBJECT) DA("OBJFILE") NEW CATALOG ,
+         SPACE(10,10) CYL DIR(100) ,
+         LRECL(80) UNIT(SYSDA) RECFM(F,B)"
+ end
+
+IF LISTDSI(SPFILE) <> 0 THEN do
+   ADDRESS "TSO" "FREE  FI(ISPFILE)"
+   ADDRESS "TSO" "ALLOC FI(ISPFILE) DA("SPFILE") NEW CATALOG ,
+         SPACE(10,10) CYL DIR(100) ,
+         LRECL(80) UNIT(SYSDA) RECFM(F,B)"
+   ADDRESS "TSO" "FREE  FI(ISPFILE)"
+   ADDRESS "TSO" "ALLOC FI(ISPFILE) DA("SPFILE") SHR  "
+ end
+
+ ADDRESS "TSO" "FREE FI(TLIBDD)"
+ ADDRESS "TSO" "FREE FI(OBJECT)"
+
+
+ADDRESS ISPEXEC "LIBDEF ISPTLIB DATASET ID( )"
+ADDRESS ISPEXEC "LIBDEF ISPTABL DATASET ID( )"
+ADDRESS ISPEXEC "LIBDEF ISPTLIB DATASET ID(" ,
+                 TLIB1 ,
+                 TLIB2 ,
+                 TLIB3 ,
+                ") UNCOND STACK"
+
+ADDRESS ISPEXEC "LIBDEF ISPTABL DATASET ID(" ,
+                 TLIB1 ,
+                 TLIB2 ,
+                 TLIB3 ,
+                ") UNCOND STACK"
+
+If LIBDEFON = "YES" Then do
+/*
+   ADDRESS ISPEXEC "LIBDEF ISPPLIB DATASET ID( )"
+   ADDRESS ISPEXEC "LIBDEF ISPSLIB DATASET ID( )"
+   ADDRESS TSO "ALTLIB DEA APPLICATION(EXEC)"
+*/
+
+   ADDRESS TSO "ALTLIB DEA USER(CLIST)"
+
+   ADDRESS ISPEXEC "LIBDEF ISPPLIB DATASET ID( " ,
+                    PLIB1 ,
+                    PLIB2 ,
+                    PLIB3 ,
+                   ") UNCOND STACK"
+
+
+   ADDRESS ISPEXEC "LIBDEF ISPSLIB DATASET ID( " ,
+                    SLIB1 ,
+                    SLIB2 ,
+                    SLIB3 ,
+                   ") UNCOND STACK"
+
+
+   ADDRESS "TSO" "FREE FI(SYSUPROC)"
+   ADDRESS "TSO" "ALLOCATE FI(SYSUPROC) DA(" ,
+                    CLIB1 ,
+                    CLIB2 ,
+                    CLIB3 ,
+                 "  ) SHR   "
+
+   ADDRESS "TSO" "ALTLIB ACT USER(CLIST)"
+
+ End
+
+call RXOBJECT OBJFILE
+
+TABNR = "NR" || RIGHT(LNR, 4, '0')
+ADDRESS ISPEXEC "VGET (ZAPPLID) SHARED"
+ADDRESS ISPEXEC "SELECT CMD(%LUWAUSW ",
+                         "NR" || RIGHT(LNR, 4, '0') ,
+                         deflib ,
+                         " ) "  ,
+                         "NEWAPPL("ZAPPLID")" ,
+                         "PASSLIB " ,
+                         "NEWPOOL " ,
+                         "SCRNAME(LUWDB2)" ,
+                         ""
+
+ADDRESS ISPEXEC "LIBDEF ISPTLIB DATASET ID( )"
+ADDRESS ISPEXEC "LIBDEF ISPTABL DATASET ID( )"
+If LIBDEFON = "YES" Then do
+   ADDRESS ISPEXEC "LIBDEF ISPPLIB DATASET ID( )"
+   ADDRESS ISPEXEC "LIBDEF ISPSLIB DATASET ID( )"
+ End
+
+
+/* PLATTE PUTZEN */
+
+X       = MSG('OFF')
+ADDRESS "TSO" "FREE FI(ISPFILE)"
+ADDRESS "TSO" "FREE FI(OBJECT)"
+
+ADDRESS TSO "DELETE " || TLIB1
+ADDRESS TSO "DELETE " || PLIB2
+ADDRESS TSO "DELETE " || SPFILE
+
+
+DSNAME = LUWA5900("LUWA5","DSNAME", "STMT", TABNR)
+ADDRESS TSO "DELETE " || STRIP(DSNAME)
+DSNAME = LUWA5900("LUWA5","DSNAME", "LISTE", TABNR)
+ADDRESS TSO "DELETE " || STRIP(DSNAME)
+
+DSNAME = ZOSB1900("ZOSB1","DSNAME", "STMT", TABNR)
+ADDRESS TSO "DELETE " || STRIP(DSNAME)
+DSNAME = ZOSB1900("ZOSB1","DSNAME", "LISTE", TABNR)
+ADDRESS TSO "DELETE " || STRIP(DSNAME)
+
+DSNAME = ZOSC1900("ZOSC1","DSNAME", "STMT", TABNR)
+ADDRESS TSO "DELETE " || STRIP(DSNAME)
+DSNAME = ZOSC1900("ZOSC1","DSNAME", "LISTE", TABNR)
+ADDRESS TSO "DELETE " || STRIP(DSNAME)
+
+If LIBDEFON = "YES" Then do
+   "ALTLIB DEA USER(CLIST)"
+   "ALTLIB DEA APPLICATION(EXEC)"
+   "ALTLIB DEACTIVATE SYSTEM(exec)"
+   "ALTLIB RESET"
+/* ADDRESS "TSO" "FREE FI(SYSUPROC)" */
+ End
+
+return

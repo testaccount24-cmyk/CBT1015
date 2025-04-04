@@ -1,0 +1,246 @@
+/* REXX */
+/*******************************************************************/
+/*                                                                 */
+/* ProgramNAME      : LUWEDSQL                                     */
+/* AUSRUF           : AUS Program                                  */
+/* FUNKTION         : ANZEIGE SQL-STATEMENTS die ausgef}hrt werden */
+/*                    Der Aufruf erfolgt im AC3 beim OPEN Cursor.  */
+/*                    Vor dem Open wird das Program aufgerufen     */
+/*                    und es kann das where stement, order by, ... */
+/*                    angepasst werden.                            */
+/*                    Die Columns die angezeigt werden,            */
+/*                    duerfen NICHT geaendert werden.              */
+/*                                                                 */
+/*******************************************************************/
+
+
+ENV = "TSO"
+USER = USERID()
+X = MSG('OFF')
+
+ADDRESS ISPEXEC 'VGET (UDBTRACE) PROFILE'
+IF UDBTRACE = 'ON' THEN TRACE I
+ELSE                    TRACE
+RECLEN  = 4096
+ADDRESS ISPEXEC 'VGET (RECLEN) PROFILE'
+TRACKS  = 60
+ADDRESS ISPEXEC 'VGET (TRACKS) PROFILE'
+
+DDLTEXT = ""
+
+EDIT_STMT = ARG(1)
+LNR       = ARG(2)
+PARSE_ART = ARG(3)
+sqlterm   = ';'
+
+DSNAME = LUW97900("LUW97","DSNAME", "STMT", LNR)
+LRECL   = RECLEN
+
+IF LISTDSI(DSNAME) = 0 THEN do
+    ADDRESS "TSO" "ALLOC F(SELDD) DA("DSNAME") SHR"
+ end
+else do
+    ADDRESS "TSO" "ALLOC F(SELDD) DA("DSNAME") NEW CATALOG ,
+          SPACE("TRACKS","TRACKS") TRACKS REUSE,
+          LRECL("RECLEN") UNIT(SYSDA)"
+ end
+
+DDLTEXT = SQL_BLOB_AUFBEREITEN(EDIT_STMT)
+
+DROP LISTE.
+LISTE.0 = 0
+DO FOREVER
+   LISTE.0 = LISTE.0 + 1
+   IND = LISTE.0
+   PARSE VALUE DDLTEXT WITH LISTE.IND '-NR' REST
+   IF REST = '' THEN LEAVE
+   DDLTEXT = REST
+ END
+
+Max_Blanks = 10
+Drop SL.
+SL.0 = 1
+SL.1 = "--SQLTERM=" || sqlterm
+STRIP_TO_SPUFI = "N"
+DO IND = 1 TO LISTE.0
+   IF STRIP(LISTE.IND) = '' THEN ITERATE
+   DDLTEXT = LISTE.IND
+   DO FOREVER
+      PARSE VALUE DDLTEXT WITH ZEILE  '-NL' REST
+      DDLTEXT = REST
+      if length(zeile) = 0 Then Zeile = "   "
+/*    If Length(Strip(Zeile)) = 0 then Iterate  */
+      sl.0 = sl.0 + 1;sli = sl.0;sl.sli = ZEILE ;
+      If substr(Strip(sl.sli), 1, 10) = "--SQLTERM=" Then do
+         Parse value(sl.sli) with test "=" sqlterm .
+         sqlterm = Strip(Sqlterm)
+       end
+
+      If DDLSPUFI = "Y" & Length(Strip(sl.sli, "T")) > SpufiLen Then do
+         STRIP_TO_SPUFI = "Y"
+       End
+
+      IF REST = '' THEN do
+         If Strip(sl.sli) <> ""  ,
+          & substr(Strip(sl.sli), 1, 10) <> "--SQLTERM=" Then do
+            If Length(Strip(sl.sli)) > 60 Then Do
+               sl.0 = sl.0 + 1;sli = sl.0;sl.sli = ZEILE ;
+               sl.sli = sqlterm
+             End
+            Else Do
+               sl.sli = sl.sli || sqlterm
+             End
+          End
+         leave
+       end
+    END
+ END
+
+max_blanks = 6
+blank_such = LEFT(' ',max_blanks,' ')
+
+
+Do i = 1 to SL.0
+   blz = 0
+   drop azline
+   azline = ""
+   sl.i = Strip( sl.i, 'T', ' ' )
+   if sl.i = "" Then SL.i = " "
+   IF POS(blank_such, sl.i) < 1 THEN Iterate
+   hkon = 'N'
+   Do bli = 1 to length(sl.i)
+      if substr(sl.i, bli, 1) = "'" & hkon = 'Y' Then hkon = 'N'
+      if substr(sl.i, bli, 1) = "'" & hkon = 'N' Then hkon = 'Y'
+      if substr(sl.i, bli, 1) = " " Then Do
+         Blz = Blz + 1
+       End
+      Else Do
+         Blz = 0
+       End
+      If hkon = 'Y' Then Do
+         Blz = 0
+       End
+      if blz > max_blanks Then Iterate
+      azline = azline || substr(sl.i, bli, 1)
+    End
+   sl.i = azline
+ End
+
+If STRIP_TO_SPUFI = "Y"  Then Do
+   Drop SlN.
+   SlN.0 = 0
+   Do sli = 1 to sl.0
+      Sln.0 = sln.0 + 1; Slin  = sln.0 ;
+      If Length(Strip(Sl.sli, "T"))  > SpufiLen Then do
+         Do while Length(sl.sli) > 0
+            sln.slin = Substr(sl.sli, 1,  SpufiLen)
+            sl.sli   = Substr(sl.sli, SpufiLen + 1)
+            If length(sl.sli) < 1 then Leave
+            Sln.0 = sln.0 + 1; Slin  = sln.0 ;
+          End
+       End
+      Else Do
+         sln.slin = sl.sli
+       End
+    End
+
+   /* Daten wieder nach sl. stellen */
+   sl.0 = sln.0
+   Do sli = 1 to sln.0
+      sl.sli = sln.sli
+    End
+ End
+
+ADDRESS "TSO" "EXECIO * DISKW SELDD ( STEM SL. FINIS"
+ADDRESS "TSO" "FREE FI(SELDD)"
+ADDRESS ISPEXEC "EDIT DATASET("DSNAME")"
+
+ADDRESS "TSO" "FREE FI(SYSIN)"
+ADDRESS "TSO" "ALLOC F(SYSIN) DA("DSNAME") SHR"
+
+If RC > 0 Then do
+   Say "*** Error on ALLOC SYSIN *** RC="RC
+   Say "    processing is interrupted "
+   Return EDIT_STMT
+ End
+
+Call READ_SYSIN
+ADDRESS "TSO" "FREE FI(SYSIN)"
+
+if Length(STATEMENT.1) > 0 Then do
+   Edit_STMT = STATEMENT.1
+ End
+
+RETURN EDIT_STMT
+
+SQL_BLOB_AUFBEREITEN:
+IF DDLSPUFI <> "Y" Then  SQL_BLOB_TEXT2 = RXSQLFOR(ARG(1), PARSE_ART)
+ Else              SQL_BLOB_TEXT2 = RXSQLFOR(ARG(1), PARSE_ART) "-NL"
+
+Return SQL_BLOB_TEXT2
+
+READ_SYSIN:
+
+  ADDRESS TSO "EXECIO * DISKR SYSIN (STEM IN1. FINIS"
+  ADDRESS TSO "EXECIO 0 DISKR SYSIN (FINIS"
+
+  DROP IN.
+  IN.0 = 0
+  DO INI = 1 TO IN1.0
+
+     IN1.INI = STRIP(IN1.INI)
+     IF SUBSTR(IN1.INI, 1, 3)  = '-- ' THEN ITERATE
+     NureinTeil = 0
+     if NureinTeil = 0 Then NurEinTeil = wordpos(' -- ', IN1.INI, 1)
+     IF NurEinTeil > 0 Then do
+        if NurEinTeil > 1 Then NurEinTeil = NurEinTeil -1
+        IN1.INI = Subword(IN1.INI, 1, NurEinTeil)
+      end
+     If Strip(IN1.INI) = "" Then Iterate
+     IN.0 = IN.0 + 1
+     INX  = IN.0
+     IN.INX = IN1.INI
+   END
+/* EINZELNE STATEMENTS AUFBEREITEN    */
+  DROP STATEMENT.
+  STATEMENT.0  = 0
+  STATEMENT.0  = 1
+  STATEMENT.1  = ""
+  DROP STMTOUT.
+  STMTOUT.0 = 1
+  STMTOUT.1.STMT.0 = 0
+  DO I = 1 TO IN.0
+     If Substr(Strip(IN.i), 1, 10)  = "--SQLTERM=" Then do
+        parse value IN.i with w1 "=" SQLTERM .
+        SQLTERM = STRIP(SQLTERM)
+        ITERATE
+      End
+     SI = STATEMENT.0
+     STATEMENT.SI = STRIP(STATEMENT.SI) || " " || STRIP(IN.i)
+     STMTOUT.SI.STMT.0 = STMTOUT.SI.STMT.0 + 1
+     STMTI = STMTOUT.SI.STMT.0
+     STMTOUT.SI.STMT.STMTI = STRIP(IN.i)
+     TEST = REVERSE(SPACE(IN.I, 0))
+     select
+       When substr(test, 1, 2) = END_SQL_TERM then do
+            STATEMENT.0  = STATEMENT.0 - 1
+            STMTOUT.0    = STATEMENT.0
+            LEAVE
+        END
+       When substr(test, 1, 1) = SQLTERM | I = In.0 Then do
+            test = reverse(strip(STATEMENT.si))
+            if substr(test, 1, 1) = SQLTERM Then do
+               STATEMENT.si = reverse(substr(test, 2))
+             End
+            STATEMENT.si = Strip(STATEMENT.si)
+            STATEMENT.0  = STATEMENT.0 + 1
+            STMTOUT.0    = STATEMENT.0
+            SI           = STATEMENT.0
+            STATEMENT.SI = ""
+            STMTOUT.Si.STMT.0 = 0
+        END
+       OTHERWISE NOP
+      END
+   END
+
+RETURN 0

@@ -1,0 +1,2024 @@
+/* REXX */
+/*******************************************************************/
+/*                                                                 */
+/* ProgramNAME      : ZOSB192B  (fuer DB2 V11 Nr 92B)              */
+/* AUSRUF           : Batch                                        */
+/* AUTHER           : ULRICH BRAEUER                               */
+/* FUNKTION         : Erzeugen DDL ausBatch Procedure              */
+/* Aenderung        :                                              */
+/*                                                                 */
+/*                                                                 */
+/*******************************************************************/
+
+/* To protect against errors: */
+SIGNAL ON  HALT            /* TRAP THIS ONLY ON LUW */
+SIGNAL OFF SYNTAX          /* TURN ON SYNTAX TRAP */
+SIGNAL OFF FAILURE
+SIGNAL OFF ERROR
+
+PARSE SOURCE SRC.1 SRC.2 SRC.3 SRC.4 SRC.5 SRC.6 SRC.7 SRC.8 SRC.9
+IF SRC.2 = "SUBROUTINE" Then SUBROUTINE    = 'Y'
+ Else                        SUBROUTINE    = 'N'
+ispf_env = SRC.8
+parse Upper version rexxType level date
+
+ENV        = "TSO"
+
+USER       = USERID()
+SYSCATS    = "SYSCAT"
+SYSIBMS    = "SYSIBM"
+SYSIBMA    = "SYSIBMADM"
+SYSPROCA   = "SYSPROC"
+CURRULE    = "STD"
+DSNRECON   = "N"
+SYSUID     = ""
+SYSPWD     = ""
+DDLSPUFI   = "N"
+SpufiLen   = 72   /* Laenge ausgabe SPUFI COMPATIBILITAET  */
+
+If ispf_env = 'ISPF' THEN Do
+   ADDRESS ISPEXEC 'VPUT (SYSIBMS)  PROFILE'
+   ADDRESS ISPEXEC 'VPUT (SYSCATS)  PROFILE'
+   ADDRESS ISPEXEC 'VPUT (SYSIBMA)  PROFILE'
+   ADDRESS ISPEXEC 'VPUT (SYSPROCA) PROFILE'
+   ADDRESS ISPEXEC 'VGET (DSNRECON) PROFILE'
+   ADDRESS ISPEXEC 'VGET (DDLSPUFI) PROFILE'
+ END
+
+Select
+   WHEN ispf_env = 'ISPF' THEN Do
+        ADDRESS "TSO"
+     End
+   WHEN ispf_env = 'MVS' THEN Do
+        ADDRESS "MVS"
+     End
+   OTHERWISE NOP
+ END
+
+stmt       = ''
+ddl        = ""
+ddltext    = ""
+HEADER     = "YES"
+
+ssid       = ""                /* DB2 SSID            */
+location   = ""                /* location to connect */
+auswahl    = ""                /* TS,TB,VW,IX,...     */
+object     = ""                /* Name des Object     */
+table      = ""                /* alle Objekte fuer TB*/
+object2    = ""                /* alle Objekte fuer TB*/
+object3    = ""                /* alle Objekte fuer TB*/
+object4    = ""                /* alle Objekte fuer TB*/
+object5    = ""                /* alle Objekte fuer TB*/
+tablespace = ""                /* alle objekte fuer TS*/
+database   = ""                /* alle objekte fuer DB*/
+lcmd       = ""                /* Command DDL oder HDDL */
+
+G_DATABASE        =  "N"        /*  DB /                         */
+G_Tablespace      =  "N"        /*  DB / SC                      */
+G_Table           =  "N"        /*  DB / SC                      */
+G_Index           =  "N"        /*  DB / SC                      */
+G_Comment         =  "N"        /*  DB / SC                      */
+G_Auxtable        =  "N"        /*  DB / SC                      */
+G_View            =  "N"        /*  DB / SC                      */
+G_PrimaryKey      =  "N"        /*  DB / SC                      */
+G_ForeignKey      =  "N"        /*  DB / SC                      */
+G_Trigger         =  "N"        /*  DB / SC                      */
+G_SProc           =  "N"        /*  DB / SC                      */
+G_Synonym         =  "N"        /*  DB / SC                      */
+G_Permission      =  "N"        /*  DB / SC                      */
+G_Variable        =  "N"        /*  DB / SC                      */
+G_GrantTable      =  "N"        /*  DB / SC                      */
+G_GrantView       =  "N"        /*  DB / SC                      */
+G_GrantSQ         =  "N"        /*  DB / SC                      */
+G_GrantRT         =  "N"        /*  DB / SC                      */
+G_Sequence        =  "N"        /*     / SC                      */
+G_Alias           =  "N"        /*     / SC                      */
+G_Variable        =  "N"        /*     / SC                      */
+G_Datatype        =  "N"        /*     / SC                      */
+
+
+CALL GET_PARM
+IF RC = 0 THEN DO I = 1 TO RXPARMS.0
+   if Strip(RXPARMS.I)        = ''   Then Iterate
+   if SUBSTR(RXPARMS.I, 1, 2) = '--' Then Iterate
+   PARM  = TRANSLATE(RXPARMS.I, '_', '-')
+   INTERPRET  PARM
+   say parm
+ END
+
+
+IF TRACE="ON" & ISPF_ENF = "ISPF" Then do
+   UDBTRACE = "ON"
+   ADDRESS ISPEXEC 'VPUT (UDBTRACE) PROFILE'
+ End
+
+IF UDBTRACE = 'ON' THEN TRACE R
+ELSE                    TRACE
+
+IF ISPF_ENF = "ISPF" Then Do
+   X       = MSG('OFF')
+ END
+
+DB2_SSID   = SSID
+
+
+If lcmd = "DDLE"     Then Do
+   lcmd = "HDDL"
+ End
+
+CT = lcmd auswahl    /* Setzen Calltype fuer AC2 */
+
+OAuswahl = auswahl
+if OAuswahl = "SC" | OAuswahl = "DB" then do
+   DDLTEXT    = "-- START : " DATE() TIME() "-NL"
+ End
+
+ELSE  SSID_CURRENT_SQLID = value(STRIP(SSID)"SQID")
+If length(SSID_CURRENT_SQLID) > 0 then do
+   CURSQLID = SSID_CURRENT_SQLID
+ End
+IF CURSQLID   = "NONE" THEN CURSQLID = ""
+
+DB2_LOC      = auswahl
+DB2_CREATOR1 = ""
+DB2_NAME1    = ""
+IF POS('.', object) > 0 THEN Do
+   PARSE VALUE object WITH DB2_CREATOR1 '.' DB2_NAME1
+   If auswahl = "SC" Then Do
+      DB2_CREATOR1 =  DB2_NAME1
+      DB2_NAME1    =  ""
+    End
+ End
+ ELSE Do
+   DB2_NAME1   = object
+   If auswahl  = "SC" Then Do
+      DB2_CREATOR1 =  DB2_NAME1
+      DB2_NAME1    =  ""
+    End
+  End
+
+Call Load_DSNREXX
+
+RXDB2_SSID        = DB2_SSID
+RXDB2_GETSTEM     = 'EINGABE.'
+RXDB2_PUTSTEM     = 'AUSGABE.'
+RXDB2_MAXROWS     = 0
+RXDB2_IGNORE_SQLERR = 'N'
+
+
+Anzahl_Objecte = 0
+Max_Objecte    = 2
+Max_Objecte    = 9999
+
+If auswahl  = "TG" ,
+ | auswahl  = "FN" ,
+ | auswahl  = "PR" ,
+ | auswahl  = "RT" Then do
+   sqlterm = "#"
+ End
+else do
+   sqlterm = ";"
+ End
+
+If Length(location) > 0 Then  OK = Connect_Location(location)
+
+DROP Auswahl_liste.
+DROP SGListe.
+DROP DBListe.
+DROP TSListe.
+Auswahl_liste.0 = 0
+SGListe.0       = 0
+DBListe.0       = 0
+TSListe.0       = 0
+
+Select
+  when lcmd = "DDL"     Then    CALL GEN_DDL
+  when lcmd = "HDDL"    Then    Do
+       Select
+          When  auswahl = "SC" Then do
+                Call Auswahl_SC
+                StartZeit = Date() TIME()
+                Call LESEN_SC
+                CALL GEN_HDDL_SC
+           end
+          When  auswahl = "DB" Then do
+                Call Auswahl_DB
+                StartZeit = Date() TIME()
+                DB2_CREATOR1 = DB2_NAME1
+                DB2_NAME1    = ""
+                Call LESEN_DB
+                CALL GEN_HDDL_DB
+                CALL GEN_HDDL_TS
+           end
+          When  auswahl = "TS" Then do
+                Call LESEN_DB
+                CALL GEN_HDDL_TS
+           end
+          When  auswahl = "TB" Then do
+                Auswahl_liste.0 = 1
+                Auswahl_liste.1 = object
+                CALL GEN_HDDL
+
+                auswahl = "PK"
+                object  =  Auswahl_liste.1
+                Call GEN_DDL
+
+                auswahl = "FK"
+                object  =  Auswahl_liste.1
+                Call GEN_DDL
+           end
+          When  auswahl = "IX" Then do
+                CALL GEN_DDL
+
+                auswahl = "PK"
+                obo     = object
+                tbo     = table
+                object  = table
+                table   = ""
+                Call GEN_DDL
+                object  = obo
+                table   = tbo
+
+           end
+          When  auswahl = "RT" Then do
+                Grant   = "YES"
+                CALL GEN_SPROC_DDL
+                Grant   = "NO"
+           end
+          When  auswahl = "SE" Then do
+                Call GEN_DDL
+                auswahl = "SEA"
+                Call GEN_DDL
+           end
+          Otherwise   Do
+               Grant   = "YES"
+               Call GEN_DDL
+               Grant   = "YES"
+           End
+        end
+    end
+  Otherwise   DDLTEXT = ""
+ End
+
+Do QUEUED()
+   Parse pull Text
+   parse value text with OBJ_Type object
+   object = Strip(object)
+
+   select
+     When OBJ_Type = "TB" Then do
+          auswahl  = "TBA"
+          CALL Lesen_daten_DDL
+          DDLTEXT  = DDLTEXT "-NL"
+      End
+     When OBJ_Type = "VW" Then do
+          auswahl  = "TBA"
+          CALL Lesen_daten_DDL
+          DDLTEXT  = DDLTEXT "-NL"
+      End
+     When OBJ_Type = "RT" Then do
+          auswahl  = "RTA"
+          CALL Lesen_daten_DDL
+          DDLTEXT  = DDLTEXT "-NL"
+      End
+     Otherwise NOP
+    End
+ End
+
+OK = DisConnect_Location(location)
+Call UNLoad_DSNREXX
+
+DDLTEXT = DDLTEXT "-NL COMMIT -NR"
+if OAuswahl = "SC" | OAuswahl = "DB" then do
+   DDLTEXT = DDLTEXT || "-- Start : " StartZeit "-NL"
+   DDLTEXT = DDLTEXT || "-- END   : " DATE() TIME() "-NL"
+ end
+
+call Anzeigen_daten
+
+Return
+
+GEN_DDL:
+   CALL Lesen_daten_DDL
+   IF LENGTH(DDLTEXT) = 0 THEN RETURN ''
+   DDLTEXT  = DDLTEXT "-NL"
+
+Return
+
+GEN_HDDL_SC:
+
+If Datatype_Val <> "N" Then DO
+   Anzahl_Objecte = 0
+   Do awi = 1 To Ausgabe.0
+      Select
+       when Ausgabe.awi.KENNZ = 'DT'    Then Nop
+       Otherwise    Iterate
+       End
+      Auswahl = "DT"
+      Object  = Strip(Ausgabe.awi.DBNAME) || "." || ,
+                Strip(Ausgabe.awi.TSNAME)
+
+      Call GEN_DDL
+   End
+ End
+
+If Variable_Val <> "N" Then DO
+  Anzahl_Objecte = 0
+  Do awi = 1 To Ausgabe.0
+     Select
+      when Ausgabe.awi.KENNZ = 'VAR'  Then Nop
+      Otherwise    Iterate
+      End
+     Auswahl = "VAR"
+     Object  = Strip(Ausgabe.awi.DBNAME) || "." || ,
+               Strip(Ausgabe.awi.TSNAME)
+     table   = ""
+
+     Call GEN_DDL
+   End
+ End
+
+
+If Tablespace_Val   <> "N" Then DO
+  Anzahl_Objecte = 0
+  TS_ODB = ""
+  TS_OTS = ""
+  Do awi = 1 To Ausgabe.0
+     Select
+      when Ausgabe.awi.KENNZ = 'TB'  Then NOP
+      Otherwise    Iterate
+      End
+
+     If TS_ODB = Ausgabe.awi.DBNAME ,
+      & TS_OTS = Ausgabe.awi.TSNAME Then DO
+        Iterate
+      End
+
+     Auswahl = "TS"
+     Object  = Strip(Ausgabe.awi.DBNAME) || "." || ,
+               Strip(Ausgabe.awi.TSNAME)
+
+     Call GEN_DDL
+
+     TS_ODB = Ausgabe.awi.DBNAME
+     TS_OTS = Ausgabe.awi.TSNAME
+   End
+ End
+
+If Tablespace_Val   <> "N" Then DO
+  Anzahl_Objecte = 0
+  TS_ODB = ""
+  TS_OTS = ""
+  Do awi = 1 To Ausgabe.0
+     Select
+      when Ausgabe.awi.KENNZ = 'REL' ,
+         & Auxtable_Val  <> "N"      Then NOP
+      Otherwise    Iterate
+      End
+
+     If TS_ODB = Ausgabe.awi.DBNAME ,
+      & TS_OTS = Ausgabe.awi.TSNAME Then DO
+        Iterate
+      End
+
+     Auswahl = "TS"
+     Object  = Strip(Ausgabe.awi.DBNAME) || "." || ,
+               Strip(Ausgabe.awi.TSNAME)
+
+     Call GEN_DDL
+
+     TS_ODB = Ausgabe.awi.DBNAME
+     TS_OTS = Ausgabe.awi.TSNAME
+   End
+ End
+
+If Table_Val        <> "N" Then Do
+  Anzahl_Objecte = 0
+  Do awi = 1 To Ausgabe.0
+     Select
+      when Ausgabe.awi.KENNZ = 'TB'  Then NOP
+      Otherwise    Iterate
+      End
+     Auswahl = "TB"
+     Object  = Strip(Ausgabe.awi.Creator) || "." || ,
+               Strip(Ausgabe.awi.NAME)
+
+     Call GEN_HDDL_TS_OBJ
+   End
+ End
+
+If Auxtable_Val     <> "N" Then Do
+  tbval_save = Table_Val
+  ixval_save = Index_Val
+  Table_Val  = "J"
+  Index_Val  = "J"
+  Anzahl_Objecte = 0
+  Do awi = 1 To Ausgabe.0
+     Select
+      when Ausgabe.awi.KENNZ = 'REL' Then NOP
+      Otherwise    Iterate
+      End
+     Auswahl = "TB"
+     Object  = Strip(Ausgabe.awi.Creator) || "." || ,
+               Strip(Ausgabe.awi.NAME)
+     Call GEN_HDDL_TS_OBJ
+   End
+  Table_Val  = tbval_save
+  Index_Val  = ixval_save
+ End
+
+If SProc_Val        <> "N" Then DO
+  table = ""
+  Anzahl_Objecte = 0
+  Do awi = 1 To Ausgabe.0
+     Select
+      when Ausgabe.awi.KENNZ = 'RT'  Then Nop
+      Otherwise    Iterate
+      End
+     Auswahl = "RT"
+     Object  = Strip(Ausgabe.awi.DBNAME)
+     Table   = Strip(Ausgabe.awi.Creator) || "." || ,
+               Strip(Ausgabe.awi.NAME)
+
+     If GrantRT_Val = "Y" Then    Grant = "YES"
+     Else                         Grant = "NO"
+
+     Call GEN_SPROC_DDL
+     Grant = "NO"
+   End
+ End
+
+If Trigger_Val      <> "N" Then Do
+  table = ""
+  Anzahl_Objecte = 0
+  Do awi = 1 To Ausgabe.0
+     Select
+      when Ausgabe.awi.KENNZ = 'TG'  Then Nop
+      Otherwise    Iterate
+      End
+     Auswahl = "TG"
+     Object  = Strip(Ausgabe.awi.DBNAME) || "." || ,
+               Strip(Ausgabe.awi.TSNAME)
+
+     Call GEN_SPROC_DDL
+   End
+ End
+
+If View_Val         <> "N" Then DO
+  Anzahl_Objecte = 0
+  Do awi = 1 To Ausgabe.0
+     Select
+      when Ausgabe.awi.KENNZ = 'VW'  Then Nop
+      Otherwise    Iterate
+      End
+     Auswahl = "VW"
+     Object  = Strip(Ausgabe.awi.DBNAME) || "." || ,
+               Strip(Ausgabe.awi.TSNAME)
+
+     If GrantView_Val <> "N" Then Grant    = "YES"
+     Call GEN_DDL
+     Grant    = ""
+
+   End
+ End
+
+If View_Val         <> "N" Then DO
+  Anzahl_Objecte = 0
+  Do awi = 1 To Ausgabe.0
+     Select
+      when Ausgabe.awi.KENNZ = 'MQT'  Then Nop
+      Otherwise    Iterate
+      End
+     Auswahl = 'MQT'
+     Object  = Strip(Ausgabe.awi.DBNAME) || "." || ,
+               Strip(Ausgabe.awi.TSNAME)
+
+     If GrantView_Val <> "N" Then Grant    = "YES"
+     Call GEN_DDL
+     Grant    = ""
+   End
+ End
+
+If PrimaryKey_Val   <> "N" Then DO
+  table = ""
+  Anzahl_Objecte = 0
+  Do awi = 1 To Ausgabe.0
+     Select
+      when Ausgabe.awi.KENNZ = 'PK'  Then Nop
+      Otherwise    Iterate
+      End
+     Auswahl = "PK"
+     Object  = Strip(Ausgabe.awi.DBNAME) || "." || ,
+               Strip(Ausgabe.awi.TSNAME)
+
+     Call GEN_DDL
+   End
+ End
+
+If ForeignKey_Val   <> "N" Then DO
+  table = ""
+  Anzahl_Objecte = 0
+  Do awi = 1 To Ausgabe.0
+     Select
+      when Ausgabe.awi.KENNZ = 'FK'  Then Nop
+      Otherwise    Iterate
+      End
+     Auswahl = "FK"
+     Object  = Strip(Ausgabe.awi.DBNAME) || "." || ,
+               Strip(Ausgabe.awi.TSNAME)
+     Object3 = "*." || Strip(Ausgabe.awi.Creator)
+
+     Call GEN_DDL
+   End
+ end
+
+If Alias_Val        <> "N" Then DO
+  Object3 = ""
+  Anzahl_Objecte = 0
+  Max_Objecte    = 20
+  Do awi = 1 To Ausgabe.0
+     Select
+      when Ausgabe.awi.KENNZ = 'AL'  Then Nop
+      Otherwise    Iterate
+      End
+     Auswahl = "AL"
+     Object  = Strip(Ausgabe.awi.DBNAME) || "." || ,
+               Strip(Ausgabe.awi.TSNAME)
+
+     Call GEN_DDL
+   End
+ End
+
+If Synonym_Val      <> "N" Then DO
+  Anzahl_Objecte = 0
+  Do awi = 1 To Ausgabe.0
+     Select
+      when Ausgabe.awi.KENNZ = 'SY'  Then Nop
+      Otherwise    Iterate
+      End
+     Auswahl = "SY"
+     Object  = Strip(Ausgabe.awi.DBNAME) || "." || ,
+               Strip(Ausgabe.awi.TSNAME)
+
+     Call GEN_DDL
+   End
+ End
+
+If Sequence_Val     <> "N" Then DO
+  Anzahl_Objecte = 0
+  Do awi = 1 To Ausgabe.0
+     Select
+      when Ausgabe.awi.KENNZ = "SE"  Then Nop
+      Otherwise    Iterate
+      End
+     Object  = Strip(Ausgabe.awi.DBNAME) || "." || ,
+               Strip(Ausgabe.awi.TSNAME)
+
+     Auswahl = "SE"
+     Call GEN_DDL
+
+     If GrantSQ_val <> "N" Then DO
+        Auswahl = "SEA"
+        Call GEN_DDL
+      End
+   End
+ End
+
+If Permission_Val <> "N" Then DO
+  Anzahl_Objecte = 0
+  Do awi = 1 To Ausgabe.0
+     Select
+      when Ausgabe.awi.KENNZ = 'PERM'  Then Nop
+      Otherwise    Iterate
+      End
+     Auswahl = "PERM"
+     Object  = Strip(Ausgabe.awi.DBNAME) || "." || ,
+               Strip(Ausgabe.awi.TSNAME)
+
+     Call GEN_DDL
+   End
+ End
+
+If Table_Val        <> "N" Then Do
+  Anzahl_Objecte = 0
+  Do awi = 1 To Ausgabe.0
+     Select
+      when Ausgabe.awi.KENNZ = 'ALTER'  Then Nop
+      Otherwise    Iterate
+      End
+     Auswahl = "TBALTER"
+     Object  = Strip(Ausgabe.awi.Creator) || "." || ,
+               Strip(Ausgabe.awi.NAME)
+
+     Call GEN_DDL
+   End
+ End
+
+Return
+
+GEN_HDDL_DB:
+DB_ODB = ""
+If Database_Val     <> "N" Then DO
+  Do DBI = 1 to Ausgabe.0
+     Select
+      when Ausgabe.DBi.KENNZ = 'TS'  Then Nop
+      when Ausgabe.DBi.KENNZ = 'REL' Then NOP
+      Otherwise    Iterate
+      End
+     Auswahl = "DB"
+     If DB_ODB = Ausgabe.DBi.DBNAME Then Do
+        Iterate
+      End
+     DB_ODB = Ausgabe.DBi.DBNAME
+     Object = "*." || Ausgabe.DBi.DBNAME
+     Call GEN_DDL
+     Anzahl_Objecte = Anzahl_Objecte + 1
+     if Anzahl_Objecte > Max_Objecte Then Do
+        call Anzeigen_daten
+        Anzahl_Objecte = 0
+      End
+   End
+ End
+
+Return
+
+GEN_HDDL_TS:
+
+TS_ODB = ""
+TS_OTS = ""
+
+If Tablespace_Val   <> "N" Then DO
+  Do TSI = 1 to Ausgabe.0
+     Select
+      when Ausgabe.TSi.KENNZ = 'TS'  Then Nop
+      Otherwise    Iterate
+      End
+     Auswahl = "TS"
+     If TS_ODB = Ausgabe.TSi.DBNAME ,
+      & TS_OTS = Ausgabe.TSi.TSNAME Then DO
+        Iterate
+      End
+
+     Object = Ausgabe.TSi.DBNAME || "." || Ausgabe.TSi.TSNAME
+
+     Call GEN_DDL
+     Anzahl_Objecte = Anzahl_Objecte + 1
+     if Anzahl_Objecte > Max_Objecte Then Do
+        call Anzeigen_daten
+        Anzahl_Objecte = 0
+      End
+
+     TS_ODB = Ausgabe.TSi.DBNAME
+     TS_OTS = Ausgabe.TSi.TSNAME
+   End
+ End
+
+If Tablespace_Val   <> "N" Then DO
+  Do TSI = 1 to Ausgabe.0
+     Select
+      when Ausgabe.TSi.KENNZ = 'REL' Then NOP
+      Otherwise    Iterate
+      End
+     Auswahl = "TS"
+     If TS_ODB = Ausgabe.TSi.DBNAME ,
+      & TS_OTS = Ausgabe.TSi.TSNAME Then DO
+        Iterate
+      End
+
+     Object = Ausgabe.TSi.DBNAME || "." || Ausgabe.TSi.TSNAME
+
+     Call GEN_DDL
+     Anzahl_Objecte = Anzahl_Objecte + 1
+     if Anzahl_Objecte > Max_Objecte Then Do
+        call Anzeigen_daten
+        Anzahl_Objecte = 0
+      End
+
+     TS_ODB = Ausgabe.TSi.DBNAME
+     TS_OTS = Ausgabe.TSi.TSNAME
+   End
+ End
+
+If Table_Val        <> "N" Then Do
+  Anzahl_Objecte = 0
+  Do awi = 1 To Ausgabe.0
+     Select
+      when Ausgabe.awi.KENNZ = 'TB'  Then Nop
+      Otherwise    Iterate
+      End
+     Auswahl = "TB"
+     Object  = Strip(Ausgabe.awi.Creator) || "." || ,
+               Strip(Ausgabe.awi.NAME)
+
+     Call GEN_HDDL_TS_OBJ
+   End
+ End
+
+If Auxtable_Val     <> "N" Then DO
+  Anzahl_Objecte = 0
+  Do awi = 1 To Ausgabe.0
+     Select
+      when Ausgabe.awi.KENNZ = 'REL' Then NOP
+      Otherwise    Iterate
+      End
+     Auswahl = "TB"
+     Object  = Strip(Ausgabe.awi.Creator) || "." || ,
+               Strip(Ausgabe.awi.NAME)
+
+     Call GEN_HDDL_TS_OBJ
+   End
+ End
+
+If View_Val         <> "N" Then DO
+  Anzahl_Objecte = 0
+  table = ""
+  Do awi = 1 To Ausgabe.0
+     Select
+      when Ausgabe.awi.KENNZ = 'VW'  Then Nop
+      Otherwise    Iterate
+      End
+     Auswahl = "VW"
+     Object  = Strip(Ausgabe.awi.DBNAME) || "." || ,
+               Strip(Ausgabe.awi.TSNAME)
+
+     If GrantView_Val <> "N" Then Grant    = "YES"
+     Call GEN_DDL
+     Grant    = ""
+   End
+ End
+
+If View_Val         <> "N" Then DO
+  Anzahl_Objecte = 0
+  table = ""
+  Do awi = 1 To Ausgabe.0
+     Select
+      when Ausgabe.awi.KENNZ = 'MQT' Then Nop
+      Otherwise    Iterate
+      End
+     Auswahl = "MQT"
+     Object  = Strip(Ausgabe.awi.DBNAME) || "." || ,
+               Strip(Ausgabe.awi.TSNAME)
+
+     If GrantView_Val <> "N" Then Grant    = "YES"
+     Call GEN_DDL
+     Grant    = ""
+   End
+ End
+
+If PrimaryKey_Val   <> "N" Then DO
+  table = ""
+  Anzahl_Objecte = 0
+  Do awi = 1 To Ausgabe.0
+     Select
+      when Ausgabe.awi.KENNZ = 'PK'  Then Nop
+      Otherwise    Iterate
+      End
+     Auswahl = "PK"
+     Object  = Strip(Ausgabe.awi.DBNAME) || "." || ,
+               Strip(Ausgabe.awi.TSNAME)
+
+     Call GEN_DDL
+   End
+ End
+
+If ForeignKey_Val   <> "N" Then DO
+  table = ""
+  Anzahl_Objecte = 0
+  Do awi = 1 To Ausgabe.0
+     Select
+      when Ausgabe.awi.KENNZ = 'FK'  Then Nop
+      Otherwise    Iterate
+      End
+     Auswahl = "FK"
+     Object  = Strip(Ausgabe.awi.DBNAME) || "." || ,
+               Strip(Ausgabe.awi.TSNAME)
+     Object3 = "*." || Strip(Ausgabe.awi.Creator)
+
+     Call GEN_DDL
+   End
+ end
+
+If Trigger_Val      <> "N" Then DO
+  table = ""
+  Anzahl_Objecte = 0
+  Do awi = 1 To Ausgabe.0
+     Select
+      when Ausgabe.awi.KENNZ = 'TG'  Then Nop
+      Otherwise    Iterate
+      End
+     Auswahl = "TG"
+     Object  = Strip(Ausgabe.awi.DBNAME) || "." || ,
+               Strip(Ausgabe.awi.TSNAME)
+
+     Call GEN_SPROC_DDL
+   End
+ End
+
+If SProc_Val        <> "N" Then DO
+   Anzahl_Objecte = 0
+   Do awi = 1 To Ausgabe.0
+      Select
+       when Ausgabe.awi.KENNZ = 'RT'  Then Nop
+       Otherwise    Iterate
+       End
+      Auswahl = "RT"
+      table    = ""
+      Object  = Strip(Ausgabe.awi.DBNAME)
+      Table   = Strip(Ausgabe.awi.Creator) || "." || ,
+                Strip(Ausgabe.awi.NAME)
+
+      object3 = ""
+
+      If GrantRT_Val = "Y" Then    Grant = "YES"
+      Else                         Grant = "NO"
+
+      Call GEN_SPROC_DDL
+      Grant = "NO"
+    End
+  End
+
+If Synonym_Val      <> "N" Then DO
+  Anzahl_Objecte = 0
+  Do awi = 1 To Ausgabe.0
+     Select
+      when Ausgabe.awi.KENNZ = 'SY'  Then Nop
+      Otherwise    Iterate
+      End
+     Auswahl = "SY"
+     Object  = Strip(Ausgabe.awi.DBNAME) || "." || ,
+               Strip(Ausgabe.awi.TSNAME)
+
+     Call GEN_DDL
+   End
+ End
+
+If Table_Val        <> "N" Then Do
+  Anzahl_Objecte = 0
+  Do awi = 1 To Ausgabe.0
+     Select
+      when Ausgabe.awi.KENNZ = 'ALTER'  Then Nop
+      Otherwise    Iterate
+      End
+     Auswahl = "TBALTER"
+     Object  = Strip(Ausgabe.awi.Creator) || "." || ,
+               Strip(Ausgabe.awi.NAME)
+
+     Call GEN_DDL
+   End
+ End
+
+If Permission_Val <> "N" Then DO
+  Anzahl_Objecte = 0
+  Do awi = 1 To Ausgabe.0
+     Select
+      when Ausgabe.awi.KENNZ = 'PERM'  Then Nop
+      Otherwise    Iterate
+      End
+     Auswahl = "PERM"
+     Object  = Strip(Ausgabe.awi.DBNAME) || "." || ,
+               Strip(Ausgabe.awi.TSNAME)
+
+     Call GEN_DDL
+   End
+ End
+
+Return
+
+GEN_HDDL_TS_OBJ:
+
+   Grant = ""
+   Anzahl_Objecte = Anzahl_Objecte + 1
+   if Anzahl_Objecte > Max_Objecte Then Do
+      call Anzeigen_daten
+      Anzahl_Objecte = 0
+    End
+
+
+If Table_Val       <> "N" Then Do
+   if auswahl = "TB" Then table    = object
+   If GrantTable_Val  <> "N" Then Grant   = "YES"
+   auswahl = "TB"
+   Call GEN_DDL
+   IF LENGTH(DDLTEXT) = 0 THEN RETURN ''
+   Grant    = ""
+   object   = ""
+ End
+
+If Comment_Val     <> "N" Then DO
+   auswahl  = "TC"
+   Call GEN_DDL
+ End
+
+If Index_Val       <> "N" Then DO
+   auswahl  = "IX"
+   Call GEN_DDL
+ End
+
+
+Return
+
+GEN_SPROC_DDL:
+
+   DDLX     = DDLTEXT
+   DDLTEXT  = ""
+   CALL Lesen_daten_DDL
+   If Length(Strip(DDLTEXT)) > 0 Then do
+      DDLTEXT  = "--SQLTERM=# -NL" || DDLTEXT
+      DDLTEXT  = DDLTEXT "-NL"
+      DDLTEXT  = DDLTEXT || "-NL" || "--SQLTERM=; -NL"
+    End
+   DDLTEXT  = DDLX || DDLTEXT
+   DDLX     = ""
+
+Return
+
+
+GEN_HDDL:
+
+   Grant = ""
+   Anzahl_Objecte = Anzahl_Objecte + 1
+   if Anzahl_Objecte > Max_Objecte Then Do
+      call Anzeigen_daten
+      Anzahl_Objecte = 0
+      /*
+      auswahl = "RECONNECT"
+      call Lesen_daten_DDL
+      */
+    End
+   if auswahl = "TB" Then table    = object
+   If GrantTable_Val <>  "N" Then Grant   = "YES"
+   auswahl = "TB"
+   Call GEN_DDL
+   IF LENGTH(DDLTEXT) = 0 THEN RETURN ''
+   Grant    = ""
+   object   = ""
+
+   auswahl  = "TC"
+   Call GEN_DDL
+
+   auswahl  = "IX"
+   Call GEN_DDL
+
+   If Ausgabe.awi.KENNZ = 'REL' Then do
+      /* on XML Or BLOB TABLE processing is interrupted */
+      Return
+    End
+
+   If GrantView_Val  <>  "N" Then Grant   = "YES"
+   auswahl  = "VW"
+   Call GEN_DDL
+   Grant    = ""
+   DDLTEXT  = DDLTEXT "-NL"
+   Grant   = "NO"
+
+   auswahl  = "TG"
+   Call GEN_SPROC_DDL
+
+   If GrantSproc_Val  <>  "N" Then Grant   = "YES"
+   auswahl  = "RT"
+   object3  = table
+   table    = ""
+   object   = ""
+   Call GEN_SPROC_DDL
+   table    = object3
+   object   = object3
+   object3  = ""
+   Grant   = "NO"
+
+   auswahl  = "AL"
+   Call GEN_DDL
+
+   auswahl  = "SY"
+   Call GEN_DDL
+
+Return
+
+
+LESEN_DB:
+
+ WHERELIST = ""
+ CALL MAKE_WHERELIST "VW.DBNAME", DB2_CREATOR1
+ CALL MAKE_WHERELIST "VW.TSNAME", DB2_NAME1
+ CALL MAKE_WHERELIST "", "VW.TYPE  IN('V' )"
+ WHERELISTV = WHERELIST
+
+ WHERELIST = ""
+ CALL MAKE_WHERELIST "MQ.DBNAME", DB2_CREATOR1
+ CALL MAKE_WHERELIST "MQ.TSNAME", DB2_NAME1
+ CALL MAKE_WHERELIST "", "MQ.TYPE  IN('M' )"
+ WHERELISTM = WHERELIST
+
+ WHERELIST = ""
+ CALL MAKE_WHERELIST "TS.DBNAME", DB2_CREATOR1
+ CALL MAKE_WHERELIST "TS.NAME", DB2_NAME1
+ if auswahl = "TS" THEN DO
+    TSTYPE = "' ', 'G', 'L', 'O', 'P', 'R'"
+  End
+ Else do
+    TSTYPE = "' ', 'G', 'L', 'R'"
+  End
+ CALL MAKE_WHERELIST "", "TS.TYPE  IN("TSTYPE")"
+ WHERELIST2 = WHERELIST
+
+ WHERELIST = ""
+ CALL MAKE_WHERELIST "TB.DBNAME", DB2_CREATOR1
+ CALL MAKE_WHERELIST "TB.TSNAME", DB2_NAME1
+ if auswahl = "TS" THEN DO
+    TTYPE = "'T', 'C', 'G', 'H', 'P', 'R', 'X'"
+  End
+ Else do
+    TTYPE = "'T', 'C', 'G', 'H', 'R'"
+  End
+ CALL MAKE_WHERELIST "", "TB.TYPE  IN("TTYPE")"
+ WHERELIST1 = WHERELIST
+
+ WHERELIST = ""
+ CALL MAKE_WHERELIST "TB.DBNAME", DB2_CREATOR1
+ CALL MAKE_WHERELIST "TB.TSNAME", DB2_NAME1
+ CALL MAKE_WHERELIST "", "TB.TYPE  IN('T'    )"
+ CALL MAKE_WHERELIST "", "TB.VERSIONING_TABLE <> ''  "
+ WHERELISTAV  = WHERELIST
+
+ WHERELIST = ""
+ CALL MAKE_WHERELIST "TB.DBNAME", DB2_CREATOR1
+ CALL MAKE_WHERELIST "TB.TSNAME", DB2_NAME1
+ CALL MAKE_WHERELIST "", "TB.TYPE  IN('T'    )"
+ CALL MAKE_WHERELIST "", "TB.ARCHIVING_TABLE  <> ''  "
+ WHERELISTAA  = WHERELIST
+
+ WHERELIST = ""
+ CALL MAKE_WHERELIST "TB.DBNAME", DB2_CREATOR1
+ CALL MAKE_WHERELIST "TB.TSNAME", DB2_NAME1
+ CALL MAKE_WHERELIST "", "TB.TYPE  IN('T'    )"
+ CALL MAKE_WHERELIST "", "TB.ARCHIVING_TABLE  <> ''  "
+ WHERELISTAA  = WHERELIST
+
+ EINGABE.0  = 1
+ EINGABE.1  = "SELECT DISTINCT KENNZ ",
+              "     , DBNAME   ",
+              "     , TSNAME   ",
+              "     , CREATOR  ",
+              "     , NAME     ",
+              "     , CREATEDTS",
+              "FROM TABLE (                        ",
+              "SELECT 'TB'              AS KENNZ   ",
+              "     , STRIP(TB.DBNAME)  AS DBNAME  ",
+              "     , STRIP(TB.TSNAME)  AS TSNAME  ",
+              "     , STRIP(TB.CREATOR) AS CREATOR ",
+              "     , STRIP(TB.NAME   ) AS NAME    ",
+              "     , TB.CREATEDTS      AS CREATEDTS" ,
+              "FROM "SYSIBMS".SYSTABLES     TB",
+              WHERELIST1 ,
+              "UNION ALL                           ",
+              "SELECT 'TS'              AS KENNZ   ",
+              "     , STRIP(TS.DBNAME)  AS DBNAME  ",
+              "     , STRIP(TS.NAME  )  AS TSNAME  ",
+              "     , ''                AS CREATOR ",
+              "     , ''                AS NAME    ",
+              "     , TS.CREATEDTS      AS CREATEDTS" ,
+              "FROM "SYSIBMS".SYSTABLESPACE TS     ",
+              WHERELIST2 ,
+              "UNION ALL                           ",
+              "SELECT 'REL'             AS KENNZ   ",
+              "     , STRIP(RT.DBNAME)  AS DBNAME  ",
+              "     , STRIP(RT.TSNAME)  AS TSNAME  ",
+              "     , STRIP(AR.AUXTBOWNER) AS CREATOR ",
+              "     , STRIP(AR.AUXTBNAME ) AS NAME    ",
+              "     , TB.CREATEDTS        AS CREATEDTS" ,
+              "FROM "SYSIBMS".SYSTABLES     TB     ",
+              "INNER JOIN "SYSIBMS".SYSAUXRELS  AR ",
+              "ON    TB.CREATOR  = AR.TBOWNER      ",
+              "AND   TB.NAME     = AR.TBNAME       ",
+              "INNER JOIN "SYSIBMS".SYSTABLES   RT ",
+              "ON    AR.AUXTBOWNER  = RT.CREATOR      ",
+              "AND   AR.AUXTBNAME   = RT.NAME         ",
+              WHERELIST1 ,
+              "UNION ALL                           ",
+              "SELECT 'SY'              AS KENNZ   ",
+              "     , STRIP(SY.CREATOR) AS DBNAME  ",
+              "     , STRIP(SY.NAME)    AS TSNAME  ",
+              "     , STRIP(TB.CREATOR) AS CREATOR ",
+              "     , STRIP(TB.NAME)    AS NAME    ",
+              "     , SY.CREATEDTS      AS CREATEDTS" ,
+              "FROM "SYSIBMS".SYSSYNONYMS SY       ",
+              "INNER JOIN "SYSIBMS".SYSTABLES   TB ",
+              "ON    TB.CREATOR  = SY.TBCREATOR    ",
+              "AND   TB.NAME     = SY.TBNAME       ",
+              WHERELIST1 ,
+              "UNION ALL                           ",
+              "SELECT DISTINCT 'TG'     AS KENNZ   ",
+              "     , STRIP(TG.SCHEMA)  AS DBNAME  ",
+              "     , STRIP(TG.NAME)    AS TSNAME  ",
+              "     , STRIP(TB.CREATOR) AS CREATOR ",
+              "     , STRIP(TB.NAME)    AS NAME    ",
+              "     , TG.CREATEDTS      AS CREATEDTS" ,
+              "FROM "SYSIBMS".SYSTRIGGERS TG       ",
+              "INNER JOIN "SYSIBMS".SYSTABLES   TB ",
+              "ON    TB.CREATOR  = TG.TBOWNER      ",
+              "AND   TB.NAME     = TG.TBNAME       ",
+              WHERELIST1 ,
+              "UNION ALL                           ",
+              "SELECT DISTINCT 'RT'     AS KENNZ   ",
+              "     , STRIP(RT.SPECIFICNAME) AS DBNAME ",
+              "     , ''                AS TSNAME  ",
+              "     , STRIP(RT.SCHEMA)  AS CREATOR ",
+              "     , STRIP(RT.NAME)    AS NAME    ",
+              "     , RT.CREATEDTS      AS CREATEDTS" ,
+              "FROM "SYSIBMS".SYSTABLES  TB        ",
+              "INNER JOIN "SYSIBMS".SYSPACKDEP PD  ",
+              "ON    TB.CREATOR  = PD.BQUALIFIER   ",
+              "AND   TB.NAME     = PD.BNAME        ",
+              "AND   PD.BTYPE IN ('A', 'S', 'V', 'T', 'I', 'P', 'R')",
+              "INNER JOIN "SYSIBMS".SYSROUTINES RT  " ,
+              "ON    PD.DCOLLID    = RT.SCHEMA     ",
+              "AND   PD.DNAME      = RT.NAME       ",
+              WHERELIST1 ,
+              "UNION ALL                           ",
+              "SELECT DISTINCT 'RT'     AS KENNZ   ",
+              "     , STRIP(RT.SPECIFICNAME) AS DBNAME ",
+              "     , ''                AS TSNAME  ",
+              "     , STRIP(RT.SCHEMA)  AS CREATOR ",
+              "     , STRIP(RT.NAME)    AS NAME    ",
+              "     , RT.CREATEDTS      AS CREATEDTS" ,
+              "FROM "SYSIBMS".SYSTABLES  TB        ",
+              "INNER JOIN "SYSIBMS".SYSPACKDEP PD  ",
+              "ON    TB.DBNAME   = PD.BQUALIFIER   ",
+              "AND   TB.TSNAME   = PD.BNAME        ",
+              "AND   PD.BTYPE IN ('A', 'S', 'V', 'T', 'I', 'P', 'R')",
+              "INNER JOIN "SYSIBMS".SYSROUTINES RT  " ,
+              "ON    PD.DCOLLID    = RT.SCHEMA     ",
+              "AND   PD.DNAME      = RT.NAME       ",
+              WHERELIST1 ,
+              "UNION ALL                           ",
+              "SELECT DISTINCT 'VW'      AS KENNZ   ",
+              "     , STRIP(VW.CREATOR)  AS DBNAME  ",
+              "     , STRIP(VW.NAME)     AS TSNAME  ",
+              "     , ''                 AS CREATOR ",
+              "     , ''                 AS NAME    ",
+              "     , VW.CREATEDTS       AS CREATEDTS" ,
+              "FROM "SYSIBMS".SYSTABLES  VW        ",
+              WHERELISTV ,
+              "UNION ALL                           ",
+              "SELECT 'MQT'              AS KENNZ   ",
+              "     , STRIP(MQ.CREATOR)  AS DBNAME  ",
+              "     , STRIP(MQ.NAME)     AS TSNAME  ",
+              "     , ''                 AS CREATOR ",
+              "     , ''                 AS NAME    ",
+              "     , MQ.CREATEDTS       AS CREATEDTS" ,
+              "FROM "SYSIBMS".SYSTABLES  MQ        ",
+              WHERELISTM ,
+              "UNION ALL                             ",
+              "SELECT DISTINCT 'FK'       AS KENNZ   ",
+              "      , FK.CREATOR         AS DBNAME  ",
+              "      , FK.TBNAME          AS TSNAME  ",
+              "      , FK.RELNAME         AS CREATOR ",
+              "      , ''                 AS NAME    ",
+              "      , FK.TIMESTAMP       AS CREATEDTS" ,
+              "FROM "SYSIBMS".SYSRELS      FK        ",
+              "INNER JOIN "SYSIBMS".SYSTABLES TB     ",
+              "ON    FK.CREATOR    = TB.CREATOR      ",
+              "AND   FK.TBNAME     = TB.NAME         ",
+              "INNER JOIN "SYSIBMS".SYSTABLESPACE TS ",
+              "ON    TB.DBNAME     = TS.DBNAME       ",
+              "AND   TB.TSNAME     = TS.NAME         ",
+              WHERELIST1 ,
+              "UNION ALL                             ",
+              "SELECT DISTINCT 'PK'       AS KENNZ   ",
+              "      , PK.TBCREATOR       AS DBNAME  ",
+              "      , PK.TBNAME          AS TSNAME  ",
+              "      , ''                 AS CREATOR ",
+              "      , ''                 AS NAME    ",
+              "      , PK.CREATEDTS       AS CREATEDTS" ,
+              "FROM "SYSIBMS".SYSTABCONST  PK        ",
+              "INNER JOIN "SYSIBMS".SYSTABLES TB     ",
+              "ON    PK.TBCREATOR  = TB.CREATOR      ",
+              "AND   PK.TBNAME     = TB.NAME         ",
+              "INNER JOIN "SYSIBMS".SYSTABLESPACE TS ",
+              "ON    TB.DBNAME     = TS.DBNAME       ",
+              "AND   TB.TSNAME     = TS.NAME         ",
+              WHERELIST1 ,
+              "UNION ALL                             ",
+              "SELECT DISTINCT 'PERM'     AS KENNZ   ",
+              "      , PERM.SCHEMA        AS DBNAME  ",
+              "      , PERM.NAME          AS TSNAME  ",
+              "      , ''                 AS CREATOR ",
+              "      , ''                 AS NAME    ",
+              "      , PERM.CREATEDTS     AS CREATEDTS" ,
+              "FROM "SYSIBMS".SYSCONTROLS PERM       ",
+              "INNER JOIN "SYSIBMS".SYSTABLES TB     ",
+              "ON    PERM.TBSCHEMA = TB.CREATOR      ",
+              "AND   PERM.TBNAME   = TB.NAME         ",
+              "INNER JOIN "SYSIBMS".SYSTABLESPACE TS ",
+              "ON    TB.DBNAME     = TS.DBNAME       ",
+              "AND   TB.TSNAME     = TS.NAME         ",
+              WHERELIST1 ,
+              "UNION ALL                             ",
+              "SELECT 'ALTER'           AS KENNZ   ",
+              "     , STRIP(TB.DBNAME)  AS DBNAME  ",
+              "     , STRIP(TB.TSNAME)  AS TSNAME  ",
+              "     , STRIP(TB.CREATOR) AS CREATOR ",
+              "     , STRIP(TB.NAME   ) AS NAME    ",
+              "     , TB.CREATEDTS      AS CREATEDTS" ,
+              "FROM "SYSIBMS".SYSTABLES     TB  ",
+              WHERELISTAV  ,
+              "UNION ALL                             ",
+              "SELECT 'ALTER'           AS KENNZ   ",
+              "     , STRIP(TB.DBNAME)  AS DBNAME  ",
+              "     , STRIP(TB.TSNAME)  AS TSNAME  ",
+              "     , STRIP(TB.CREATOR) AS CREATOR ",
+              "     , STRIP(TB.NAME   ) AS NAME    ",
+              "     , TB.CREATEDTS      AS CREATEDTS" ,
+              "FROM "SYSIBMS".SYSTABLES     TB  ",
+              WHERELISTAA  ,
+              " ) T1  "                            ,
+              " ORDER BY KENNZ, CREATEDTS "       ,
+              " "
+
+ CALL EXECUTE_SQL
+
+Return
+
+LESEN_SC:
+
+ WHERELIST = ""
+ CALL MAKE_WHERELIST "TB.CREATOR", DB2_CREATOR1
+ CALL MAKE_WHERELIST "TB.NAME", DB2_NAME1
+ CALL MAKE_WHERELIST "", "TB.TYPE  IN('T', 'C', 'G', 'H', 'R')"
+ WHERELIST1 = WHERELIST
+
+ WHERELIST = ""
+ CALL MAKE_WHERELIST "VW.CREATOR", DB2_CREATOR1
+ CALL MAKE_WHERELIST "VW.NAME", DB2_NAME1
+ CALL MAKE_WHERELIST "", "VW.TYPE  IN('V') "
+ WHERELISTV = WHERELIST
+
+ WHERELIST = ""
+ CALL MAKE_WHERELIST "MQ.CREATOR", DB2_CREATOR1
+ CALL MAKE_WHERELIST "MQ.NAME", DB2_NAME1
+ CALL MAKE_WHERELIST "", "MQ.TYPE  IN('M' )"
+ WHERELISTM = WHERELIST
+
+ WHERELIST = ""
+ CALL MAKE_WHERELIST "TB.CREATOR", DB2_CREATOR1
+ CALL MAKE_WHERELIST "TB.NAME", DB2_NAME1
+ CALL MAKE_WHERELIST "", "TB.TYPE  IN('A')"
+ WHERELISTA = WHERELIST
+
+ WHERELIST = ""
+ CALL MAKE_WHERELIST "TB.CREATOR", DB2_CREATOR1
+ CALL MAKE_WHERELIST "TB.NAME" , DB2_NAME1
+ CALL MAKE_WHERELIST "", "TB.VERSIONING_TABLE <> '' "
+ CALL MAKE_WHERELIST "TB.TYPE", 'T'
+ WHERELISTAV  = WHERELIST
+
+ WHERELIST = ""
+ CALL MAKE_WHERELIST "TB.CREATOR", DB2_CREATOR1
+ CALL MAKE_WHERELIST "TB.NAME" , DB2_NAME1
+ CALL MAKE_WHERELIST "", "TB.ARCHIVING_TABLE  <> '' "
+ CALL MAKE_WHERELIST "TB.TYPE", 'T'
+ WHERELISTAA  = WHERELIST
+
+ EINGABE.0  = 1
+ EINGABE.1  = "SELECT DISTINCT KENNZ ",
+              "     , DBNAME   ",
+              "     , TSNAME   ",
+              "     , CREATOR  ",
+              "     , NAME     ",
+              "     , CREATEDTS",
+              "FROM TABLE (                                          ",
+              "SELECT DISTINCT 'TB'     AS KENNZ   ",
+              "     , STRIP(TB.DBNAME)  AS DBNAME  ",
+              "     , STRIP(TB.TSNAME)  AS TSNAME  ",
+              "     , STRIP(TB.CREATOR) AS CREATOR ",
+              "     , STRIP(TB.NAME   ) AS NAME    ",
+              "     , TB.CREATEDTS      AS CREATEDTS" ,
+              "FROM "SYSIBMS".SYSTABLES     TB",
+              WHERELIST1 ,
+              "UNION ALL                           ",
+              "SELECT DISTINCT 'REL'    AS KENNZ   ",
+              "     , STRIP(RT.DBNAME)  AS DBNAME  ",
+              "     , STRIP(RT.TSNAME)  AS TSNAME  ",
+              "     , STRIP(AR.AUXTBOWNER) AS CREATOR ",
+              "     , STRIP(AR.AUXTBNAME ) AS NAME    ",
+              "     , TB.CREATEDTS         AS CREATEDTS" ,
+              "FROM "SYSIBMS".SYSTABLES     TB     ",
+              "INNER JOIN "SYSIBMS".SYSAUXRELS  AR ",
+              "ON    TB.CREATOR  = AR.TBOWNER      ",
+              "AND   TB.NAME     = AR.TBNAME       ",
+              "INNER JOIN "SYSIBMS".SYSTABLES   RT ",
+              "ON    AR.AUXTBOWNER  = RT.CREATOR      ",
+              "AND   AR.AUXTBNAME   = RT.NAME         ",
+              WHERELIST1 ,
+              "UNION ALL                           ",
+              "SELECT DISTINCT 'SY'     AS KENNZ   ",
+              "     , STRIP(SY.CREATOR) AS DBNAME  ",
+              "     , STRIP(SY.NAME)    AS TSNAME  ",
+              "     , STRIP(TB.CREATOR) AS CREATOR ",
+              "     , STRIP(TB.NAME)    AS NAME    ",
+              "     , SY.CREATEDTS      AS CREATEDTS" ,
+              "FROM "SYSIBMS".SYSSYNONYMS SY       ",
+              "INNER JOIN "SYSIBMS".SYSTABLES   TB ",
+              "ON    TB.CREATOR  = SY.TBCREATOR    ",
+              "AND   TB.NAME     = SY.TBNAME       ",
+              WHERELIST1 ,
+              "UNION ALL                           ",
+              "SELECT DISTINCT 'AL'     AS KENNZ   ",
+              "     , STRIP(TB.CREATOR) AS DBNAME  ",
+              "     , STRIP(TB.NAME)    AS TSNAME  ",
+              "     , STRIP(TB.TBCREATOR) AS CREATOR ",
+              "     , STRIP(TB.TBNAME)    AS NAME    ",
+              "     , TB.CREATEDTS      AS CREATEDTS" ,
+              "FROM "SYSIBMS".SYSTABLES   TB       ",
+              WHERELISTA ,
+              "UNION ALL                           ",
+              "SELECT DISTINCT 'TG'     AS KENNZ   ",
+              "     , STRIP(TG.SCHEMA)  AS DBNAME  ",
+              "     , STRIP(TG.NAME)    AS TSNAME  ",
+              "     , STRIP(TB.CREATOR) AS CREATOR ",
+              "     , STRIP(TB.NAME)    AS NAME    ",
+              "     , TG.CREATEDTS      AS CREATEDTS" ,
+              "FROM "SYSIBMS".SYSTRIGGERS TG       ",
+              "INNER JOIN "SYSIBMS".SYSTABLES   TB ",
+              "ON    TB.CREATOR  = TG.TBOWNER      ",
+              "AND   TB.NAME     = TG.TBNAME       ",
+              WHERELIST1 ,
+              "UNION ALL                           ",
+              "SELECT DISTINCT 'VW'      AS KENNZ   ",
+              "     , STRIP(VW.CREATOR)  AS DBNAME  ",
+              "     , STRIP(VW.NAME)     AS TSNAME  ",
+              "     , ''                 AS CREATOR ",
+              "     , ''                 AS NAME    ",
+              "     , VW.CREATEDTS       AS CREATEDTS" ,
+              "FROM "SYSIBMS".SYSTABLES  VW       ",
+              WHERELISTV ,
+              "UNION ALL                           ",
+              "SELECT 'MQT'              AS KENNZ   ",
+              "     , STRIP(MQ.CREATOR)  AS DBNAME  ",
+              "     , STRIP(MQ.NAME)     AS TSNAME  ",
+              "     , ''                 AS CREATOR ",
+              "     , ''                 AS NAME    ",
+              "     , MQ.CREATEDTS       AS CREATEDTS" ,
+              "FROM "SYSIBMS".SYSTABLES  MQ        ",
+              WHERELISTM ,
+              "UNION ALL                           ",
+              "SELECT DISTINCT 'RT'      AS KENNZ   ",
+              "     , SPECIFICNAME       AS DBNAME  ",
+              "     , ''                 AS TSNAME  ",
+              "     , SCHEMA             AS CREATOR ",
+              "     , NAME               AS NAME    ",
+              "     , RT.CREATEDTS       AS CREATEDTS" ,
+              "FROM "SYSIBMS".SYSROUTINES RT       ",
+              "WHERE SCHEMA = '"DB2_CREATOR1"'     ",
+              "UNION ALL                           ",
+              "SELECT DISTINCT 'SE'      AS KENNZ   ",
+              "     , SCHEMA             AS DBNAME  ",
+              "     , NAME               AS TSNAME  ",
+              "     , SCHEMA             AS CREATOR ",
+              "     , NAME               AS NAME    ",
+              "     , SE.CREATEDTS       AS CREATEDTS" ,
+              "FROM "SYSIBMS".SYSSEQUENCES SE      ",
+              "WHERE SCHEMA  = '"DB2_CREATOR1"'    ",
+              "AND   SEQTYPE IN ('S' )             ",
+              "UNION ALL                           ",
+              "SELECT DISTINCT 'SE'      AS KENNZ   ",
+              "     , SCHEMA             AS DBNAME  ",
+              "     , NAME               AS TSNAME  ",
+              "     , SCHEMA             AS CREATOR ",
+              "     , NAME               AS NAME    ",
+              "     , SE.CREATEDTS       AS CREATEDTS" ,
+              "FROM "SYSIBMS".SYSSEQUENCES SE      ",
+              "WHERE SEQSCHEMA  = '"DB2_CREATOR1"'  ",
+              "AND   SEQTYPE IN ('A')               ",
+              "UNION ALL                            ",
+              "SELECT DISTINCT 'FK'      AS KENNZ   ",
+              "     , CREATOR            AS DBNAME  ",
+              "     , TBNAME             AS TSNAME  ",
+              "     , RELNAME            AS CREATOR ",
+              "     , ''                 AS NAME    ",
+              "     , FK.TIMESTAMP      AS CREATEDTS" ,
+              "FROM "SYSIBMS".SYSRELS      FK      ",
+              "WHERE CREATOR = '"DB2_CREATOR1"'    ",
+              "UNION ALL                           ",
+              "SELECT DISTINCT 'PK'      AS KENNZ  ",
+              "     , TBCREATOR          AS DBNAME  ",
+              "     , TBNAME             AS TSNAME  ",
+              "     , ''                 AS CREATOR ",
+              "     , ''                 AS NAME    ",
+              "     , PK.CREATEDTS      AS CREATEDTS" ,
+              "FROM "SYSIBMS".SYSTABCONST  PK       ",
+              "WHERE TBCREATOR = '"DB2_CREATOR1"'   ",
+              "UNION ALL                           ",
+              "SELECT DISTINCT 'PERM'    AS KENNZ ",
+              "     , SCHEMA             AS DBNAME  ",
+              "     , NAME               AS TSNAME  ",
+              "     , ''                 AS CREATOR ",
+              "     , ''                 AS NAME    ",
+              "     , PERM.CREATEDTS     AS CREATEDTS" ,
+              "FROM "SYSIBMS".SYSCONTROLS  PERM     ",
+              "WHERE TBSCHEMA  = '"DB2_CREATOR1"'   ",
+              "UNION ALL                           ",
+              "SELECT DISTINCT 'VAR'     AS KENNZ ",
+              "     , SCHEMA             AS DBNAME  ",
+              "     , NAME               AS TSNAME  ",
+              "     , ''                 AS CREATOR ",
+              "     , ''                 AS NAME    ",
+              "     , VAR.CREATEDTS      AS CREATEDTS" ,
+              "FROM "SYSIBMS".SYSVARIABLES VAR      ",
+              "WHERE SCHEMA  = '"DB2_CREATOR1"'   ",
+              "UNION ALL                           ",
+              "SELECT DISTINCT 'DT'      AS KENNZ ",
+              "     , SCHEMA             AS DBNAME  ",
+              "     , NAME               AS TSNAME  ",
+              "     , ''                 AS CREATOR ",
+              "     , ''                 AS NAME    ",
+              "     , DT.CREATEDTS      AS CREATEDTS" ,
+              "FROM "SYSIBMS".SYSDATATYPES DT       ",
+              "WHERE SCHEMA  = '"DB2_CREATOR1"'   ",
+              "UNION ALL                           ",
+              "SELECT DISTINCT 'ALTER'  AS KENNZ   ",
+              "     , STRIP(TB.DBNAME)  AS DBNAME  ",
+              "     , STRIP(TB.TSNAME)  AS TSNAME  ",
+              "     , STRIP(TB.CREATOR) AS CREATOR ",
+              "     , STRIP(TB.NAME   ) AS NAME    ",
+              "     , TB.CREATEDTS      AS CREATEDTS" ,
+              "FROM "SYSIBMS".SYSTABLES     TB",
+              WHERELISTAV ,
+              "UNION ALL                           ",
+              "SELECT DISTINCT 'ALTER'  AS KENNZ   ",
+              "     , STRIP(TB.DBNAME)  AS DBNAME  ",
+              "     , STRIP(TB.TSNAME)  AS TSNAME  ",
+              "     , STRIP(TB.CREATOR) AS CREATOR ",
+              "     , STRIP(TB.NAME   ) AS NAME    ",
+              "     , TB.CREATEDTS      AS CREATEDTS" ,
+              "FROM "SYSIBMS".SYSTABLES     TB",
+              WHERELISTAA ,
+              " ) T1  "                            ,
+              " ORDER BY KENNZ, CREATEDTS "       ,
+              " "
+
+ CALL EXECUTE_SQL
+
+Return
+
+Lesen_daten_DDL:
+
+LOC = LOCATION
+FK  = auswahl
+OB  = object
+TB  = table
+ob3 = object3
+ob4 = object4
+ob5 = object5
+TS  = tablespace
+DB  = database
+GR  = Grant
+
+
+RETWERT = ZOSB1AC2(SSID,   ,           /* SSID       */
+                   LOC,    ,           /* LOCATION   */
+                   FK,     ,           /* FUKTION    */
+                   OB,     ,           /* OBJECT     */
+                   TB,     ,           /* TABLE      */
+                   OB3,    ,           /* OBJECT     */
+                   OB4,    ,           /* OBJECT     */
+                   OB5,    ,           /* OBJECT     */
+                   TS,     ,           /* TABLESPACE */
+                   DB,     ,           /* DATABASE   */
+                   GR,     ,           /* Grant      */
+                   CT,     ,           /* CALLTYPE   */
+                  )
+
+IF RETWERT = 100 THEN EXIT 100   /* MANUELLE UNTERBRECHUNG escape */
+DDLTEXT = DDLTEXT RETWERT
+
+DDLTEXT = STRIP(DDLTEXT, 'T')
+IF LENGTH(DDLTEXT) = 0 THEN RETURN
+return DDLTEXT
+
+
+Anzeigen_daten:
+
+DROP LISTE.
+LISTE.0 = 0
+DO FOREVER
+   LISTE.0 = LISTE.0 + 1
+   IND = LISTE.0
+   PARSE VALUE DDLTEXT WITH LISTE.IND '-NR' REST
+   IF REST = '' THEN LEAVE
+   DDLTEXT = REST
+ END
+
+Drop SL.
+SL.0 = 0
+If HEADER = "YES" Then do
+   SL.0 = 5
+   SL.1 = "--SQLTERM=;"
+   SL.2 = "--SPROCPARSER=,"
+   SL.3 = " "
+   SL.4 = " "
+   SL.5 = "SET CURRENT RULES = '"CURRULE"' ;"
+   If Length(CURSQLID) > 0 Then Do
+      SL.0 = 7
+      SL.6 = "SET CURRENT SQLID = '"CURSQLID"'  ;"
+      SL.7 = " "
+    End
+ end
+
+STRIP_TO_SPUFI = "N"
+DO IND = 1 TO LISTE.0
+   IF STRIP(LISTE.IND) = '' THEN ITERATE
+   DDLTEXT = LISTE.IND
+   DO FOREVER
+      PARSE VALUE DDLTEXT WITH ZEILE  '-NL' REST
+      DDLTEXT = REST
+      if length(zeile) = 0 Then Zeile = "   "
+/*    If Length(Strip(Zeile)) = 0 then Iterate  */
+      sl.0 = sl.0 + 1;sli = sl.0;sl.sli = ZEILE ;
+      If substr(Strip(sl.sli), 1, 10) = "--SQLTERM=" Then do
+         Parse value(sl.sli) with test "=" sqlterm .
+         sqlterm = Strip(Sqlterm)
+       end
+
+      If DDLSPUFI = "Y" & Length(Strip(sl.sli, "T")) > SpufiLen Then do
+         STRIP_TO_SPUFI = "Y"
+       End
+
+      IF REST = '' THEN do
+         If Strip(sl.sli) <> ""  ,
+          & substr(Strip(sl.sli), 1, 10) <> "--SQLTERM=" Then do
+            If Length(Strip(sl.sli)) > 60 Then Do
+               sl.0 = sl.0 + 1;sli = sl.0;sl.sli = ZEILE ;
+               sl.sli = sqlterm
+             End
+            Else Do
+               sl.sli = sl.sli || sqlterm
+             End
+          End
+         leave
+       end
+    END
+ END
+
+max_blanks = 6
+blank_such = LEFT(' ',max_blanks,' ')
+
+
+Do i = 1 to SL.0
+   blz = 0
+   drop azline
+   azline = ""
+   sl.i = Strip( sl.i, 'T', ' ' )
+   if sl.i = "" Then SL.i = " "
+   IF POS(blank_such, sl.i) < 1 THEN Iterate
+   hkon = 'N'
+   Do bli = 1 to length(sl.i)
+      if substr(sl.i, bli, 1) = "'" & hkon = 'Y' Then hkon = 'N'
+      if substr(sl.i, bli, 1) = "'" & hkon = 'N' Then hkon = 'Y'
+      if substr(sl.i, bli, 1) = " " Then Do
+         Blz = Blz + 1
+       End
+      Else Do
+         Blz = 0
+       End
+      If hkon = 'Y' Then Do
+         Blz = 0
+       End
+      if blz > max_blanks Then Iterate
+      azline = azline || substr(sl.i, bli, 1)
+    End
+   sl.i = azline
+ End
+
+If STRIP_TO_SPUFI = "Y"  Then Do
+   Drop SlN.
+   SlN.0 = 0
+   Do sli = 1 to sl.0
+      Sln.0 = sln.0 + 1; Slin  = sln.0 ;
+      If Length(Strip(Sl.sli, "T"))  > SpufiLen Then do
+         Do while Length(sl.sli) > 0
+            sln.slin = Substr(sl.sli, 1,  SpufiLen)
+            sl.sli   = Substr(sl.sli, SpufiLen + 1)
+            If length(sl.sli) < 1 then Leave
+            Sln.0 = sln.0 + 1; Slin  = sln.0 ;
+          End
+       End
+      Else Do
+         sln.slin = sl.sli
+       End
+    End
+
+   /* Daten wieder nach sl. stellen */
+   sl.0 = sln.0
+   Do sli = 1 to sln.0
+      sl.sli = sln.sli
+    End
+ End
+
+call Write_file
+
+DROP SL.
+SL.0 = 0
+DROP DDLTEXT
+DDLTEXT = ""
+
+return
+
+
+Write_file:
+
+ "EXECIO "SL.0" DISKW OUTDD (STEM SL. FINIS"
+If RC <> 0 Then do
+   SAY RC  ERRORTEXT(RC)
+   say RC  "TSO" "EXECIO "SL.0" DISKW OUTDD (STEM SL. FINIS"
+   EXIT  8
+ End
+
+
+HEADER = "NO"
+
+return
+
+Connect_Location:
+
+ If Length(Strip(arg(1))) = 0 Then Return 0
+ If Length(SYSUID) > 0 & Length(SYSPWD) > 0 Then do
+        SQLTEXT = " CONNECT TO "ARG(1) "USER :SYSUID USING :SYSPWD "
+  End
+ ELSE Do
+     SQLTEXT = " CONNECT TO "ARG(1)
+  End
+ Call EXECUTE_SQL_TEXT
+ IF SQLCODE <  0 THEN DO
+    sqlc = sqlcode
+    MSGTXT = 'Error in CONNECT TO ' || arg(1) ||,
+             ' SQLCODE: ' || SQLCODE
+    SAY MSGTXT
+    call SQL_ERROR
+  END
+
+ parse value sqlerrp with DB_ENV 4 DB_Vers 6 DB_Rel 8 DB_Mod
+Return SQLCODE
+
+DisConnect_Location:
+
+ If Length(Strip(arg(1))) = 0 Then Return 0
+
+ SQLTEXT =  "RELEASE " ARG(1)
+ Call EXECUTE_SQL_TEXT
+ SQLTEXT =  "COMMIT  "
+ Call EXECUTE_SQL_TEXT
+ SQLTEXT = " CONNECT RESET "
+ Call EXECUTE_SQL_TEXT
+ sqlc = sqlcode
+ IF SQLCODE <  0 THEN DO
+    sqlc = sqlcode
+    MSGTXT = 'Error in DISCONNECT ' || arg(1) ||,
+             ' SQLCODE: ' || SQLCODE
+    SAY MSGTXT
+    call SQL_ERROR
+  END
+Return SQLCODE
+
+EXECUTE_SQL:
+
+If Datatype(CNR) <> "NUM" Then CNR = 1
+If Datatype(SNR) <> "NUM" Then SNR = CNR
+DO STI = 1 TO EINGABE.0
+   SQLSTMT = VALUE(SPACE(RXDB2_GETSTEM, 0) || STI)
+   SQLSTMT = SPACE(SQLSTMT, 1)
+   IF WORD(SQLSTMT, 1) = "CONNECT" & WORD(SQLSTMT, 2) = "TO" THEN DO
+      SQLTEXT =  " "SQLSTMT
+      Call EXECUTE_SQL_TEXT
+      IF SQLCODE <> 0 THEN DO
+         SAY "Error in "SQLSTMT "SQLCODE: " || SQLCODE
+       END
+      ITERATE
+    END
+
+   SQLTEXT =         " CLOSE C"CNR" "
+   Call EXECUTE_SQL_TEXT
+   SQLTEXT =  " DECLARE              C"CNR" CURSOR FOR S"SNR
+   Call EXECUTE_SQL_TEXT
+   IF SQLCODE <> 0 THEN DO
+      SAY "A2 DECLARE     SQLCODE="SQLCODE
+      SAY SQLSTMT
+      call SQL_ERROR
+    END
+   SQLTEXT =  " PREPARE              S"SNR" FROM :SQLSTMT"
+   Call EXECUTE_SQL_TEXT
+   IF SQLCODE <> 0 THEN DO
+      SAY "A2 PREPARE     SQLCODE="SQLCODE
+      SAY SQLSTMT
+      call SQL_ERROR
+    END
+   SQLTEXT =  " DESCRIBE S"SNR" INTO :OUTSQLDA"
+   Call EXECUTE_SQL_TEXT
+   IF SQLCODE <> 0 THEN DO
+      SAY "A2 DESCRIBE    SQLCODE="SQLCODE
+      SAY SQLSTMT
+      call SQL_ERROR
+    END
+   SQLTEXT =  " OPEN C"CNR""
+   Call EXECUTE_SQL_TEXT
+   IF SQLCODE <> 0 THEN DO
+      SAY "A2 OPEN        SQLCODE="SQLCODE
+      SAY SQLSTMT
+      call SQL_ERROR
+    END
+   IVAL = VALUE(SPACE(RXDB2_PUTSTEM, 0) || 0) "= 0"
+   INTERPRET  IVAL
+   DO WHILE SQLCODE = 0
+      SQLTEXT =  " FETCH C"CNR" USING DESCRIPTOR :OUTSQLDA"
+      Call EXECUTE_SQL_TEXT
+      IF SQLCODE <> 0 THEN LEAVE
+      IVAL = "I = " VALUE(SPACE(RXDB2_PUTSTEM, 0) || 0) "+ 1"
+      INTERPRET  IVAL
+      IVAL = SPACE(RXDB2_PUTSTEM, 0) || 0  " = I"
+      INTERPRET  IVAL
+      DO CI = 1 TO OUTSQLDA.SQLD
+         /* AUSGABE.1.DBNAME = "DSNDB07"   */
+         IVAL = VALUE(SPACE(RXDB2_PUTSTEM, 0) || I) || "." ||  ,
+                SPACE(OUTSQLDA.CI.SQLNAME, 0)
+         INTERPRET IVAL"=OUTSQLDA.CI.SQLDATA"
+       END
+    END
+ END
+
+RETURN
+
+EXECUTE_SQL_TEXT:
+ADDRESS DSNREXX "EXECSQL "SQLTEXT
+Select
+  When rc =  -2168 Then do
+       SQLCODE    = -99999
+       SQLERRMC   = "Returncode war " RC
+   End
+  Otherwise nop
+ End
+Return
+
+SQL_ERROR:
+
+SQLC = D2X(SQLCODE,8)
+SQLC = X2C(SQLC)
+
+
+SQL_ERRD = ""
+Do I = 1 To 6
+   SQL_ERRD = SQL_ERRD||D2C(SQLERRD.I,4)
+End
+SQL_WARN = ""
+Do I = 0 To 10
+   SQL_WARN = SQL_WARN||LEFT(SQLWARN.I,1)
+End
+
+MSG_LEN = 80
+SQLCA = 'SQLCA   '
+SQLCA = SQLCA || X2C(00000088)
+SQLCA = SQLCA || SQLC
+SQLCA = SQLCA || D2C(70,2)
+SQLCA = SQLCA || 'DSN     '
+SQLCA = SQLCA || LEFT(SQLERRMC,70)
+SQLCA = SQLCA || LEFT(SQLERRP,8)
+SQLCA = SQLCA || SQL_ERRD
+SQLCA = SQLCA || SQL_WARN
+SQLCA = SQLCA || LEFT(SQLSTATE,5)
+TIAR_MSG = D2C(MSG_LEN * 12,2) || COPIES(' ',MSG_LEN * 12)
+TEXT_LEN = D2C(MSG_LEN,4)
+ADDRESS ATTCHPGM 'DSNTIAR SQLCA TIAR_MSG TEXT_LEN'
+
+If RC < 5 Then,
+   Do
+   If RC = 4 Then Say "DSNTIAR RC=4 Message Area Truncated"
+   S_POS = 3              /* Bypass the length bytes in Message Area */
+   Do I = 1 to 12         /* Loop through all lines of message */
+      MSG_TEXT = Substr(tiar_msg,S_POS,MSG_LEN) /* Pick out text */
+      MSG_TEXT = Strip(MSG_TEXT,T," ") /* Remove trailing blanks */
+      If MSG_TEXT > " " Then Say MSG_TEXT /* Echo msg to terminal */
+      Else Iterate /* Some msg lines are blank, skip */
+      S_POS = S_POS + MSG_LEN /* Skip to next "line" of MSG data */
+   End I
+End
+Else Do
+   Say "Call to DSNTIAR - Failed. RC=" RC
+   Say 'SQLCODE ='SQLCODE; Say 'SQLERRM ='SQLERRMC
+   Say 'SQLERRP ='SQLERRP; Say 'SQLSTATE='SQLSTATE
+   XX = "SQLERRD ="
+   Do I = 1 to 6 ; XX = XX||SQLERRD.I||',';End;Say XX
+   XX = "SQLWARN ="
+   Do I = 0 to 10; XX = XX||SQLWARN.I||',';End;Say XX
+End
+
+RETURN
+
+MAKE_WHERELIST: PROCEDURE EXPOSE WHERELIST
+
+COLUMNNAME = ARG(1)
+ARGUMENT   = ARG(2)
+ARGTYPE    = ARG(3)
+
+IF LENGTH(STRIP(ARGUMENT)) = 0 THEN RETURN
+ARGUMENT   = TRANSLATE(ARGUMENT, '%', '*')
+
+IF TRANSLATE(WORD(WHERELIST, 1) ) = "WHERE" THEN ANDKZ = "AND"
+ ELSE ANDKZ = "WHERE"
+
+IF LENGTH(STRIP(COLUMNNAME)) = 0 ,
+ & LENGTH(STRIP(ARGUMENT)) > 0 THEN DO
+   WHERELIST = WHERELIST ANDKZ ARGUMENT
+   RETURN
+ END
+
+IF LENGTH(STRIP(ARGUMENT)) = 0 THEN RETURN
+
+If ARGTYPE = "NUM" Then do
+   IF POS('%', ARGUMENT) > 0 THEN DO
+      WHERELIST = WHERELIST ANDKZ COLUMNNAME "LIKE "ARGUMENT
+    END
+   Else Do
+      WHERELIST = WHERELIST ANDKZ COLUMNNAME "= "ARGUMENT
+    END
+ End
+Else Do
+   IF POS('%', ARGUMENT) > 0 ,
+    | POS('_', ARGUMENT) > 0 THEN DO
+      WHERELIST = WHERELIST ANDKZ COLUMNNAME "LIKE '"ARGUMENT"'"
+    END
+   Else Do
+      WHERELIST = WHERELIST ANDKZ COLUMNNAME "= '"ARGUMENT"'"
+    END
+ End
+
+RETURN
+
+Load_DSNREXX:
+ "SUBCOM DSNREXX"
+IF RC THEN   S_RC = RXSUBCOM('ADD','DSNREXX','DSNREXX')
+
+ADDRESS DSNREXX "CONNECT "DB2_SSID
+IF SQLCODE <  0 THEN Do
+   say "CONNECT   SQLCODE ="SQLCODE "<"DB2_SSID">"
+   say "          SQLSTATE="SQLSTATE
+ End
+
+Return
+
+UNLoad_DSNREXX:
+
+ "SUBCOM DSNREXX"
+If RC = 0 Then do
+   ADDRESS DSNREXX "DISCONNECT"
+   S_RC = RXSUBCOM('DELETE','DSNREXX','DSNREXX')
+ End
+
+Return
+
+Auswahl_SC:
+
+DATABASE_Val    = "N"
+TABLESPACE_VAL  = "N"
+TABLE_VAL       = "N"
+INDEX_VAL       = "N"
+COMMENT_VAL     = "N"
+AUXTABLE_VAL    = "N"
+VIEW_VAL        = "N"
+PRIMARYKEY_VAL  = "N"
+FOREIGNKEY_VAL  = "N"
+TRIGGER_VAL     = "N"
+SPROC_VAL       = "N"
+GRANTTABLE_VAL  = "N"
+GRANTVIEW_VAL   = "N"
+GRANTSQ_VAL     = "N"
+GRANTRT_VAL     = "N"
+SEQUENCE_VAL    = "N"
+ALIAS_VAL       = "N"
+SYNONYM_VAL     = "N"
+PERMISSION_VAL  = "N"
+VARIABLE_VAL    = "N"
+DATATYPE_VAL    = "N"
+
+
+If G_DATABASE   =  "Y" Then DATABASE_Val    = "N"    /*  DB         */
+IF G_TABLESPACE =  "Y" THEN TABLESPACE_VAL  = "Y"    /*  DB / SC    */
+IF G_TABLE      =  "Y" THEN TABLE_VAL       = "Y"    /*  DB / SC    */
+IF G_INDEX      =  "Y" THEN INDEX_VAL       = "Y"    /*  DB / SC    */
+IF G_COMMENT    =  "Y" THEN COMMENT_VAL     = "Y"    /*  DB / SC    */
+IF G_AUXTABLE   =  "Y" THEN AUXTABLE_VAL    = "Y"    /*  DB / SC    */
+IF G_VIEW       =  "Y" THEN VIEW_VAL        = "Y"    /*  DB / SC    */
+IF G_PRIMARYKEY =  "Y" THEN PRIMARYKEY_VAL  = "Y"    /*  DB / SC    */
+IF G_FOREIGNKEY =  "Y" THEN FOREIGNKEY_VAL  = "Y"    /*  DB / SC    */
+IF G_TRIGGER    =  "Y" THEN TRIGGER_VAL     = "Y"    /*  DB / SC    */
+IF G_SPROC      =  "Y" THEN SPROC_VAL       = "Y"    /*  DB / SC    */
+IF G_GRANTTABLE =  "Y" THEN GRANTTABLE_VAL  = "Y"    /*  DB / SC    */
+IF G_GRANTVIEW  =  "Y" THEN GRANTVIEW_VAL   = "Y"    /*  DB / SC    */
+IF G_GRANTSQ    =  "Y" THEN GRANTSQ_VAL     = "Y"    /*  DB / SC    */
+IF G_GRANTRT    =  "Y" THEN GRANTRT_VAL     = "Y"    /*  DB / SC    */
+IF G_SYNONYM    =  "Y" THEN SYNONYM_VAL     = "Y"    /*  DB / SC    */
+IF G_PERMISSION =  "Y" THEN PERMISSION_VAL  = "Y"    /*  DB / SC    */
+IF G_SEQUENCE   =  "Y" THEN SEQUENCE_VAL    = "Y"    /*     / SC    */
+IF G_ALIAS      =  "Y" THEN ALIAS_VAL       = "Y"    /*     / SC    */
+IF G_VARIABLE   =  "Y" THEN VARIABLE_VAL    = "Y"    /*     / SC    */
+IF G_DATATYPE   =  "Y" THEN DATATYPE_VAL    = "Y"    /*     / SC    */
+
+
+Return
+
+Auswahl_DB:
+
+DATABASE_Val    = "N"
+TABLESPACE_VAL  = "N"
+TABLE_VAL       = "N"
+INDEX_VAL       = "N"
+COMMENT_VAL     = "N"
+AUXTABLE_VAL    = "N"
+VIEW_VAL        = "N"
+PRIMARYKEY_VAL  = "N"
+FOREIGNKEY_VAL  = "N"
+TRIGGER_VAL     = "N"
+SPROC_VAL       = "N"
+GRANTTABLE_VAL  = "N"
+GRANTVIEW_VAL   = "N"
+GRANTSQ_VAL     = "N"
+GRANTRT_VAL     = "N"
+SEQUENCE_VAL    = "N"
+ALIAS_VAL       = "N"
+SYNONYM_VAL     = "N"
+PERMISSION_VAL  = "N"
+VARIABLE_VAL    = "N"
+DATATYPE_VAL    = "N"
+
+
+If G_DATABASE   =  "Y" Then DATABASE_Val    = "Y"    /*  DB / SC    */
+IF G_TABLESPACE =  "Y" THEN TABLESPACE_VAL  = "Y"    /*  DB / SC    */
+IF G_TABLE      =  "Y" THEN TABLE_VAL       = "Y"    /*  DB / SC    */
+IF G_INDEX      =  "Y" THEN INDEX_VAL       = "Y"    /*  DB / SC    */
+IF G_COMMENT    =  "Y" THEN COMMENT_VAL     = "Y"    /*  DB / SC    */
+IF G_AUXTABLE   =  "Y" THEN AUXTABLE_VAL    = "Y"    /*  DB / SC    */
+IF G_VIEW       =  "Y" THEN VIEW_VAL        = "Y"    /*  DB / SC    */
+IF G_PRIMARYKEY =  "Y" THEN PRIMARYKEY_VAL  = "Y"    /*  DB / SC    */
+IF G_FOREIGNKEY =  "Y" THEN FOREIGNKEY_VAL  = "Y"    /*  DB / SC    */
+IF G_TRIGGER    =  "Y" THEN TRIGGER_VAL     = "Y"    /*  DB / SC    */
+IF G_SPROC      =  "Y" THEN SPROC_VAL       = "Y"    /*  DB / SC    */
+IF G_GRANTTABLE =  "Y" THEN GRANTTABLE_VAL  = "Y"    /*  DB / SC    */
+IF G_GRANTVIEW  =  "Y" THEN GRANTVIEW_VAL   = "Y"    /*  DB / SC    */
+IF G_GRANTSQ    =  "Y" THEN GRANTSQ_VAL     = "Y"    /*  DB / SC    */
+IF G_GRANTRT    =  "Y" THEN GRANTRT_VAL     = "Y"    /*  DB / SC    */
+IF G_PERMISSION =  "Y" THEN PERMISSION_VAL  = "Y"    /*  DB / SC    */
+IF G_SYNONYM    =  "Y" THEN SYNONYM_VAL     = "Y"    /*  DB / SC    */
+
+IF G_SEQUENCE   =  "Y" THEN SEQUENCE_VAL    = "N"    /*     / SC    */
+IF G_ALIAS      =  "Y" THEN ALIAS_VAL       = "N"    /*     / SC    */
+IF G_VARIABLE   =  "Y" THEN VARIABLE_VAL    = "N"    /*     / SC    */
+IF G_DATATYPE   =  "Y" THEN DATATYPE_VAL    = "N"    /*     / SC    */
+
+Return
+
+GET_SYSIN:
+
+  "EXECIO * DISKR SYSIN (STEM IN1. FINIS"
+
+ DROP IN.
+ IN.0 = 0
+ /* NUR GUELTIGE SAETZE AN DAS Program WEITER GEBEN */
+ DO INI = 1 TO IN1.0
+    IF SUBSTR(IN1.INI, 1, 2)  = '--' THEN ITERATE
+    IN.0 = IN.0 + 1
+    INX  = IN.0
+    IN.INX = IN1.INI
+  END
+
+RETURN 0
+
+GET_PARM:
+
+ "EXECIO * DISKR RXPARM  (STEM RXPARMS. FINIS"
+
+RETURN 0
+
+
+error: failure: syntax: novalue: halt:
+say SRC.3":"
+cstr = CONDITION('Condition')         /* Name of trapped condition*/
+istr = CONDITION('Instruction')       /* CALL or SIGNAL           */
+dstr = CONDITION('Description')       /* Description or null      */
+sstr = CONDITION('Status')            /* ON, OFF, or DELAY        */
+Say  'Condition  :'cstr
+say  'Instruction:'istr
+say  'Description:'dstr
+say  'Status     :'sstr
+
+If condition = 'HALT' Then do
+   Say SRC.3 "manually abort " condition condition('C')
+ End
+ Else Do
+   Say SRC.3 condition
+   condition = condition('C')
+   source = strip(sourceline(sigl),"B")
+   say copies('*',79)
+   say left('* 'condition' CONDITION ON LINE 'sigl' OF REXX 'rexx,78)'*'
+   say left('* 'source,78)'*'
+   say left('* RETURN CODE 'rc,78)'*'
+   say left('* 'errortext(rc),78)'*'
+   say copies('*',79)
+ End
+exit 100

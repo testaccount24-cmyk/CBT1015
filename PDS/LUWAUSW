@@ -1,0 +1,1038 @@
+/* REXX */
+/*******************************************************************/
+/*                                                                 */
+/* ProgramNAME      : LUWAUSW   (fuer LUW     Nr 000)              */
+/* AUSRUF           : AUS ISPF                                     */
+/* AUTHER           : ULRICH BRAEUER                               */
+/* FUNKTION         : Auswahl Verwalten LUW                        */
+/*                                                                 */
+/*                    ULI BRAEUER                                  */
+/*                                                                 */
+/*******************************************************************/
+
+SIGNAL ON SYNTAX          /* TURN ON SYNTAX TRAP */
+SIGNAL ON HALT            /* TRAP THIS ONLY ON LUW */
+SIGNAL OFF FAILURE
+SIGNAL OFF ERROR
+
+PARSE SOURCE SRC.1  , /* ENVIRONMENT  (TSO)            */
+             SRC.2  , /* AUFRUF ALS (COMMAND)          */
+             SRC.3  , /* Program NAME (LUW97000)       */
+             SRC.4  , /* SYS00186 (TEMP FILE)          */
+             SRC.5  , /* AUFRUF AUS LIB (X.X.CLISTUDB) */
+             SRC.6  , /* ?                             */
+             SRC.7  , /* TSO                           */
+             SRC.8  , /* ISPF                          */
+             SRC.9  , /* ?                             */
+             SRC.10   /* ?                             */
+
+
+ENV = "TSO"
+X = MSG('OFF')
+"DELSTACK"
+USER     = USERID()
+SMFID    = MVSVAR('SYSNAME')
+Sec_Out  = ""
+ModLevel = ""
+
+SYSCATS  = "SYSCAT"
+SYSIBMS  = "SYSIBM"
+SYSIBMA  = "SYSIBMADM"
+SYSPROCA = "SYSPROC"
+SYSUID   = ""
+SYSPWD   = ""
+DSNRECON = "Y"
+ADDRESS ISPEXEC 'VGET (SYSIBMS) PROFILE'
+ADDRESS ISPEXEC 'VGET (SYSCATS) PROFILE'
+ADDRESS ISPEXEC 'VGET (SYSIBMA) PROFILE'
+ADDRESS ISPEXEC 'VGET (SYSPROCA) PROFILE'
+ADDRESS ISPEXEC 'VPUT (SYSUID)   PROFILE'
+ADDRESS ISPEXEC 'VPUT (SYSPWD)   PROFILE'
+
+
+LNR  = Word(ARG(1), 1)
+PROC = Word(ARG(1), 2)
+CUR  = "AUSWAHL"
+TESTCONNECT = ""
+
+call INIT_START
+LocOK = ''
+ADDRESS ISPEXEC "CONTROL ERRORS RETURN"
+ADDRESS ISPEXEC 'VGET (SSID) PROFILE'
+ADDRESS ISPEXEC 'VGET (LOCATION) PROFILE'
+
+DO FOREVER
+   DT       = Date()
+   TI       = Time()
+   ADDRESS ISPEXEC "DISPLAY PANEL(PLUWAUSW)"
+   If RC > 8 Then do
+      say "ZEDSMSG="ZEDSMSG
+      say "ZERRLM="ZERRLM
+      say "ZERRMSG="ZERRMSG
+      say "ZERRSM="ZERRSM
+      say "RC="rc
+      return ""
+    End
+   COMMAND = ZCMD
+
+   /* PF Tasten Pruefen  */
+   Select
+      When SUBSTR(COMMAND,1,3) = "CAN"  THEN LEAVE
+      WHEN WORD(COMMAND,1) = "TRACE" then do
+           IF WORD(COMMAND, 2) = "ON"  Then trace('I')
+           IF WORD(COMMAND, 2) = "OFF" Then trace('O')
+           UDBTRACE = word(COMMAND, 2)
+           ADDRESS ISPEXEC 'VPUT (UDBTRACE) PROFILE'
+           ZCMD = ''
+       end
+      When PF                  = 'PF03' THEN LEAVE
+      When PF                  = 'PF04' THEN LEAVE
+      When AUSWAHL             =  99    THEN LEAVE
+      Otherwise NOP
+     End
+
+   CUR  = "AUSWAHL"
+   /* Pruefen der Eingabe */
+   If Length(SSID) < 1 Then do
+      MSGLINE = "Bitte gueltige SSID eingeben "
+      Iterate
+    end
+
+
+   OK = List_SSID_on_LPAR()
+
+   SSID_OK = "N"
+   Do SSIDix = 1 to SSIDListe.0
+      If SSID = Word(SSIDListe.SSIDix, 1) THEN DO
+         IF Word(SSIDListe.SSIDix, 2) = "ACTIVE" Then Do
+            SSID_OK = "Y"
+            LEAVE
+          End
+         ELSE DO
+            SSID_OK = "NA"
+            LEAVE
+          End
+       End
+    End
+
+   IF SSID_OK = "N"  Then Do
+      MSGLINE = "Bitte gueltige SSID eingeben "
+      Iterate
+    End
+   IF SSID_OK = "NA" Then Do
+      MSGLINE = "SSID IST NICHT GESTARTTED  "
+      Iterate
+    End
+
+   select
+     When auswahl = 1 Then do
+          If Length(Location) < 1 | Location = "?" Then do
+             Location = GetLocation()
+             If Length(Location) < 1 Then do
+                MSGLINE = "Bitte G}ltige Location einggeben "
+                CUR  = "SSID"
+                iterate
+              End
+           end
+
+          If Length(LocOK) > 0 & LocOk = Location Then nop
+          else do
+             Call Pruefen_Location
+             if LOCFOUND  = 'N' Then do
+                MSGLINE = "Location nicht gefunden in SSID " || ,
+                          " bitte pruefen ||   "
+                iterate
+              End
+           end
+      End
+     When auswahl = 2 Then do
+          If Length(Location) > 0 Then do
+             Call Pruefen_Location
+             if LOCFOUND  = 'N' Then do
+                MSGLINE = "Location nicht gefunden in SSID " || ,
+                          " bitte pruefen ||   "
+                iterate
+              End
+           end
+      End
+     When auswahl = 3 Then do
+          If Length(LocOK) > 0 & LocOk = Location Then nop
+          else do
+             Call Pruefen_Location
+             if LOCFOUND  = 'N' Then do
+                MSGLINE = "Location nicht gefunden in SSID " || ,
+                          " bitte pruefen ||   "
+                iterate
+              End
+           end
+      End
+     OTHERWISE NOP
+    End
+
+   If Sec_Out = "A" ,
+    & (Auswahl = 1 | Auswahl = 2 | Auswahl = 3) then do
+       TESTCONNECT = "Y"
+       Call Load_DSNREXX
+       OK = CONNECT_LOCATION(location)
+       OSQLCode = Sqlcode
+       If SQLCODE = 0 Then Sec_Out = ""  /* PWD nicht erforderlich */
+       TESTCONNECT = ""
+       Call UNLoad_DSNREXX
+       If OSqlcode <> 0 Then Do
+          If SYSUID = "" Then Do
+             MSGLINE = "Bitte UserID und Password eingeben "
+             CURSOR = 'CURSOR(SYSUID)'
+             CUR  = "SYSUID"
+             Iterate
+           End
+          If SYSPWD = "" Then Do
+             MSGLINE = "Bitte UserID und Password eingeben "
+             CURSOR = 'CURSOR(SYSPWD)'
+             CUR  = "SYSPWD"
+             Iterate
+           End
+        End
+    End
+   ADDRESS ISPEXEC 'VPUT (SYSUID)   PROFILE'
+   ADDRESS ISPEXEC 'VPUT (SYSPWD)   PROFILE'
+
+    LocOk    = Location
+    UDBAUS1  = Auswahl
+    UDBSSID  = ssid
+    UDBLOC   = Location
+    ADDRESS ISPEXEC 'VPUT (UDBAUS1 UDBSSID UDBLOC UDBTRACE) ' ,
+            'PROFILE'
+
+   /* Aufruf der gewaehlten Funktion */
+   MSGLINE = " "
+   tabnr   = 1
+   DB2_SSID = ssid
+   call Get_CFG_FILE
+   Call UNLoad_DSNREXX
+   Call Load_DSNREXX
+
+   OBJLIB  = USER || ".ISPF" || SMFID || "." ||  ,
+             "NR" || RIGHT(LNR, 4, '0') || ".OBJECT"
+   SELECT
+     when auswahl = 1 Then do
+          OK = CONNECT_LOCATION(location)
+          ERRP= sqlerrp
+          DBV = DB_Vers
+          DBE = DB_ENV
+          DBR = DB_Rel
+          OK = DISCONNECT_LOCATION(location)
+          Call UNLoad_DSNREXX
+          Call Find_Version
+
+          PRG1  = DB_Version || "905"
+          PRG2  = DB_Version || "200"
+          CProg1= PRG1 OBJLIB
+          CProg = PRG2 "ssid, location, LNR, Tabnr, errp, proc"
+          Interpret "Call "CProg1
+          Interpret "Call "CProg
+      End
+
+     when auswahl = 2 Then do
+          OK = DISCONNECT_LOCATION(location)
+          errp= sqlerrp
+          DBV = DB_Vers
+          DBE = DB_ENV
+          DBR = DB_Rel
+          Call UNLoad_DSNREXX
+          Call Find_Version
+
+          PRG1  = DB_Version || "905"
+          PRG2  = DB_Version || "200"
+          CProg1= PRG1 OBJLIB
+          If Version = 12   Then do
+             CPROG = PRG2 "SSID, LOCATION, LNR, TABNR, ",
+                          "FUN_LEVEL, " ,
+                          "CAT_LEVEL, " ,
+                          "proc "
+           End
+           Else                do
+             CProg = PRG2 "ssid, location, LNR, Tabnr, errp, proc"
+           End
+          Interpret "Call "CProg1
+          Interpret "Call "CProg
+      end
+     when auswahl = 3 Then do
+          OK = CONNECT_LOCATION(location)
+          ERRP= sqlerrp
+          DBV = DB_Vers
+          DBE = DB_ENV
+          Progname = Catalog_Compatibilitaet()
+          OK = DISCONNECT_LOCATION(location)
+          DB_Version = Progname
+          Call UNLoad_DSNREXX
+          If length(Progname) > 0 Then do
+            CALL ARXPARM1 SSID
+            Progname = Substr(Progname, 1, 5)
+            CProg1= Progname || "905" OBJLIB
+            CProg = Progname || "200"
+            If Version = 12   Then do
+               CPROG = CProg "SSID, LOCATION, LNR, TABNR, ",
+                             "FUN_LEVEL, " ,
+                             "CAT_LEVEL, " ,
+                             "proc "
+             End
+             Else                do
+               CProg = CProg "ssid, location, LNR, Tabnr, errp, proc"
+             End
+            Interpret "Call "CProg1
+            Interpret "Call "CProg
+           End
+      End
+     when auswahl = 20 Then do
+          location  = ""
+          OK = DISCONNECT_LOCATION(location)
+          errp= sqlerrp
+          DBV = DB_Vers
+          Call UNLoad_DSNREXX
+          CALL ARXPARM1 SSID
+      end
+      Otherwise nop
+    end
+
+   ADDRESS ISPEXEC 'VGET (UDBTRACE) PROFILE'
+   IF UDBTRACE = 'ON' THEN TRACE I
+   ELSE                    TRACE
+
+ end
+
+ADDRESS ISPEXEC 'VPUT (SSID) PROFILE'
+ADDRESS ISPEXEC 'VPUT (LOCATION) PROFILE'
+call INIT_ende
+
+EXIT
+
+INIT_START:
+/*
+PARSE SOURCE SRC.1  , /* ENVIRONMENT  (TSO)            */
+             SRC.2  , /* AUFRUF ALS (COMMAND)          */
+             SRC.3  , /* Program NAME (LUWAUSW)        */
+             SRC.4  , /* SYS00186 (TEMP FILE)          */
+             SRC.5  , /* AUFRUF AUS LIB (X.X.CLISTUDB) */
+             SRC.6  , /* ?                             */
+             SRC.7  , /* TSO                           */
+             SRC.8  , /* ISPF                          */
+             SRC.9  , /* ?                             */
+             .
+*/
+deflib = reverse(SRC.5)            /* WIRD BDUTSILC.FPSI.XXXXXX */
+parse value deflib with x '.' temp /* DANN FPSI.XXXXXX          */
+deflib = reverse(temp) || '.'      /* DANN XXXXXX.ISPF.         */
+
+call Get_UDBProf1
+
+
+return
+
+Get_UDBProf1:
+ADDRESS ISPEXEC 'VGET (UDBAUS1 UDBSSID UDBLOC UDBTRACE) PROFILE'
+
+ssid     = UDBSSID
+location = UDBLOC
+Auswahl  = UDBAUS1
+if UDBTRACE = 'ON' Then Trace i
+else                    Trace
+
+return
+
+INIT_ENDE:
+
+return
+
+
+Catalog_Compatibilitaet:
+Progname = ""
+CATAUSW  = ""
+
+DO FOREVER
+   ADDRESS ISPEXEC "DISPLAY PANEL(PCOMPAT)"
+   If RC > 8 Then do
+      say "ZEDSMSG="ZEDSMSG
+      say "ZERRLM="ZERRLM
+      say "ZERRMSG="ZERRMSG
+      say "ZERRSM="ZERRSM
+      say "RC="rc
+      return ""
+    End
+   COMMAND = ZCMD
+
+   /* PF Tasten Pruefen  */
+   Select
+      When SUBSTR(COMMAND,1,3) = "CAN"  THEN LEAVE
+      WHEN WORD(COMMAND,1) = "TRACE" then do
+           IF WORD(COMMAND, 2) = "ON"  Then trace('I')
+           IF WORD(COMMAND, 2) = "OFF" Then trace('O')
+           UDBTRACE = word(COMMAND, 2)
+           ADDRESS ISPEXEC 'VPUT (UDBTRACE) PROFILE'
+           ZCMD = ''
+       end
+      When PF                  = 'PF03' THEN LEAVE
+      When PF                  = 'PF04' THEN LEAVE
+      When AUSWAHL             =  99    THEN LEAVE
+      Otherwise NOP
+     End
+
+
+   /* Pruefen der Eingabe */
+   select
+     When CATAUSW =  1      Then do
+          Return "ZOS81200"
+      End
+     When CATAUSW =  2      Then do
+          Return "ZOS91200"
+      End
+     When CATAUSW =  3      Then do
+          Return "ZOSA1200"
+      End
+     When CATAUSW =  4      Then do
+          Return "ZOSB1200"
+      End
+     When CATAUSW =  5      Then do
+          Version   = 12
+          DBV       = 12
+          DBE       = 'DSN'
+          errp      = 'DSN12150'
+          CAT_LEVEL = 'DSN121100'
+          FUN_LEVEL ='DSN121100'
+          Return "ZOSC1200"
+      End
+     When CATAUSW =  20     Then do
+          Return "LUW97200"
+      End
+     When CATAUSW =  30     Then do
+          Return "LUWA1200"
+      End
+     When CATAUSW =  31     Then do
+          Return "LUWA5200"
+      End
+     When CATAUSW =  32     Then do
+          Return "LUWB1200"
+      End
+     When CATAUSW =  33     Then do
+          Return "LUWB5200"
+      End
+     OTHERWISE NOP
+    End
+
+ end
+
+
+Return Progname
+
+Find_Version:
+
+ DB_Version = ""
+ select
+    When DBV = 12 & DBE = 'DSN' Then do
+         errp = Substr(errp, 1, 7)
+         Call DB2V12_Modlevel
+         errp = errp""ModLevel
+         DB_Version = "ZOSC1"
+     End
+    When DBV = 11 & DBE = 'DSN' Then do
+         DB_Version = "ZOSB1"
+     End
+    When DBV = 10 & DBE = 'DSN' Then do
+         DB_Version = "ZOSA1"
+     End
+    When DBV =  9 & DBE = 'DSN' Then do
+         DB_Version = "ZOS91"
+     End
+    When DBV =  8 & DBE = 'DSN' Then do
+         DB_Version = "ZOS81"
+     End
+    When DBV = 10 & DBR = 05 & DBE = 'SQL' Then Do
+         DB_Version = "LUWA5"
+     End
+    When DBV = 10 & DBE = 'SQL' Then do
+         DB_Version = "LUWA1"
+     End
+    When DBV = 11 & DBR = 01 & DBE = 'SQL' Then Do
+         DB_Version = "LUWB1"
+     End
+    When DBV = 11 & DBR = 05 & DBE = 'SQL' Then Do
+         DB_Version = "LUWB5"
+     End
+    When DBV =  9 & DBE = 'SQL' Then do
+         DB_Version = "LUW97"
+     End
+    Otherwise Do
+         IF DBE = 'SQL' Then   DB_Version = "LUWB5"
+          ELSE                 DB_Version = "ZOSC1"
+     End
+  End
+
+Return
+
+Pruefen_Location:
+
+DROP AUSGABE.
+RXDB2_SSID        = SSID
+RXDB2_GETSTEM     = 'EINGABE.'
+RXDB2_PUTSTEM     = 'AUSGABE.'
+RXDB2_MAXROWS     = 0
+RXDB2_IGNORE_SQLERR = 'N'
+
+LOCFOUND  = 'N'
+EINGABE.0 = 1
+EINGABE.1 = "SELECT COUNT(*) ANZLOC FROM "SYSIBMS".LOCATIONS " ,
+            "WHERE LOCATION = '"LOCATION"'"
+EINGABE.1 = "SELECT LO.LOCATION, LO.LINKNAME              " ,
+            "     , LO.PORT AS LOPORT                     " ,
+            "     , IP.IPADDR                             " ,
+            "     , IP.SECURITY_OUT                       " ,
+            "FROM "SYSIBMS".LOCATIONS LO                  " ,
+            "LEFT OUTER JOIN "SYSIBMS".IPNAMES IP         " ,
+            "ON   LO.LINKNAME = IP.LINKNAME               " ,
+            "WHERE LOCATION = '"LOCATION"'"  ,
+            "ORDER BY LOCATION                            " ,
+            ""
+
+call EXECUTE_SQL
+if Ausgabe.0 > 0 Then LOCFOUND = 'Y'
+If Ausgabe.1.SECURITY_OUT = "A" Then Sec_Out = "A"
+
+return
+
+DB2V12_Modlevel:
+
+
+DROP AUSGABE.
+RXDB2_SSID        = SSID
+RXDB2_GETSTEM     = 'EINGABE.'
+RXDB2_PUTSTEM     = 'AUSGABE.'
+RXDB2_MAXROWS     = 0
+RXDB2_IGNORE_SQLERR = 'N'
+
+LOCFOUND  = 'N'
+EINGABE.0 = 1
+EINGABE.1 = "SELECT  LVU.FUNCTION_LVL AS FUNCTION_LEVEL  ",
+            "      , LVU.CATALOG_LVL  AS CTALOG_LEVEL    ",
+            "FROM SYSIBM.SYSLEVELUPDATES LVU             ",
+            "WHERE OPERATION_TYPE IN ('F', 'C')          ",
+            "ORDER BY  LVU.EFFECTIVE_TIME  DESC          ",
+            "FETCH FIRST 1 ROWS ONLY FOR FETCH ONLY      ",
+            "WITH UR                                     ",
+            ""
+
+call EXECUTE_SQL
+
+FUN_LEVEL = Ausgabe.1.FUNCTION_LEVEL
+CAT_LEVEL = Ausgabe.1.CTALOG_LEVEL
+
+parse value  CAT_LEVEL With "V" Version "R" Rel "M" ModLevel
+CAT_LEVEL = "DSN" || Version || Rel || ModLevel
+
+parse value  FUN_LEVEL With "V" Version "R" Rel "M" ModLevel
+FUN_LEVEL = "DSN" || Version || Rel || ModLevel
+
+return
+
+
+GetLocation:
+
+loctab = "LT" || SPACE(TRANSLATE(TIME(), " ", ":"), 0)
+address ispexec 'TBCLOSE 'LOCTAB
+address ispexec  'TBERASE 'LOCTAB
+If RC >  8  Then do
+   address ispexec 'TBCREATE 'LOCTAB'  KEYS(loc) ' ,
+                   'NAMES(LCMD, link, port, ip)  '
+ End
+address ispexec  'TBOPEN 'LOCTAB
+if rc /= 0 then do
+   address ispexec 'TBCREATE 'LOCTAB'  KEYS(loc) replace ' ,
+                   'NAMES(LCMD, link, port, ip)  '
+   If RC <> 0 Then do
+      Say "Error on TBCreate, processing is interrupted "
+      Say "Returncode = " RC
+      Say "Fehler     = " RC
+      address ispexec 'TBCLOSE 'LOCTAB
+      address ispexec  'TBERASE 'LOCTAB
+      address ispexec  'TBEND   'LOCTAB
+      Return ''
+    End
+ end
+
+call get_locations
+address ISPEXEC 'TBSORT 'loctab' FIELDS(loc) '
+address ispexec 'TBCLOSE 'LOCTAB
+
+lnr = 1
+crp = 1
+Rloc = ''
+DO FOREVER
+/* ADDRESS ISPEXEC "ADDPOP" */
+   address ispexec  'TBOPEN 'LOCTAB
+   CURSOR = 'CURSOR(LCMD)'
+   CSRROW = 'CSRROW(1)'
+   address ispexec 'TBDISPL 'LOCTAB' PANEL(PLOCLIST)',
+                   'CSRROW('LNR')' ,
+                   'AUTOSEL(NO) POSITION(CRP)'
+   If RC > 8 Then do
+      say "Panel Display Error (PLOCLIST) RC="RC
+      say "ZEDSMSG="ZEDSMSG
+      say "ZERRLM="ZERRLM
+      say "ZERRMSG="ZERRMSG
+      say "ZERRSM="ZERRSM
+      return ""
+    End
+/* ADDRESS ISPEXEC "REMPOP" */
+   COMMAND = ZCMD
+
+   /* PF Tasten Pruefen  */
+   Select
+      When SUBSTR(COMMAND,1,3) = "CAN"  THEN LEAVE
+      When Word(COMMAND,1)     = "F"  THEN Do
+           src = Translate(Subword(command, 2))
+           ADDRESS ISPEXEC "TBTOP  "loctab
+           crp = 0
+           Do while rc = 0
+              crp = crp + 1
+              if word(loc, 1) >= src then do
+                 leave
+               End
+              ADDRESS ISPEXEC "TBSKIP "loctab
+            End
+       End
+      When Word(COMMAND,1)     = "SORT"  THEN Do
+           select
+               When word(command, 2) = "2" Then do
+                 address ISPEXEC 'TBSORT 'loctab' FIELDS(link) '
+                End
+               When word(command, 2) = "3" Then do
+                 address ISPEXEC 'TBSORT 'loctab' FIELDS(port) '
+                End
+               When word(command, 2) = "4" Then do
+                 address ISPEXEC 'TBSORT 'loctab' FIELDS(ip) '
+                End
+              Otherwise Do
+                 address ISPEXEC 'TBSORT 'loctab' FIELDS(loc) '
+               End
+            End
+       End
+      When PF                  = 'PF03' THEN LEAVE
+      When AUSWAHL             =  99    THEN LEAVE
+      Otherwise NOP
+     End
+    eingabe = ''
+    if ZTDSELS > 0 Then    lnr = crp
+    do cnt = 1 to  ZTDSELS  /* processing line command  */
+       LCMD = TRANSLATE(LCMD)
+       IF LCMD = 'S' Then do
+          PF = ""
+          Rloc = translate(Strip(loc))
+          leave
+        End
+     end /* DO cnt = 1....   */
+    IF LCMD = 'S' Then Leave
+ end
+
+PF = ""
+address ispexec 'TBCLOSE 'LOCTAB
+address ispexec  'TBERASE 'LOCTAB
+address ispexec  'TBEND 'LOCTAB
+
+Return RLoc
+
+get_locations:
+
+/* ADDRESS ISPEXEC 'TBADD   'LOCTAB  */
+
+DROP AUSGABE.
+RXDB2_SSID        = SSID
+RXDB2_GETSTEM     = 'EINGABE.'
+RXDB2_PUTSTEM     = 'AUSGABE.'
+RXDB2_MAXROWS     = 0
+RXDB2_IGNORE_SQLERR = 'N'
+
+LOCFOUND  = 'N'
+EINGABE.0 = 1
+EINGABE.1 = "SELECT LO.LOCATION, LO.LINKNAME              " ,
+            "     , LO.PORT AS LOPORT                     " ,
+            "     , IP.IPADDR                             " ,
+            "     , IP.SECURITY_OUT                       " ,
+            "FROM "SYSIBMS".LOCATIONS LO                  " ,
+            "LEFT OUTER JOIN "SYSIBMS".IPNAMES IP         " ,
+            "ON   LO.LINKNAME = IP.LINKNAME               " ,
+            "ORDER BY LOCATION                            " ,
+            ""
+call EXECUTE_SQL
+
+do i = 1 to ausgabe.0
+   LCMD    = "     "
+   loc     = STRIP(ausgabe.i.LOCATION)
+   link    = STRIP(ausgabe.i.LINKNAME)
+   port    = STRIP(ausgabe.i.LOPORT)
+   IP      = STRIP(ausgabe.i.IPADDR)
+   Sec_Out = STRIP(ausgabe.i.SECURITY_OUT)
+   ADDRESS ISPEXEC 'TBADD   'LOCTAB
+ End
+
+return
+
+
+EXECUTE_SQL:
+DB2_SSID = RXDB2_SSID
+
+CALL Load_DSNREXX
+
+SQLSTMT = VALUE(SPACE(RXDB2_GETSTEM, 0) || 1)
+SQLSTMT = SPACE(SQLSTMT, 1)
+
+ADDRESS DSNREXX "EXECSQL DECLARE  C1 CURSOR FOR S1"
+IF SQLCODE <> 0 THEN SAY "DECLARE     SQLCODE="SQLCODE
+ADDRESS DSNREXX "EXECSQL PREPARE  S1 FROM :SQLSTMT"
+IF SQLCODE <> 0 THEN SAY "PREPARE     SQLCODE="SQLCODE
+ADDRESS DSNREXX "EXECSQL DESCRIBE S1 INTO :OUTSQLDA"
+IF SQLCODE <> 0 THEN SAY "DESCRIBE    SQLCODE="SQLCODE
+ADDRESS DSNREXX "EXECSQL OPEN C1"
+If SQLCODE <> 0 Then SAY "OPEN        SQLCODE="SQLCODE
+IVAL = VALUE(SPACE(RXDB2_PUTSTEM, 0) || 0) "= 0"
+INTERPRET  IVAL
+DO WHILE SQLCODE = 0
+   ADDRESS DSNREXX "EXECSQL FETCH C1 USING DESCRIPTOR :OUTSQLDA"
+   IF SQLCODE /= 0 THEN LEAVE
+   IVAL = "I = " VALUE(SPACE(RXDB2_PUTSTEM, 0) || 0) "+ 1"
+   INTERPRET  IVAL
+   IVAL = SPACE(RXDB2_PUTSTEM, 0) || 0  " = I"
+   INTERPRET  IVAL
+   DO CI = 1 TO OUTSQLDA.SQLD
+      /* AUSGABE.1.DBNAME = "DSNDB07"   */
+      IVAL = VALUE(SPACE(RXDB2_PUTSTEM, 0) || I) || "." ||  ,
+             SPACE(OUTSQLDA.CI.SQLNAME, 0)
+      INTERPRET IVAL"=OUTSQLDA.CI.SQLDATA"
+    END
+ END
+
+ADDRESS DSNREXX   "EXECSQL CLOSE C1 "
+Call UNLoad_DSNREXX
+
+RETURN
+
+Load_DSNREXX:
+ADDRESS TSO "SUBCOM DSNREXX"
+IF RC THEN   S_RC = RXSUBCOM('ADD','DSNREXX','DSNREXX')
+
+ADDRESS DSNREXX "CONNECT "DB2_SSID
+IF SQLCODE <> 0 THEN SAY "CONNECT     SQLCODE="SQLCODE "<"DB2_SSID">"
+
+Return
+
+UNLoad_DSNREXX:
+
+ADDRESS TSO "SUBCOM DSNREXX"
+If RC = 0 Then do
+   ADDRESS DSNREXX "DISCONNECT"
+   S_RC = RXSUBCOM('DELETE','DSNREXX','DSNREXX')
+ End
+
+
+Return
+
+CONNECT_LOCATION:
+   If length(arg(1)) < 1 then return 0
+   If Length(SYSUID) > 0 & Length(SYSPWD) > 0 Then do
+      SQLTEXT = "CONNECT TO "ARG(1) "USER :SYSUID USING :SYSPWD "
+    End
+   ELSE Do
+       SQLTEXT = "CONNECT TO "ARG(1)
+    End
+   ADDRESS DSNREXX "EXECSQL " SQLTEXT
+
+   IF SQLCODE <> 0 & TESTCONNECT <> "Y" then do
+      SAY "LUWAUSW Error on " SQLTEXT SQLCODE
+      call SQL_ERROR
+      RETURN 8
+      END
+    parse value sqlerrp with DB_ENV 4 DB_Vers 6 DB_Rel 8 DB_Mod
+    If DB_Env = "DSN" & DB_vers = 12 Then do
+       /* Ab Version 12 den Modificaten Level auslesen und Setzen */
+       Test_Mod_Level = 1  /* Dummy */
+     End
+RETURN 0
+
+DISCONNECT_LOCATION:
+ SQLTEXT =  "RELEASE " ARG(1)
+ ADDRESS DSNREXX "EXECSQL " SQLTEXT
+ SQLTEXT =  "COMMIT  "
+ ADDRESS DSNREXX "EXECSQL " SQLTEXT
+   SQLTEXT =  "CONNECT RESET"
+   ADDRESS DSNREXX "EXECSQL " SQLTEXT
+   if sqlcode < 0 then do
+      SAY "LUWAUSW "
+      Call SQL_ERROR
+    End
+   parse value sqlerrp with DB_ENV 4 DB_Vers 6 DB_Rel 8 DB_Mod
+   If DB_Env = "DSN" & DB_vers = 12 Then do
+      /* Ab Version 12 den Modificaten Level auslesen und Setzen */
+      Test_Mod_Level = 1  /* Dummy */
+    End
+RETURN 0
+
+
+SQL_ERROR:
+
+If ENV = "WIN" Then do
+   say
+   say '**** SQL returned the following : '
+   say '     STEP        = ' STEP
+   say '     SQLCODE     = ' sqlca.Sqlcode
+   say '     Message     = ' SqlMsg
+   say
+   Return
+ End
+
+SQLC = D2X(SQLCODE,8)
+SQLC = X2C(SQLC)
+
+
+SQL_ERRD = ""
+SQL_WARN = ""
+If DB_ENV = "DSN" Then do
+   Do I = 1 To 6
+      SQL_ERRD = SQL_ERRD || D2C(SQLERRD.I,4)
+   End
+   Do I = 0 To 10
+      SQL_WARN = SQL_WARN || LEFT(SQLWARN.I,1)
+   End
+ End
+
+MSG_LEN = 80
+SQLCA = 'SQLCA   '
+SQLCA = SQLCA || X2C(00000088)
+SQLCA = SQLCA || SQLC
+SQLCA = SQLCA || D2C(70,2)
+SQLCA = SQLCA || 'DSN     '
+SQLCA = SQLCA || LEFT(SQLERRMC,70)
+SQLCA = SQLCA || LEFT(SQLERRP,8)
+SQLCA = SQLCA || SQL_ERRD
+SQLCA = SQLCA || SQL_WARN
+SQLCA = SQLCA || LEFT(SQLSTATE,5)
+TIAR_MSG = D2C(MSG_LEN * 12,2) || COPIES(' ',MSG_LEN * 12)
+TEXT_LEN = D2C(MSG_LEN,4)
+ADDRESS ATTCHPGM 'DSNTIAR SQLCA TIAR_MSG TEXT_LEN'
+
+If RC < 5 Then,
+   Do
+   If RC = 4 Then Say "DSNTIAR RC=4 Message Area Truncated"
+   S_POS = 3              /* Bypass the length bytes in Message Area */
+   Do I = 1 to 12         /* Loop through all lines of message */
+      MSG_TEXT = Substr(tiar_msg,S_POS,MSG_LEN) /* Pick out text */
+      MSG_TEXT = Strip(MSG_TEXT,T," ") /* Remove trailing blanks */
+      If MSG_TEXT > " " Then Say MSG_TEXT /* Echo msg to terminal */
+      Else Iterate /* Some msg lines are blank, skip */
+      S_POS = S_POS + MSG_LEN /* Skip to next "line" of MSG data */
+   End I
+   say "SQLCODE="SQLCODE "SQLSTATE="SQLSTATE
+End
+Else Do
+   Say "Call to DSNTIAR - Failed. RC=" RC
+   Say 'SQLCODE ='SQLCODE; Say 'SQLERRM ='SQLERRMC
+   Say 'SQLERRP ='SQLERRP; Say 'SQLSTATE='SQLSTATE
+   XX = "SQLERRD ="
+   Do I = 1 to 6 ; XX = XX||SQLERRD.I||',';End;Say XX
+   XX = "SQLWARN ="
+   Do I = 0 to 10; XX = XX||SQLWARN.I||',';End;Say XX
+End
+
+
+Get_CFG_FILE:
+/*  CFG FILE                            */
+mem     = "#SSIDINF"
+CFGFILE = Strip(proc) || "(" || mem || ")"
+ADDRESS TSO "FREE FILE(CFGF) NOHOLD"
+ADDRESS TSO "ALLOC F(CFGF) DATASET('"CFGFILE"') SHR"
+ADDRESS TSO "EXECIO * DISKR CFGF (STEM CONFIG. FINIS"
+ADDRESS TSO "EXECIO 0 DISKR CFGF ( FINIS"
+ADDRESS TSO "FREE FILE(CFGF) NOHOLD"
+
+LLIB1 = ""
+LLIB2 = ""
+LLIB3 = ""
+ADDRESS ISPEXEC "LIBDEF ISPLLIB DATASET ID( )"
+Do I = 1 TO CONFIG.0
+   If Translate(Word(Config.i, 1))     = SSID THEN DO
+       IF POS('SDSNLOAD', Subword(CONFIG.i, 2) )  > 0 Then do
+          PARSE VAlue Subword(CONFIG.i,2) with a1 '"' LLIB1 '"' .
+          LLIB1 = space("'" || LLIB1 || "'", 0)
+        End
+    End
+ End
+
+ADDRESS ISPEXEC "LIBDEF ISPLLIB DATASET ID( " ,
+                 LLIB1 ,
+                 LLIB2 ,
+                 LLIB3 ,
+                ") UNCOND STACK"
+
+return 0
+
+List_SSID_on_LPAR:
+
+   numeric digits 20
+
+   psa         = 0     /* psa absolute address                       */
+   psa_cvt     = 16    /* psa->cvt ptr offset                        */
+   cvt_jesct   = 296   /* cvt->jesct ptr offset                      */
+   jesct_sscvt = 24    /* jesct->sscvt ptr offset                    */
+   sscvt_sscvt = 4     /* sscvt->next sscvt ptr offset               */
+   sscvt_ssid  = 8     /* sscvt subsystem id offset                  */
+   sscvt_ssvt  = 16    /* sscvt->ssvt                                */
+   sscvt_suse  = 20    /* subsystem user field (->ERLY)              */
+   sscvt_syn   = 24    /* has table synonym pointer                  */
+   sscvt_sus2  = 28    /* subsystem user field                       */
+   sscvt_eyec  = 0     /* sscvt eyecatcher offset                    */
+   erly_id   = 0       /* ERLY block identifier ( = x'A5')           */
+   erly_size = 2       /* ERLY block size (= x'A8')                  */
+   erly_eyec = 4       /* ERLY block eyecatcher                      */
+   erly_ssid = 8       /* DB2 subsystem id                           */
+   erly_mstr = 12      /* MSTR STC name                              */
+   erly_pclx = 20      /* PC LX value                                */
+   erly_ssvt = 34      /* ptr back to SSVT                           */
+   erly_ssgp = 38      /* ptr to DSN3SSGP (= 0 is subsystem is down) */
+   erly_scom = 56      /* ptr to SCOM (subsys communication block)   */
+   erly_modn = 84      /* DSN3EPX                                    */
+
+
+   cvt   = c2d(storage(d2x(psa + psa_cvt),4))
+   jesct = c2d(storage(d2x(cvt + cvt_jesct),4))
+   sscvt = c2d(storage(d2x(jesct + jesct_sscvt),4))
+
+   DROP SSIDListe.
+   SSIDListe.0 = 0
+
+   do while sscvt /= 0
+      subsystem = storage(d2x(sscvt + sscvt_ssid),4)
+      ssctssvt = c2d(storage(d2x(sscvt + sscvt_ssvt),4))
+      ssctsuse = c2d(storage(d2x(sscvt + sscvt_suse),4))
+      ssctsyn  = c2d(storage(d2x(sscvt + sscvt_syn),4))
+      ssctsus2 = c2d(storage(d2x(sscvt + sscvt_sus2),4))
+      if ssctsuse /= 0 then do   /* pointing to ERLY? */
+         erly = ssctsuse
+         erlyid = c2x(storage(d2x(erly + erly_id),2))
+         if erlyid = "00A5" then do  /* id = ERLY */
+            erlysize = c2d(storage(d2x(erly + erly_size),2))
+            erlyeyec = storage(d2x(erly + erly_eyec),4)
+            if erlyeyec = "ERLY" then do  /* eyecatcher = ERLY */
+               modn = strip(storage(d2x(erly + erly_modn),8))
+               if modn = "DSN3EPX" then do
+                  scom = c2d(storage(d2x(erly + erly_scom),4))
+                  if scom = 0 then DO
+                     SSIDListe.0 = SSIDListe.0 + 1
+                     SSIDix      = SSIDListe.0
+                     SSIDListe.SSIDix = subsystem
+                   End
+                  else Do
+                     SSIDListe.0 = SSIDListe.0 + 1
+                     SSIDix      = SSIDListe.0
+                     SSIDListe.SSIDix = subsystem" ACTIVE"
+                   End
+               end
+            end
+         end
+      end
+      sscvt = c2d(storage(d2x(sscvt + sscvt_sscvt),4))
+   end
+
+return 0
+
+Get_Config_FILE:
+PARSE SOURCE SRC.1  , /* ENVIRONMENT  (TSO)            */
+             SRC.2  , /* AUFRUF ALS (COMMAND)          */
+             SRC.3  , /* Program NAME (LUW97000)       */
+             SRC.4  , /* SYS00186 (TEMP FILE)          */
+             SRC.5  , /* AUFRUF AUS LIB (X.X.CLISTUDB) */
+             SRC.6  , /* ?                             */
+             SRC.7  , /* TSO                           */
+             SRC.8  , /* ISPF                          */
+             SRC.9  , /* ?                             */
+
+
+
+/*  CFG FILE                            */
+
+K1 = SUBstr(DB_Version, 1, 1)
+K2 = SUBstr(DB_Version, 4, 2)
+
+mem     = "#STEU" || K1 || K2
+CFGFILE = Strip(proc) || "(" || mem || ")"
+
+ADDRESS TSO "FREE FILE(CFGF) NOHOLD"
+ADDRESS TSO "ALLOC F(CFGF) DATASET('"CFGFILE"') SHR"
+ADDRESS TSO "EXECIO * DISKR CFGF (STEM CONFIG. FINIS"
+ADDRESS TSO "EXECIO 0 DISKR CFGF (FINIS"
+ADDRESS TSO "FREE FILE(CFGF) NOHOLD"
+
+
+STEUTAB = "STEUTAB"
+ADDRESS ISPEXEC  'TBCLOSE 'STEUTAB
+ADDRESS ISPEXEC  'TBERASE 'STEUTAB
+ADDRESS ISPEXEC  'TBOPEN  'STEUTAB
+IF RC <> 0 THEN Do
+   ADDRESS ISPEXEC 'TBCREATE 'STEUTAB   ,
+                   'NAMES(VON, NACH, STEUER)'
+   If rc <> 0 Then say "TBCREATE RC="RC
+ End
+
+
+STEUER = ""
+Do I = 1 TO CONFIG.0
+   y = i + 1
+
+   If Strip(Config.i)        = ''  Then Iterate
+   If Substr(Config.I, 1, 1) = '*' Then Iterate
+   VON   = WORD(CONFIG.I, 1)
+   NACH  = WORD(CONFIG.I, 2)
+   If y > CONFIG.0 Then do
+      VNEXT = "Fertig"
+      NNEXT = "Fertig"
+    End
+   Else Do
+      VNEXT = WORD(CONFIG.Y, 1)
+      NNEXT = WORD(CONFIG.Y, 2)
+    End
+   STEUER = STEUER Space(SUBWORD(CONFIG.I, 3) || ";" , 1)
+   If von || nach  <> VNEXT || NNEXT Then do
+      ADDRESS ISPEXEC 'TBADD 'STEUTAB
+      If rc <> 0 Then Do
+         say from to  STEUER
+         say "TBADD    RC="RC
+         Leave
+       End
+      STEUER = ""
+    End
+ End
+
+return 0
+
+
+error: failure: syntax: novalue: halt:
+say SRC.3":"
+cstr = CONDITION('Condition')         /* Name of trapped condition*/
+istr = CONDITION('Instruction')       /* CALL or SIGNAL           */
+dstr = CONDITION('Description')       /* Description or null      */
+sstr = CONDITION('Status')            /* ON, OFF, or DELAY        */
+Say  'Condition  :'cstr
+say  'Instruction:'istr
+say  'Description:'dstr
+say  'Status     :'sstr
+
+If condition = 'HALT' Then do
+   Say SRC.3 "manually abort " condition condition('C')
+ End
+ Else Do
+   Say SRC.3 condition
+   condition = condition('C')
+   source = strip(sourceline(sigl),"B")
+   say copies('*',79)
+   say left('* 'condition' CONDITION ON LINE 'sigl' OF REXX 'rexx,78)'*'
+   say left('* 'source,78)'*'
+   say left('* RETURN CODE 'rc,78)'*'
+   say left('* 'errortext(rc),78)'*'
+   say copies('*',79)
+ End
+exit 100

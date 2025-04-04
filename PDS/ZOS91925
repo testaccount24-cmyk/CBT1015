@@ -1,0 +1,1917 @@
+/* REXX */
+/*******************************************************************/
+/*                                                                 */
+/* PROGRAMMNAME     : ZOS91925                                     */
+/* AUSRUF           : Procedure  x=ZOS91925(ssid,loc,ausw,obj)     */
+/* AUTHER           : ULRICH BRAEUER                               */
+/* FUNKTION         : Alter Object                                 */
+/*                                                                 */
+/*                                                                 */
+/*******************************************************************/
+
+SIGNAL ON FAILURE
+SIGNAL ON ERROR
+SIGNAL OFF FAILURE
+SIGNAL OFF ERROR
+
+PARSE SOURCE SRC.1  , /* ENVIRONMENT  (TSO)            */
+             SRC.2  , /* AUFRUF ALS (COMMAND)          */
+             SRC.3  , /* Program NAME (LUW97000)       */
+             SRC.4  , /* SYS00186 (TEMP FILE)          */
+             SRC.5  , /* AUFRUF AUS LIB (X.X.CLISTUDB) */
+             SRC.6  , /* ?                             */
+             SRC.7  , /* TSO                           */
+             SRC.8  , /* ISPF                          */
+             SRC.9  , /* ?                             */
+
+
+ENV        = "TSO"
+X          = MSG('OFF')
+USER       = USERID()
+SYSCATS    = "SYSCAT"
+SYSIBMS    = "SYSIBM"
+SYSIBMA    = "SYSIBMADM"
+SYSPROCA   = "SYSPROC"
+RECLEN     = 4096
+TRACKS     = 60
+DSNRECON   = "N"
+SYSUID  = ""
+SYSPWD  = ""
+ADDRESS ISPEXEC 'VGET (DSNRECON) PROFILE'
+ADDRESS ISPEXEC 'VGET (TRACKS) PROFILE'
+ADDRESS ISPEXEC 'VGET (RECLEN) PROFILE'
+ADDRESS ISPEXEC 'VGET (SYSIBMS) PROFILE'
+ADDRESS ISPEXEC 'VGET (SYSCATS) PROFILE'
+ADDRESS ISPEXEC 'VGET (SYSIBMA) PROFILE'
+ADDRESS ISPEXEC 'VGET (SYSPROCA) PROFILE'
+ADDRESS ISPEXEC 'VGET (SYSUID)   PROFILE'
+ADDRESS ISPEXEC 'VGET (SYSPWD)   PROFILE'
+
+ADDRESS ISPEXEC 'VGET (UDBTRACE) PROFILE'
+IF UDBTRACE = 'ON' THEN TRACE I
+ELSE                    TRACE
+
+red   = '01'x                              /* Assign colors to       */
+blue  = '02'x                              /*   Attribute bytes      */
+green = '03'x                              /*   found in the data    */
+white = '04'x
+in1   = '05'x
+in2   = '06'x
+in3   = '07'x
+endin = '3a'x
+keyw  = '3b'x
+maxlines = 0                               /* set max number of lines*/
+dyndata  = ''                              /* initialize data        */
+cmddata  = ''                              /* initialize data        */
+curline = 1                                /* set current line #     */
+
+stmt              = ""
+ddltext           = ""
+
+ssid        = arg(1)
+location    = arg(2)
+auswkz      = arg(3)
+lnr         = arg(4)
+tabnr       = arg(5)
+Do_All      = arg(6)
+eingabe     = arg(7)
+eingabe2    = arg(8)
+statement   = arg(9)
+object1     = arg(10)
+object2     = arg(11)
+object3     = arg(12)
+object4     = arg(13)
+object5     = arg(14)
+EDIT        = arg(15)
+Object_list = arg(16)
+DB2Vers     = arg(17)
+proclib     = arg(18)
+curnr       = arg(19)   /* Cursor Nummer der Zeile in ISPF-TAB */
+obj         = ""
+tablespace  = ""
+DB2_SSID    = SSID
+If DSNRECON = "Y" Then Do
+   Call Load_DSNREXX
+ End
+
+listtb = ListObject
+crlf           = "0a0d"x
+
+drop al.
+al.0  = 0
+drop sl.
+sl.0 = 0
+
+CZeile  = ""
+If Datatype(Curnr) = "NUM" Then do
+   tabnr = tabnr -1  /* Aktuelle Table in ZOS91210 verwendet */
+   LUWTABLE       = "LUWTB"tabnr
+   COLTAB         = "COLTB"tabnr
+   address ispexec 'TBOPEN  'COLTAB
+   address ispexec 'TBTOP   'COLTAB
+   address ispexec 'TBSKIP  'COLTAB' NUMBER('curnr')'
+   address ispexec 'TBGET   'COLTAB
+   address ispexec 'TBCLOSE 'COLTAB
+ End
+
+
+RXDB2_SSID        = SSID
+RXDB2_GETSTEM     = 'EINGABE.'
+RXDB2_PUTSTEM     = 'AUSGABE.'
+ANZAHL_ROWS       = 0
+
+ALTAB          = "ALTER" || tabnr
+address ispexec  'TBERASE 'ALTAB
+If RC > 12  Then do
+   say "Error on TBERASE RC="RC "TABLE="ALTAB
+ End
+address ispexec  'TBOPEN 'ALTAB
+if rc /= 0 then Do
+   ADDRESS ISPEXEC "TBCREATE "ALTAB   ,
+                   " KEYS(NAME)             ",
+                   " NAMES(OVal, NVal) ",
+                   " REPLACE"
+ End
+
+
+parse value DB2Vers with DBENV 4 DBVers 6 DBRel 8 DBMod
+parse value Object1 with DB2_CREATOR1 '.' DB2_NAME1
+parse value Object2 with DB2_CREATOR2 '.' DB2_NAME2
+parse value Object3 with DB2_CREATOR3 '.' DB2_NAME3
+parse value Object4 with DB2_CREATOR4 '.' DB2_NAME4
+parse value Object5 with DB2_CREATOR5 '.' DB2_NAME5
+
+eingabe3 = subword(eingabe2, 2)
+eingabe2 = Word(eingabe2, 1)
+
+Call Get_CFG_FILE
+
+RLIB    = 'N'
+select
+  when auswkz = 'SG' & eingabe   = "ALTER" Then do
+       CALL Alter_Stogroup
+       EDIT = "NO"
+   End
+  when auswkz = 'DB' & eingabe   = "ALTER" Then do
+       CALL Alter_Database
+       EDIT = "NO"
+   End
+  when auswkz = 'TS' & eingabe   = "ALTER" Then do
+       CALL Alter_Tablespace
+       EDIT = "NO"
+   End
+  when auswkz = 'SE' & eingabe   = "ALTER" Then do
+       CALL Alter_Sequence
+       EDIT = "NO"
+   End
+  when auswkz = 'TG' & eingabe   = "ALTER" Then do
+       CALL Alter_Trigger
+       EDIT = "NO"
+   End
+  when auswkz = 'VW' & eingabe   = "ALTER" Then do
+       CALL Alter_View
+       EDIT = "NO"
+   End
+  when auswkz = 'TB' & eingabe   = "ALTER" Then do
+       CALL Alter_Table
+       EDIT = "NO"
+   End
+  when auswkz = 'IX' & eingabe   = "ALTER" Then do
+       CALL Alter_Index
+       EDIT = "NO"
+   End
+  when auswkz = 'PERM' & eingabe   = "ALTER" Then do
+       CALL Alter_Ppermission
+       EDIT = "NO"
+   End
+  Otherwise do
+       anzcols = 0
+   End
+ End
+
+If al.0 > 0 Then Call Build_Ausgabe
+ADDRESS ISPEXEC "FTCLOSE NAME(" || MEM || ") LIBRARY(ISPFILE)"
+If al.0 > 0 Then do
+   ADDRESS ISPEXEC "EDIT DATASET('"CLMEM"') PANEL(ISREFR01)"
+ End
+
+if anzcols = 0 THEN RETURN 12
+if EDIT = "YES" THEN Call Edit_Stmt  /* Anzeige Erwuenscht */
+
+If DSNRECON = "Y" Then Do
+   Call UNLoad_DSNREXX
+ End
+
+Return Stmt
+
+Build_Ausgabe:
+
+MEM     = "ALTEROBJ"
+SKEL    = "SKALTS9"
+JOB     = "Y"
+STMT    = "N"
+STOSTA  = "N"
+OK    =  LISTDSI(ISPFILE "FILE")
+CLMEM = Strip(sysdsname) || "(" || MEM || ")"
+
+ADDRESS ISPEXEC 'FTOPEN'
+If rc > 4 Then Do
+  Say 'FTOPEN   RC='RC
+  Say 'ZERRSM = 'ZERRSM
+  Say 'ZERRLM = 'ZERRLM
+ End
+
+JOB  = "Y"
+STMT = "N"
+ADDRESS ISPEXEC 'FTINCL 'SKEL
+If rc > 4 Then Do
+  Say 'FTINCL   'SKEL 'RC='RC
+  Say 'ZERRSM = 'ZERRSM
+  Say 'ZERRLM = 'ZERRLM
+ End
+
+Do i = 1 to al.0
+   JOB  = "N"
+   STMT = "Y"
+   SQLSTMT = al.i
+   ADDRESS ISPEXEC 'FTINCL 'SKEL
+   If rc > 4 Then Do
+     Say 'FTINCL   'SKEL 'RC='RC
+     Say 'ZERRSM = 'ZERRSM
+     Say 'ZERRLM = 'ZERRLM
+    End
+ End
+
+Return
+
+Alter_Tablespace:
+DB      = DB2_CREATOR1
+TS      = DB2_NAME1
+
+MEM     = "ALTERTS1"
+SKEL    = "SKALTS9"
+
+CNR = 1
+SNR = 1
+EINGABE.0 = 1
+EINGABE.1 = "SELECT TS.DBNAME                              ",
+            "   ,   TS.NAME                                ",
+            "   ,   TS.BPOOL                               ",
+            "   ,   TS.SBCS_CCSID                          ",
+            "   ,   CASE WHEN TS.ERASERULE = 'Y' THEN 'YES'",
+            "            ELSE 'NO'                         ",
+            "        END AS       ERASERULE                ",
+            "   ,   CASE WHEN TS.CLOSERULE = 'Y' Then 'YES' ",
+            "            ELSE 'NO'                         ",
+            "        END AS    CLOSERULE                   ",
+            "   ,   CASE WHEN TS.LOG       = 'Y' Then 'YES' ",
+            "            ELSE 'NO'                         ",
+            "        END AS    LOG                         ",
+            "   ,   CASE WHEN TS.LOCKRULE  = 'R' Then 'ROW' ",
+            "            WHEN TS.LOCKRULE  = 'A' Then 'ANY' ",
+            "            WHEN TS.LOCKRULE  = 'L' Then 'LARGE'    ",
+            "            WHEN TS.LOCKRULE  = 'P' Then 'PAGE'     ",
+            "            WHEN TS.LOCKRULE  = 'S' Then 'TABLESPACE'",
+            "            ELSE 'TABLE'                      ",
+            "        END AS    LOCKSIZE                    ",
+            "   ,   TP.PARTITION                           ",
+            "   ,   CASE WHEN TP.COMPRESS = 'Y' Then 'YES' ",
+            "            ELSE 'NO'                         ",
+            "        END AS COMPRESS                       ",
+            "   ,   CASE WHEN TP.TRACKMOD = 'Y' Then 'YES' ",
+            "            ELSE 'NO'                         ",
+            "        END AS TRACKMOD                       ",
+            "   ,   CASE WHEN TP.PQTY < 0 THEN TP.PQTY     ",
+            "            ELSE TP.PQTY * 4                  ",
+            "        END AS PQTY                           ",
+            "   ,   CASE WHEN SQTY < 0 THEN TP.SQTY        ",
+            "            ELSE TP.SQTY * 4                  ",
+            "        END AS SQTY                           ",
+            "   ,    FREEPAGE                              ",
+            "   ,    PCTFREE                               ",
+            "   ,    GBPCACHE                              ",
+            "   ,    TP.STORNAME                           ",
+            "   ,    TS.TYPE                               ",
+            "   ,    TS.MAXPARTITIONS                      ",
+            "   ,    TS.DSSIZE/1024/1024 AS DSSIZE         ",
+            "   ,    TS.SEGSIZE                            ",
+            "FROM "SYSIBMS".SYSTABLESPACE     TS           ",
+            "INNER JOIN "SYSIBMS".SYSTABLEPART TP          ",
+            "ON  TS.DBNAME = TP.DBNAME                     ",
+            "AND TS.NAME   = TP.TSNAME                     ",
+            "where TS.DBNAME = '"DB2_CREATOR1"'            ",
+            "And   TS.NAME   = '"DB2_NAME1"'               ",
+            "ORDER BY TS.DBNAME, TS.NAME, TP.PARTITION     ",
+            ""
+
+Call EXECUTE_SQL_DYNAMIC
+If SQLCODE < 0 Then return
+If AUSGABE.1.TYPE =  "G" ,         /* partition by growth */
+ | AUSGABE.1.TYPE =  "R" Then Do   /* RANGE PART          */
+   AUSGABE.0              =  1
+   AUSGABE.1.PARTITIONS   =  0
+ End
+
+TSNAME = AUSGABE.1.NAME
+DBNAME = AUSGABE.1.DBNAME
+
+NVAL = ''
+address ISPEXEC 'TBCLOSE 'ALTAB
+address ISPEXEC 'TBOPEN  'ALTAB
+
+
+NAME ='BUFFERPOOL'
+OVal = Ausgabe.1.BPOOL
+NVal = Ausgabe.1.BPOOL
+ADDRESS ISPEXEC 'TBADD 'ALTAB
+
+
+NAME ='CCSID     '
+OVal = Ausgabe.1.SBCS_CCSID
+NVal = Ausgabe.1.SBCS_CCSID
+ADDRESS ISPEXEC 'TBADD 'ALTAB
+
+NAME ='CLOSE     '
+OVal = Ausgabe.1.CLOSERULE
+NVal = Ausgabe.1.CLOSERULE
+ADDRESS ISPEXEC 'TBADD 'ALTAB
+
+NAME ='LOGGED    '
+OVal = Ausgabe.1.LOG
+NVal = Ausgabe.1.LOG
+ADDRESS ISPEXEC 'TBADD 'ALTAB
+
+NAME ='LOCKSIZE  '
+OVal = Ausgabe.1.LOCKSIZE
+NVal = Ausgabe.1.LOCKSIZE
+ADDRESS ISPEXEC 'TBADD 'ALTAB
+
+NAME ='MAXPARTITIONS '
+OVal = Ausgabe.1.MAXPARTITIONS
+NVal = Ausgabe.1.MAXPARTITIONS
+ADDRESS ISPEXEC 'TBADD 'ALTAB
+
+NAME ='DSSIZE    '
+OVal = Ausgabe.1.DSSIZE || "G"
+NVal = Ausgabe.1.DSSIZE || "G"
+ADDRESS ISPEXEC 'TBADD 'ALTAB
+
+NAME ='SEGSIZE       '
+OVal = Ausgabe.1.SEGSIZE
+NVal = Ausgabe.1.SEGSIZE
+ADDRESS ISPEXEC 'TBADD 'ALTAB
+
+Do TPI  = 1 to Ausgabe.0
+   NAME ='P ' || Ausgabe.TPI.PARTITION || '  PRIQTY'
+   OVal = Ausgabe.TPI.PQTY
+   NVal = Ausgabe.TPI.PQTY
+   ADDRESS ISPEXEC 'TBADD 'ALTAB
+
+   NAME ='P ' || Ausgabe.TPI.PARTITION || '  SECQTY'
+   OVal = Ausgabe.TPI.SQTY
+   NVal = Ausgabe.TPI.SQTY
+   ADDRESS ISPEXEC 'TBADD 'ALTAB
+
+   NAME ='P ' || Ausgabe.TPI.PARTITION || '  COMPRESS'
+   OVal = Ausgabe.TPI.COMPRESS
+   NVal = Ausgabe.TPI.COMPRESS
+   ADDRESS ISPEXEC 'TBADD 'ALTAB
+
+   NAME ='P ' || Ausgabe.TPI.PARTITION || '  TRACKMOD'
+   OVal = Ausgabe.TPI.TRACKMOD
+   NVal = Ausgabe.TPI.TRACKMOD
+   ADDRESS ISPEXEC 'TBADD 'ALTAB
+
+   NAME ='P ' || Ausgabe.TPI.PARTITION || '  FREEPAGE'
+   OVal = Ausgabe.TPI.FREEPAGE
+   NVal = Ausgabe.TPI.FREEPAGE
+   ADDRESS ISPEXEC 'TBADD 'ALTAB
+
+   NAME ='P ' || Ausgabe.TPI.PARTITION || '  PCTFREE'
+   OVal = Ausgabe.TPI.PCTFREE
+   NVal = Ausgabe.TPI.PCTFREE
+   ADDRESS ISPEXEC 'TBADD 'ALTAB
+
+   NAME ='P ' || Ausgabe.TPI.PARTITION || '  GBPCACHE'
+   OVal = Ausgabe.TPI.GBPCACHE
+   NVal = Ausgabe.TPI.GBPCACHE
+   ADDRESS ISPEXEC 'TBADD 'ALTAB
+
+   NAME ='P ' || Ausgabe.TPI.PARTITION || '  STOGROUP'
+   OVal = Ausgabe.TPI.STORNAME
+   NVal = Ausgabe.TPI.STORNAME
+   ADDRESS ISPEXEC 'TBADD 'ALTAB
+ End
+
+
+address ispexec  'TBCLOSE 'ALTAB
+address ispexec  'TBOPEN 'ALTAB
+CURSOR = 'CURSOR(ZCMD)'
+CSRROW  = 'CSRROW(1)'
+RETCODE = RC
+MESSAGE = 'MSG( )'
+ZTDSELS = 0
+ZTDTOP  = 0
+LNR     = 1
+address ISPEXEC 'TBCLOSE 'ALTAB
+DO FOREVER
+   address ISPEXEC 'TBOPEN 'ALTAB
+   address ISPEXEC 'TBTOP  'ALTAB
+   address ISPEXEC 'TBSKIP 'ALTAB' NUMBER('ZTDTOP')'
+   address ispexec 'TBDISPL 'ALTAB' PANEL(PALTERTS)',
+                   MESSAGE CURSOR 'CSRROW('LNR')' ,
+                   'AUTOSEL(NO) POSITION(CRP)'
+   If rc > 4 then do
+      Say "*** Error on Display Alter RC="rc
+      Say " ZERRSM =" ZERRSM
+      Say " ZERRLM =" ZERRLM
+      retuen
+    End
+   COMMAND = ZCMD
+
+      /* PF Tasten Pruefen  */
+   Select
+      WHEN SUBSTR(COMMAND,1,3) = "CAN"  THEN DO
+           address ispexec 'TBCLOSE 'ALTAB
+           address ispexec 'TBERASE 'ALTAB
+           Return
+       end
+      WHEN WORD(ZCMD,1) = "TRACE" then do
+           IF WORD(ZCMD, 2) = "ON"     Then trace('I')
+           IF WORD(ZCMD, 2) = "OFF" Then trace('O')
+           UDBTRACE = word(ZCMD, 2)
+           ADDRESS ISPEXEC 'VPUT (UDBTRACE) PROFILE'
+           ZCMD = ''
+       end
+      When PF                  = 'PF03' THEN DO
+           address ispexec 'TBCLOSE 'ALTAB
+           address ispexec 'TBERASE 'ALTAB
+           Return
+       end
+      When PF                  = 'PF04' THEN DO
+           address ispexec 'TBCLOSE 'ALTAB
+           address ispexec 'TBERASE 'ALTAB
+           Return
+       end
+      Otherwise NOP
+    End
+
+   if ZTDSELS > 0 Then    LAUFNR = crp
+   do cnt = 1 to  ZTDSELS            /* Verarbeiten ZeilenCommand */
+      ADDRESS ISPEXEC 'TBMOD   'ALTAB
+      address ispexec 'TBDISPL 'ALTAB' AUTOSEL(NO) POSITION(CRP)'
+      If cnt = ZTDSELS Then Iterate
+    end
+   Address ispexec 'TBCLOSE 'ALTAB
+   Leave
+ End
+
+
+OK    =  LISTDSI(ISPFILE "FILE")
+CLMEM = Strip(sysdsname) || "(" || MEM || ")"
+ADDRESS ISPEXEC 'FTOPEN'
+If rc > 4 Then Do
+  Say 'FTOPEN   '
+  Say 'ZERRSM = 'ZERRSM
+  Say 'ZERRLM = 'ZERRLM
+ End
+
+
+address ispexec 'TBCLOSE 'ALTAB
+address ispexec 'TBOPEN  'ALTAB
+address ispexec 'TBTOP   'ALTAB
+
+STOPTS = 'N'
+anz = 0
+Do while RC = 0
+   If NVal = '' Then do
+      address ispexec 'TBSKIP   'ALTAB
+      If RC <> 0 Then Leave
+      Iterate
+    End
+   If NVal <> Oval Then do
+      If Substr(Name, 1, 2) = "P " Then Do
+         Part = "PART " Word(Name, 2)
+         If Word(Name, 2) = 0 Then Part = ""
+         Name = Word(Name, 3)
+       END
+      Select
+        When Name = "STOGROUP" Then DO
+             STOPTS = 'Y'
+             LEAVE
+         End
+        When Name = "BUFFERPOOL" Then DO
+             STOPTS = 'Y'
+             LEAVE
+         End
+        When Name = "SEGSIZE" Then DO
+             STOPTS = 'Y'
+             LEAVE
+         End
+        Otherwise NOP
+       End
+     End
+   address ispexec 'TBSKIP   'ALTAB
+ End
+
+
+SKEL = "SKALTS9"
+JOB  = "Y"
+STMT = "N"
+STOSTA = "N"
+ADDRESS ISPEXEC 'FTINCL 'SKEL
+If rc > 4 Then Do
+  Say 'FTINCL   'SKEL
+  Say 'ZERRSM = 'ZERRSM
+  Say 'ZERRLM = 'ZERRLM
+ End
+
+address ispexec 'TBCLOSE 'ALTAB
+address ispexec 'TBOPEN  'ALTAB
+address ispexec 'TBTOP   'ALTAB
+
+Do while RC = 0
+   If NVal = '' Then do
+      address ispexec 'TBSKIP   'ALTAB
+      Iterate
+    End
+   If NVal <> Oval Then do
+      JOB  = "N"
+      STMT = "Y"
+      PART = ""
+      Select
+        When Name = "LOGGED" Then Do
+             If NVal = "NO"  Then Do
+                NAME = "NOT LOGGED"
+                NVal = ""
+              End
+             Else Do
+                NAME = "LOGGED"
+                NVal = ""
+              End
+         End
+        Otherwise NOP
+       End
+      If Substr(Name, 1, 2) = "P " Then Do
+         Part = "PART " Word(Name, 2)
+         If Word(Name, 2) = 0 Then Part = ""
+         Name = Word(Name, 3)
+         Select
+           When Name = "STOGROUP" Then Name = "USING STOGROUP  "
+           Otherwise NOP
+          End
+       End
+      SQLSTMT = "ALTER TABLESPACE  " Strip(DB2_CREATOR1) || '.' || ,
+                                     Strip(DB2_NAME1) PART
+      ADDRESS ISPEXEC 'FTINCL 'SKEL
+      If rc > 4 Then Do
+         Say 'FTINCL   'SKEL
+         Say 'ZERRSM = 'ZERRSM
+         Say 'ZERRLM = 'ZERRLM
+       End
+      SQLSTMT = "      " NAME NVal ";"
+      ADDRESS ISPEXEC 'FTINCL 'SKEL
+      If rc > 4 Then Do
+         Say 'FTINCL   'SKEL
+         Say 'ZERRSM = 'ZERRSM
+         Say 'ZERRLM = 'ZERRLM
+       End
+    End
+   address ispexec 'TBSKIP   'ALTAB
+ End
+
+ADDRESS ISPEXEC "FTCLOSE NAME(" || MEM || ") LIBRARY(ISPFILE)"
+ADDRESS ISPEXEC "EDIT DATASET('"CLMEM"') PANEL(ISREFR01)"
+
+Return
+
+Alter_Stogroup:
+
+
+parse value CZeile with NAME                  value(crlf) ,
+                        CREATOR               value(crlf) ,
+                        VCATNAME              value(crlf) ,
+                        DATACLAS              value(crlf) ,
+                        MGMTCLAS              value(crlf) ,
+                        STORCLAS              value(crlf) ,
+                        .
+
+
+NAME              = Left(NAME      ,    8, ' ')
+VCATNAME          = Left(VCATNAME  ,    8, ' ')
+DATACLAS          = Left(DATACLAS  ,   24, ' ')
+MGMTCLAS          = Left(MGMTCLAS  ,   24, ' ')
+STORCLAS          = Left(STORCLAS  ,   24, ' ')
+
+area.0  = 9
+area.1  = white"Alter Storagegroup "NAME
+area.2  = white"                                             "
+area.3  = white"                                             "
+area.4  = white"                                             "
+area.5  = white"                                             "
+area.6  = white"       "keyw"DATACLAS   "in1 || DATACLAS  || endin
+area.7  = white"       "keyw"MGMTCLAS   "in1 || MGMTCLAS  || endin
+area.8  = white"       "keyw"STORCLAS   "in1 || STORCLAS  || endin
+area.9  = white" "
+
+Call Anzeige_Dyn_Panel
+
+If Strip(DATACLAS_Val) <> Strip(DATACLAS) Then Do
+   OK = Nexttab( "Alter STOGROUP " Name  , al. )
+   OK = Nexttab( "      DATACLAS      "DATACLAS_Val , al. )
+   OK = Nexttab( "; "                               , al. )
+ End
+
+If Strip(MGMTCLAS_val)  <> Strip(MGMTCLAS)  Then Do
+   OK = Nexttab( "Alter STOGROUP " Name  , al. )
+   OK = Nexttab( "      MGMTCLAS      "MGMTCLAS_Val, al. )
+   OK = Nexttab( "; "                               , al. )
+ End
+
+If Strip(STORCLAS_Val)  <> Strip(STORCLAS) Then Do
+   OK = Nexttab( "Alter STOGROUP " Name  , al. )
+   OK = Nexttab( "      STORCLAS      "STORCLAS_Val, al.)
+   OK = Nexttab( "; "                               , al. )
+ End
+
+
+Return
+
+Alter_Database:
+
+parse value CZeile with NAME                  value(crlf) ,
+                        CREATOR               value(crlf) ,
+                        STGROUP               value(crlf) ,
+                        BPOOL                 value(crlf) ,
+                        INDEXBP               value(crlf) ,
+                        DBID                  value(crlf) ,
+                        ROSHARE               value(crlf) ,
+                        TYPE                  value(crlf) ,
+                        .
+
+
+DBName  = Left(NAME, 8, ' ')
+STOGRP  = Left(STGROUP, 8, ' ')
+BP      = Left(BPOOL,   8, ' ')
+IBP     = Left(INDEXBP, 8, ' ')
+
+
+
+area.0  = 9
+area.1  = white"Alter Database "DBNAME
+area.2  = white"                                             "
+area.3  = white"                                             "
+area.4  = white"                                             "
+area.5  = white"                                             "
+area.6  = white"       "keyw"STOGROUP   "in1 || STOGRP || endin
+area.7  = white"       "keyw"BPool      "in1 || BP     || endin
+area.8  = white"       "keyw"BPool_IX   "in1 || IBP    || endin
+area.9  = white" "
+
+Call Anzeige_Dyn_Panel
+
+If STOGROUP_Val <> STOGRP Then Do
+   OK = Nexttab( "Alter Database " DBName  , al. )
+   OK = Nexttab( "      STOGROUP      "STOGROUP_Val, al. )
+ End
+
+If Strip(BPool_Val)     <> Strip(BP)     Then Do
+   OK = Nexttab( "Alter Database " DBName  , al. )
+   OK = Nexttab( "      BUFFERPOOL    "BPool_Val, al. )
+ End
+
+If Strip(BPool_IX_Val)  <> Strip(IBP)    Then Do
+   OK = Nexttab( "Alter Database " DBName  , al. )
+   OK = Nexttab( "      INDEXBP       "BPool_IX_Val, al.)
+ End
+
+
+Return
+
+Alter_Ppermission:
+/*Noch ungetestet */
+
+
+parse value CZeile with SCHEMA                value(crlf) ,
+                        NAME                  value(crlf) ,
+                        TBSCHEMA              value(crlf) ,
+                        TBNAME                value(crlf) ,
+                        TBCORRELATION         value(crlf) ,
+                        COLNAME               value(crlf) ,
+                        COLNO                 value(crlf) ,
+                        CONTROL_ID            value(crlf) ,
+                        CONTROL_TYPE          value(crlf) ,
+                        ENFORCED              value(crlf) ,
+                        IMPLICIT              value(crlf) ,
+                        ENABLE                value(crlf) ,
+                        .
+
+Select
+ When CONTROL_ID  = 'P' Then Do
+      Alter_Type = "PERMISSION "
+  End
+ When CONTROL_ID  = 'M' Then Do
+      Alter_Type = "MASK "
+  End
+ otherwise  NOP
+ End
+
+ENABLE  = Left(ENABLE, 10, ' ')
+
+
+area.0  = 9
+area.1  = white"Alter "Alter_Type"  " Space(SCHEMA '.' NAME, 0)
+area.2  = white"                                             "
+area.3  = white"                                             "
+area.4  = white"                                             "
+area.5  = white"                                             "
+area.6  = white"       "keyw"ENABLE "in1 || ENABLE || endin" " ,
+               " ENABLE    "
+area.7  = white"                                             " ,
+               " DISABLE   "
+area.8  = white"                                             " ,
+               " REGENERATE"
+area.9  = white" "
+
+Call Anzeige_Dyn_Panel
+
+If ENABLE_Val <> ENABLE Then Do
+   OK = Nexttab( "Alter "Alter_Type Space(Schema '.' Name, 0) , al. )
+   Select
+     When Translate(Substr(ENABLE_Val, 1)) = "E" then do
+          OK = Nexttab( "      ENABLE      ;", al. )
+      end
+     When Translate(Substr(ENABLE_Val, 1)) = "D" then do
+          OK = Nexttab( "      DISABLE     ;", al. )
+      end
+     When Translate(Substr(ENABLE_Val, 1)) = "R" then do
+          OK = Nexttab( "      REGENERATE  ;", al. )
+      end
+     Otherwise Do
+          OK = Nexttab( "      ENABLE      ;", al. )
+      end
+    End
+ End
+
+
+
+
+Return
+
+Alter_Sequence:
+
+parse value CZeile with SCHEMA                value(crlf) ,
+                        NAME                  value(crlf) ,
+                        SEQTYPE               value(crlf) ,
+                        SEQUENCEID            value(crlf) ,
+                        INCREMENT             value(crlf) ,
+                        DCREATOR              value(crlf) ,
+                        DNAME                 value(crlf) ,
+                        DCOLNAME              value(crlf) ,
+                        START                 value(crlf) ,
+                        MAXVALUE              value(crlf) ,
+                        MINVALUE              value(crlf) ,
+                        MAXASSIGNEDVAL        value(crlf) ,
+                        CYCLE                 value(crlf) ,
+                        CACHE                 value(crlf) ,
+                        ORDER                 value(crlf) ,
+                        DATATYPEID            value(crlf) ,
+                        SOURCETYPEID          value(crlf) ,
+                        CREATEDTS             value(crlf) ,
+                        ALTEREDTS             value(crlf) ,
+                        PRECISION             value(crlf) ,
+                        RESTARTWITH           value(crlf) ,
+                        REMARKS               value(crlf) ,
+                        .
+
+
+REMARKS             = Left(REMARKS              ,300, ' ')
+RESTARTWITH         = Left(RESTARTWITH          , 19, ' ')
+INCREMENT           = Left(INCREMENT            , 19, ' ')
+START               = Left(START                , 19, ' ')
+MAXVALUE            = Left(MAXVALUE             , 19, ' ')
+MINVALUE            = Left(MINVALUE             , 19, ' ')
+MAXASSIGNEDVAL      = Left(MAXASSIGNEDVAL       , 19, ' ')
+CYCLE               = Left(CYCLE                , 19, ' ')
+CACHE               = Left(CACHE                , 19, ' ')
+ORDER               = Left(ORDER                , 19, ' ')
+
+area.0 = 20
+area.1  = white"Alter Sequence "Space(Schema '.' Name, 0) ,
+               " ID="SEQUENCEID "Type="SEQTYPE
+area.2  = white"                                               "
+area.3  = white"                                               "
+area.4  = white"                                               "
+area.5  = white"                                               "
+area.6  = white"     "keyw"RESTARTWITH   "in1 || RESTARTWITH   || endin
+area.7  = white"     "keyw"INCREMENT     "in1 || INCREMENT     || endin
+area.8  = white"     "keyw"START         "in1 || START         || endin
+area.9  = white"     "keyw"MAXVALUE      "in1 || MAXVALUE      || endin
+area.10 = white"     "keyw"MINVALUE      "in1 || MINVALUE      || endin
+area.11 = white"     "keyw"CYCLE         "in1 || CYCLE         || endin
+area.12 = white"     "keyw"CACHE         "in1 || CACHE         || endin
+area.13 = white"     "keyw"ORDER         "in1 || ORDER         || endin
+area.14 = white"      MAXASSIGNEDVAL"white||MAXASSIGNEDVAL
+area.15 = white" "
+area.16 = white"     "keyw"Remarks       "in1 || Remarks
+area.17 = " "
+area.18 = " "
+area.19 = " "endin
+area.20 = white" "
+
+Call Anzeige_Dyn_Panel
+
+If Restartwith_Val <> RESTARTWITH Then Do
+   OK = Nexttab( "Alter Sequence " Space(Schema '.' Name, 0) , al. )
+   If RESTARTWITH_Val = "" Then Do
+      OK = Nexttab( "      Restart    ; "                 , al.)
+    End
+   Else do
+      OK = Nexttab( "      Restart WITH " RESTARTWITH_Val " ;" , al.)
+    End
+ End
+
+If INCREMENT_Val <> INCREMENT   Then Do
+   OK = Nexttab( "Alter Sequence " Space(Schema '.' Name, 0) , al. )
+   OK = Nexttab( "      INCREMENT BY " INCREMENT_Val " ;"    , al. )
+ End
+
+If MINVALUE_Val <> MINVALUE    Then Do
+   OK = Nexttab( "Alter Sequence " Space(Schema '.' Name, 0) , al. )
+   If MINVALUE_Val = "" Then Do
+      OK = Nexttab( "   NO MINVALUE  "              " ;"    , al. )
+    End
+   Else Do
+      OK = Nexttab( "      MINVALUE  " MINVALUE_Val " ;"    , al. )
+    End
+ End
+
+If MAXVALUE_Val <> MAXVALUE    Then Do
+   OK = Nexttab( "Alter Sequence " Space(Schema '.' Name, 0) , al. )
+   If MAXVALUE_Val = "" Then Do
+      OK = Nexttab( "      MAXVALUE  "              " ;"    , al. )
+    End
+   Else Do
+      OK = Nexttab( "      MAXVALUE  " MAXVALUE_Val " ;"    , al. )
+    End
+ End
+
+If CACHE_Val <> CACHE       Then Do
+   OK = Nexttab( "Alter Sequence " Space(Schema '.' Name, 0) , al. )
+   If MAXVALUE_Val = "" Then Do
+      OK = Nexttab( "   NO CACHE     "              " ;"    , al. )
+    End
+   Else Do
+      OK = Nexttab( "      CACHE     " CACHE_Val " ;"    , al. )
+    End
+ End
+
+If CYCLE_Val <> CYCLE    Then Do
+   OK = Nexttab( "Alter Sequence " Space(Schema '.' Name, 0) , al. )
+   If MAXVALUE_Val = "NO" Then Do
+      OK = Nexttab( "   NO CYCLE   "              " ;"    , al. )
+    End
+   Else Do
+      OK = Nexttab( "      CYCLE   "              " ;"    , al. )
+    End
+ End
+
+
+If ORDER_Val <> ORDER    Then Do
+   OK = Nexttab( "Alter Sequence " Space(Schema '.' Name, 0) , al. )
+   If MAXVALUE_Val = "NO" Then Do
+      OK = Nexttab( "   NO ORDER   "              " ;"    , al. )
+    End
+   Else Do
+      OK = Nexttab( "      ORDER   "              " ;"    , al. )
+    End
+ End
+
+
+
+Return
+
+Alter_Trigger:
+
+parse value CZeile with NAME                  value(crlf) ,
+                        SCHEMA                value(crlf) ,
+                        TBNAME                value(crlf) ,
+                        TBOWNER               value(crlf) ,
+                        TRIGTIME              value(crlf) ,
+                        TRIGEVENT             value(crlf) ,
+                        TRIGNAME              value(crlf) ,
+                        GRANULARITY           value(crlf) ,
+                        CREATEDTS             value(crlf) ,
+                        SECURE                value(crlf) ,
+                        .
+
+
+SECURE            = Left(SECURE ,    1, ' ')
+
+
+area.0  = 7
+area.1  = white"Alter Trigger  "Space(Schema "." name, 0)
+area.2  = white"                                             "
+area.3  = white"                                             "
+area.4  = white"                                             "
+area.5  = white"                                             "
+area.6  = white"       "keyw"SECURED    "in1 || SECURE    || endin ,
+          white"  Y/N  "
+area.7  = white" "
+
+Call Anzeige_Dyn_Panel
+
+If Strip(SECURED_Val) <> Strip(SECURE) Then Do
+   If SECURED = "N" Then NOT = "NOT "
+   Else                  NOT = "    "
+   OK = Nexttab( "Alter Trigger  " Space(Schema "." name, 0), al.)
+   OK = Nexttab( "      "NOT"SECURED       "  , al. )
+   OK = Nexttab( "; "                               , al. )
+ End
+
+
+Return
+
+Alter_View:
+
+parse value CZeile with Creator               value(crlf) ,
+                        Name                  value(crlf) ,
+                        TBCreator             value(crlf) ,
+                        TBName                value(crlf) ,
+                        .
+
+
+REGENERATE        = " "
+REGENERATE        = Left(REGENERATE, 1, ' ')
+
+
+area.0  = 7
+area.1  = white"Alter View  "Space(Creator "." name, 0)
+area.2  = white"                                             "
+area.3  = white"                                             "
+area.4  = white"                                             "
+area.5  = white"                                             "
+area.6  = white"       "keyw"REGENERATE "in1 || REGENERATE || endin ,
+          white"  R    "
+area.7  = white" "
+
+Call Anzeige_Dyn_Panel
+
+If Strip(REGENERATE_Val) = 'R'            Then Do
+   OK = Nexttab( "Alter View     " Space(Creator "." name, 0), al.)
+   OK = Nexttab( "      REGENERATE         "  , al. )
+   OK = Nexttab( "; "                               , al. )
+ End
+
+
+Return
+
+Alter_Index:
+/* Wird noch auf Partition und Columns erweitert */
+   Call Alter_Index_Base
+return
+
+Alter_Index_Base:
+
+
+parse value CZeile with Creator               value(crlf) ,
+                        NAME                  value(crlf) ,
+                        TBCREATOR             value(crlf) ,
+                        TBNAME                value(crlf) ,
+                        CLUSTERING            value(crlf) ,
+                        CLUSTERED             value(crlf) ,
+                        UNIQUERULE            value(crlf) ,
+                        BPOOL                 value(crlf) ,
+                        FULLKEYCARD           value(crlf) ,
+                        DBNAME                value(crlf) ,
+                        INDEXSPACE            value(crlf) ,
+                        CLOSERULE             value(crlf) ,
+                        COPY                  value(crlf) ,
+                        PIECESIZE             value(crlf) ,
+                        PADDED                value(crlf) ,
+                        COMPRESS              value(crlf) ,
+                        .
+
+
+BPOOL             = Left(BPOOL       ,  8, ' ')
+CLOSE             = Left(CLOSERULE   ,  1, ' ')
+COPY              = Left(COPY        ,  1, ' ')
+PIECESIZE         = Left(PIECESIZE   , 10, ' ')
+CLUSTER           = Left(CLUSTERED   ,  1, ' ')
+PADDED            = Left(PADDED      ,  1, ' ')
+COMPRESS          = Left(COMPRESS    ,  1, ' ')
+ADDCOL            = Left(' '         ,  1, ' ')
+INCCOL            = Left(' '         ,  1, ' ')
+
+
+Index_Name = Space(Creator "." name, 0)
+area.0  = 14
+area.1  = white"Alter Index "Index_Name
+area.2  = white"                                             "
+area.3  = white"                                             "
+area.4  = white"   "keyw"BUFFERPOOL "in1 || BPOOL      || endin
+area.5  = white"   "keyw"CLOSE      "in1 || CLOSE      || endin ,
+          white"       Y/N "
+area.6  = white"   "keyw"COPY       "in1 || COPY       || endin ,
+          white"       Y/N "
+area.7  = white"   "keyw"CLUSTER    "in1 || CLUSTER    || endin ,
+          white"       Y/N "
+area.8  = white"   "keyw"PADDED     "in1 || PADDED     || endin ,
+          white"       Y/N "
+area.9  = white"   "keyw"COMPRESS   "in1 || COMPRESS   || endin ,
+          white"       Y/N "
+area.10 = white"   "keyw"PIECESIZE  "in1 || PIECESIZE  || endin
+area.11 = white" "
+area.12 = white"   "keyw"ADD Column "in1 || ADDCOL     || endin
+area.13 = white"   "keyw"Include    "in1 || INCCOL     || endin
+area.14 = white" "
+
+Call Anzeige_Dyn_Panel
+
+If Strip(BUFFERPOOL_Val) <> Strip(BPOOL)     Then Do
+   OK = Nexttab( "Alter Index    " Index_Name, al.)
+   OK = Nexttab( "      BUFFERPOOL  "BUFFERPOOL_Val, al. )
+   OK = Nexttab( "; "                               , al. )
+ End
+
+If Strip(COPY_Val) <> COPY           Then Do
+   If Substr(COPY_VAL  , 1, 1) = "N" Then copy = 'NO'
+   Else                                   copy = 'YES'
+   OK = Nexttab( "Alter Index    " Index_Name, al.)
+   OK = Nexttab( "      COPY        "COPY     , al. )
+   OK = Nexttab( "; "                               , al. )
+ End
+
+If Strip(CLOSE_Val) <> CLOSE       Then Do
+   If Substr(CLOSE_Val,1, 1) = "N" Then CLOSE    = 'NO'
+   Else                                 CLOSE    = 'YES'
+   OK = Nexttab( "Alter Index    " Index_Name, al.)
+   OK = Nexttab( "      CLOSE       "CLOSE  , al. )
+   OK = Nexttab( "; "                               , al. )
+ End
+
+If Strip(CLUSTER_Val) <> CLUSTER     Then Do
+   If Substr(CLUSTER_Val,1, 1) = "N" Then Cluster  = 'NO'
+   Else                                   Cluster  = 'YES'
+   OK = Nexttab( "Alter Index    " Index_Name, al.)
+   OK = Nexttab( "      CLUSTER     "CLUSTER  , al. )
+   OK = Nexttab( "; "                               , al. )
+ End
+
+If Strip(PADDED_Val) <> PADDED      Then Do
+   If Substr(PADDED_Val,1, 1) = "N"  Then PADDED   = 'NOT'
+   Else                                   PADDED   = '   '
+   OK = Nexttab( "Alter Index    " Index_Name, al.)
+   OK = Nexttab( "     "PADDED" PADDED      " , al. )
+   OK = Nexttab( "; "                               , al. )
+ End
+
+If Strip(COMPRESS_Val) <> COMPRESS    Then Do
+   If Substr(COMPRESS_Val,1, 1) = "N" Then COMPRESS = 'NO'
+   Else                                    COMPRESS = 'YES'
+   OK = Nexttab( "Alter Index    " Index_Name, al.)
+   OK = Nexttab( "      COMPRESS    "COMPRESS , al. )
+   OK = Nexttab( "; "                               , al. )
+ End
+
+If Strip(PIECESIZE_Val)<> PIECESIZE   Then Do
+   If Datatype(PIECESIZE_Val) /= "NUM" Then PIECESIZE_Val = 0
+   OK = Nexttab( "Alter Index    " Index_Name, al.)
+   OK = Nexttab( "      PIECESIZE   "PIECESIZE_VAL, al. )
+   OK = Nexttab( "; "                               , al. )
+ End
+
+If Strip(ADD_Val)<> ADDCOL      Then Do
+   ix_Function = "Add Column"
+   tabnr     = tabnr     + 1
+   AUSWKZ   = "CO"
+   Call Alter_Index_Add_Column
+   tabnr     = tabnr     - 1
+   AUSWKZ   = "IX"
+ End
+
+If Strip(Include_Val)<> INCCOL      Then Do
+   ix_Function = "Include Column"
+   AUSWKZ   = "CO"
+   tabnr     = tabnr     + 1
+   Call Alter_Index_Add_Column
+   tabnr     = tabnr     - 1
+   AUSWKZ   = "IX"
+ End
+
+Return
+
+Alter_Index_Add_Column:
+
+object2      = Space(TBCREATOR '.' TBNAME, 0)
+call Lesen_daten
+
+CZeile  = ""
+COLTAB = "COLTB"tabnr
+address ispexec 'TBOPEN  'COLTAB
+address ispexec 'TBTOP   'COLTAB
+address ispexec 'TBSKIP  'COLTAB
+area.0  = 4
+area.1  = white"Alter Index "Space(Creator "." name, 0) ix_Function
+area.2  = white"                                             "
+area.3  = white"    COLNO  " ,
+                    Left("NAME", 45) ,
+                    Left("COLTYPE", 8) ,
+               "N D H "
+area.4  = white"                                             "
+Do while RC = 0
+
+   SEL = " "
+   parse value CZeile with TBCREATOR             value(crlf) ,
+                           TBNAME                value(crlf) ,
+                           COLNO                 value(crlf) ,
+                           NAME                  value(crlf) ,
+                           COLTYPE               value(crlf) ,
+                           LENGTH                value(crlf) ,
+                           SCALE                 value(crlf) ,
+                           NULLS                 value(crlf) ,
+                           DEFAULT               value(crlf) ,
+                           HIDDEN                value(crlf) ,
+                           COLCARDF              value(crlf) ,
+                           KEYSEQ                value(crlf) ,
+                           PARTKEY_COLSEQ        value(crlf) ,
+                           PARTKEY_ORDERING      value(crlf) ,
+                           LENGTH2               value(crlf) ,
+                           .
+
+   area.0 = area.0 + 1
+   ai     = area.0
+   COLNO   = Right(COLNO, 3, '0')
+   area.ai = white"   "keyw"S" || COLNO""in1 || SEL || endin ,
+             Left(NAME, 45)   ,
+             Left(COLTYPE, 8) ,
+             NULLS            ,
+             DEFAULT          ,
+             HIDDEN           ,
+             ""
+   maxcolno = colno
+   address ispexec 'TBSKIP  'COLTAB
+ End
+
+Call Anzeige_Dyn_Panel
+
+
+Do awnr = 1 to maxcolno
+   Ausw = "S" || Right(awnr, 3, '0') || "_Val"
+   If "S" = Value(Ausw) Then do
+      address ispexec 'TBTOP   'COLTAB
+      address ispexec 'TBSKIP  'COLTAB' NUMBER('awnr')'
+      parse value CZeile with TBCREATOR             value(crlf) ,
+                              TBNAME                value(crlf) ,
+                              COLNO                 value(crlf) ,
+                              NAME                  value(crlf) ,
+                              COLTYPE               value(crlf) ,
+                              .
+
+      OK = Nexttab( "Alter Index    " Index_Name , al.)
+      OK = Nexttab( "      "ix_Function "(" NAME ")", al. )
+      OK = Nexttab( "; "                               , al. )
+    End
+
+ End
+
+address ispexec 'TBCLOSE 'COLTAB
+Return
+
+Alter_Table:
+
+
+parse value CZeile with CREATOR               value(crlf) ,
+                        NAME                  value(crlf) ,
+                        TYPE                  value(crlf) ,
+                        DBNAME                value(crlf) ,
+                        TSNAME                value(crlf) ,
+                        PARENTS               value(crlf) ,
+                        CHILDREN              value(crlf) ,
+                        CARD                  value(crlf) ,
+                        COLCOUNT              value(crlf) ,
+                        STATUS                value(crlf) ,
+                        TABLESTATUS           value(crlf) ,
+                        CHECKFLAG             value(crlf) ,
+                        DATACAPTURE           value(crlf) ,
+                        SPLIT_ROWS            value(crlf) ,
+                        APPEND                value(crlf) ,
+                        AUDITING              value(crlf) ,
+                        VALPROC               value(crlf) ,
+                        CLUSTERTYPE           value(crlf) ,
+                        .
+
+
+If SPLIT_ROWS     = " " Then SPLIT_ROWS  = "N"
+If DATACAPTURE    = " " Then DATACAPTURE = "N"
+If AUDITING       = " " Then AUDITING    = "N"
+If CLUSTERTYPE    = " " Then CLUSTERTYPE = "N"
+DATACAPTURE       = Left(DATACAPTURE ,  1, ' ')
+VOLATILE          = Left(SPLIT_ROWS  ,  1, ' ')
+APPEND            = Left(APPEND      ,  1, ' ')
+AUDIT             = Left(AUDITING    ,  1, ' ')
+VALPROC           = Left(VALPROC     , 24, ' ')
+CloneYN           = Left(' '         ,  1, ' ')
+CloneTab          = Left(' '         , 34, ' ')
+mehr              = Left(' '         ,  1, ' ')
+
+area.0  = 17
+area.1  = white"Alter Table "Space(Creator "." name, 0)
+area.2  = white"                                             "
+area.3  = white"                                             "
+area.4  = white"   "keyw"DATACAPTURE      "in1 || DATACAPTURE|| endin ,
+          white"       N=NONE / C=CHANGES "
+area.5  = white"   "keyw"VOLATILE         "in1 || VOLATILE   || endin ,
+          white"       Y/N "
+area.6  = white"   "keyw"APPEND           "in1 || APPEND     || endin ,
+          white"       Y/N "
+area.7  = white"   "keyw"AUDIT            "in1 || AUDIT      || endin ,
+          white"       N=NONE / C=CHANGES / A=ALL "
+area.8  = white"   "keyw"VALPROC          "in1 || VALPROC    || endin ,
+          white"       Prog.Name / Null "
+area.9  = white" "
+area.10 = white"   "keyw"RESTRICT ON DROP" ,
+            In1 || CLUSTERTYPE || endin ,
+          white"       N=Drop / Y=ADD "
+area.11 = white" "
+area.12 = white" "
+area.13 = white"   "keyw"Clone "in1 || CloneYN  || endin ,
+          white" D=Drop/A=Add " ,
+          white"   "keyw"Table "in1 || CloneTab || endin
+area.14 = white" "
+area.15 = white"   "keyw"Mehr        "in1 || mehr     || endin
+area.16 = white" "
+area.17 = white" "
+
+Call Anzeige_Dyn_Panel
+
+
+If Strip(DATACAPTURE_Val) <> DATACAPTURE    Then Do
+   If Substr(DATACAPTURE_VAL  , 1, 1) = "N" Then TXTVal = 'NONE'
+   Else                                          TXTVal = 'CHANGES'
+   OK = Nexttab( "Alter Table    " Space(Creator "." name, 0), al.)
+   OK = Nexttab( "      DATA CAPTURE "TXTVal  , al. )
+   OK = Nexttab( "; "                               , al. )
+ End
+
+If Strip(VOLATILE_Val) <> VOLATILE    Then Do
+   If Substr(VOLATILE_Val,1, 1) = "N" Then TXTVal   = 'NOT'
+   Else                                    TXTVal   = '   '
+   OK = Nexttab( "Alter Table    " Space(Creator "." name, 0), al.)
+   OK = Nexttab( "      "TXTVal" VOLATILE " , al. )
+   OK = Nexttab( "; "                               , al. )
+ End
+
+If Strip(APPEND_Val) <> APPEND      Then Do
+   If Substr(APPEND_Val,1, 1) = "N" Then TXTVal = 'NO'
+   Else                                  TXTVal = 'YES'
+   OK = Nexttab( "Alter Table    " Space(Creator "." name, 0), al.)
+   OK = Nexttab( "      APPEND      "TXTVal   , al. )
+   OK = Nexttab( "; "                               , al. )
+ End
+
+If Strip(AUDIT_Val) <> AUDIT       Then Do
+   Select
+     When  Substr(AUDIT_Val,1, 1) = "N" Then TXTVal = 'NONE'
+     When  Substr(AUDIT_Val,1, 1) = "C" Then TXTVal = 'CHANGES'
+     When  Substr(AUDIT_Val,1, 1) = "A" Then TXTVal = 'ALL'
+     Otherwise                               TXTVal = 'NONE'
+   End
+   OK = Nexttab( "Alter Table    " Space(Creator "." name, 0), al.)
+   OK = Nexttab( "      AUDIT   "TXTVal   , al. )
+   OK = Nexttab( "; "                               , al. )
+ End
+
+If Strip(RESTRICT_Val) <> CLUSTERTYPE Then Do
+   Select
+     When  Substr(RESTRICT_Val, 1, 1) = "Y" Then TXTVal = 'ADD'
+     Otherwise                               TXTVal = 'DROP'
+   End
+   OK = Nexttab( "Alter Table    " Space(Creator "." name, 0), al.)
+   OK = Nexttab( "      "TXTVal" RESTRICT ON DROP ", al.)
+   OK = Nexttab( "; "                               , al. )
+ End
+
+If Strip(VALPROC_Val) <> VALPROC     Then Do
+   Select
+     When  Strip(VALPROC_Val)      = "NULL" Then TXTVal = 'NULL'
+     When  Length(VALPROC_Val)     = 0      Then TXTVal = 'NULL'
+     Otherwise                                   TXTVal = VALPROC_Val
+   End
+   OK = Nexttab( "Alter Table    " Space(Creator "." name, 0), al.)
+   OK = Nexttab( "      VALIDPROC "TXTVal   , al. )
+   OK = Nexttab( "; "                               , al. )
+ End
+
+If Strip(Clone_Val) <> CloneYN     Then Do
+   OK = Nexttab( "Alter Table    " Space(Creator "." name, 0), al.)
+   Select
+     When  Strip(Clone_Val)      = "A" Then Do
+           OK = Nexttab( "      ADD  CLONE "Table_Val, al. )
+      End
+     Otherwise Do
+           OK = Nexttab( "      DROP CLONE"         , al. )
+      End
+   End
+   OK = Nexttab( "; "                               , al. )
+ End
+
+
+
+
+
+
+If Strip(Mehr_Val) <> Mehr        Then Do
+   Call Alter_Table_More
+ End
+
+
+Return
+
+Alter_Table_More:
+
+
+CHK = " "
+
+parse value CZeile with CREATOR               value(crlf) ,
+                        NAME                  value(crlf) ,
+                        .
+
+area.0  = 30
+area.1  = white"Alter Table "Space(Creator "." name, 0)
+area.2  = white"                                             "
+area.3  = white" "keyw"A01 Alter Table                         "in1 || ,
+          CHK|| endin
+area.4  = white" "keyw"A02 ADD column                          "in1 || ,
+          CHK|| endin
+area.5  = white" "keyw"A03 ADD PRIMARY KEY                     "in1 || ,
+          CHK|| endin
+area.6  = white" "keyw"A04 DROP PRIMARY KEY                    "in1 || ,
+          CHK|| endin
+area.7  = white" "keyw"A05 ADD FOREIGN KEY                     "in1 || ,
+          CHK|| endin
+area.8  = white" "keyw"A06 DROP FOREIGN KEY                    "in1 || ,
+          CHK|| endin
+area.9  = white" "keyw"A07 ADD CHECK constraint                "in1 || ,
+          CHK|| endin
+area.10 = white" "keyw"A08 DROP CHECK constraint               "in1 || ,
+          CHK|| endin
+area.11 = white" "keyw"A09 ADD UNIQUE constraint               "in1 || ,
+          CHK|| endin
+area.12 = white" "keyw"A10 DROP UNIQUE constraint              "in1 || ,
+          CHK|| endin
+area.13 = white" "keyw"A11 ADD ORGANIZE BY HASH                "in1 || ,
+          CHK|| endin
+area.14 = white" "keyw"A12 ALTER ORGANIZATION                  "in1 || ,
+          CHK|| endin
+area.15 = white" "keyw"A13 DROP ORGANIZATION                   "in1 || ,
+          CHK|| endin
+area.16 = white" "keyw"A14 ACTIVATE COLUMN ACCESS CONTROL      "in1 || ,
+          CHK|| endin
+area.17 = white" "keyw"A15 DEACTIVATE COLUMN ACCESS CONTROL    "in1 || ,
+          CHK|| endin
+area.18 = white" "keyw"A16 ADD MATERIALIZED QUERY              "in1 || ,
+          CHK|| endin
+area.19 = white" "keyw"A17 DROP MATERIALIZED QUERY             "in1 || ,
+          CHK|| endin
+area.20 = white" "keyw"A18 REFRESH MATERIALIZED TABLE          "in1 || ,
+          CHK|| endin
+area.21 = white" "keyw"A19 ADD PARTITIONING KEY                "in1 || ,
+          CHK|| endin
+area.22 = white" "keyw"A20 ADD/ALTER PARTITION                 "in1 || ,
+          CHK|| endin
+area.23 = white" "keyw"                                        "in1 || ,
+          CHK|| endin
+area.24 = white" "keyw"                                        "in1 || ,
+          CHK|| endin
+area.25 = white" "keyw"A23 ADD VERSIONING                      "in1 || ,
+          CHK|| endin
+area.26 = white" "keyw"A24 DROP VERSIONING                     "in1 || ,
+          CHK|| endin
+area.27 = white" "keyw"A25 ADD PERIOD                          "in1 || ,
+          CHK|| endin
+area.28 = white" "keyw"A26 ACTIVATE ROW ACCESS CONTROL         "in1 || ,
+          CHK|| endin
+area.29 = white" "keyw"A27 DEACTIVATE ROW ACCESS CONTROL       "in1 || ,
+          CHK|| endin
+area.30 = white" "
+
+Call Anzeige_Dyn_Panel
+
+/* Wird noch auf Partition und Columns erweitert */
+
+return
+
+Edit_Stmt:
+
+DSNAME = ZOS91900("ZOS91","DSNAME", "STMT", LNR)
+LRECL   = RECLEN
+
+IF LISTDSI(DSNAME) = 0 THEN do
+    ADDRESS "TSO" "ALLOC F(SELDD) DA("DSNAME") SHR"
+ end
+else do
+    ADDRESS "TSO" "ALLOC F(SELDD) DA("DSNAME") NEW CATALOG ,
+          SPACE("TRACKS","TRACKS") TRACKS REUSE,
+          LRECL("RECLEN") UNIT(SYSDA)"
+ end
+
+
+ADDRESS "TSO" "EXECIO * DISKW SELDD ( STEM SL. FINIS"
+ADDRESS "TSO" "FREE FI(SELDD)"
+
+ok   = ZOS91911(SSID,     ,
+                LOCATION,  ,
+                EINGABE,   ,
+                OBJ,       ,
+                DSNAME,    ,
+                LNR   )
+
+return
+
+Get_CFG_FILE:
+PARSE SOURCE SRC.1  , /* ENVIRONMENT  (TSO)            */
+             SRC.2  , /* AUFRUF ALS (COMMAND)          */
+             SRC.3  , /* Program NAME (LUW97000)       */
+             SRC.4  , /* SYS00186 (TEMP FILE)          */
+             SRC.5  , /* AUFRUF AUS LIB (X.X.CLISTUDB) */
+             SRC.6  , /* ?                             */
+             SRC.7  , /* TSO                           */
+             SRC.8  , /* ISPF                          */
+             SRC.9  , /* ?                             */
+/*  CFG FILE                            */
+mem     = "#SSIDINF"
+CFGFILE = Strip(sysdsname) || "(" || mem || ")"
+CFGFILE = Strip(proclib) || "(" || mem || ")"
+ADDRESS TSO "FREE FILE(CFGF) NOHOLD"
+ADDRESS TSO "ALLOC F(CFGF) DATASET('"CFGFILE"') SHR"
+ADDRESS TSO "EXECIO * DISKR CFGF (STEM CONFIG. FINIS"
+ADDRESS TSO "EXECIO 0 DISKR CFGF ( FINIS"
+ADDRESS TSO "FREE FILE(CFGF) NOHOLD"
+
+Do I = 1 TO CONFIG.0
+   If Translate(Word(Config.i, 1))     = 'AG' ,
+    | TRANSLATE(Word(Config.i, 1))     = SSID Then do
+       CMDLINE =  Subword(CONFIG.i, 2)
+       INTERPRET  CMDLINE
+    End
+ End
+
+return 0
+
+EXECUTE_SQL_DYNAMIC:
+
+IF DATATYPE(CNR) <> 'NUM' THEN CNR = 1
+IF DATATYPE(SNR) <> 'NUM' THEN SNR = 1
+DO STI = 1 TO EINGABE.0
+   SQLSTMT = EINGABE.STI
+   SQLSTMT = SPACE(SQLSTMT, 1)
+
+   IF WORD(SQLSTMT, 1) = "CONNECT" & WORD(SQLSTMT, 2) = "TO" THEN DO
+      SQLTEXT =  " "SQLSTMT
+      Call EXECUTE_SQL_TEXT
+      IF SQLCODE <> 0 THEN DO
+         SAY "ERROR IN"SQLSTMT "SQLCODE: " SQLCODE
+       END
+      ITERATE
+    END
+
+   If DB2_EDITSQL = "Y" | DB2_EDITSQL = "J" Then do
+      SQLSTMT = Edit_SQL(SQLSTMT)
+      DB2_EDITSQL = 'N'
+    End
+
+   DROP OUTSQLDA.
+   OUTSQLDA.SQLD = 0
+   SQLTEXT =         " CLOSE C1 "
+   Call EXECUTE_SQL_TEXT
+   SQLTEXT =  " DECLARE              C1 CURSOR FOR S1"
+   Call EXECUTE_SQL_TEXT
+   IF SQLCODE <  0 THEN DO
+      SAY "A3 DECLARE     SQLCODE="SQLCODE
+      SAY SQLSTMT
+    END
+   SQLTEXT =  " PREPARE              S1 FROM :SQLSTMT"
+   Call EXECUTE_SQL_TEXT
+   IF SQLCODE <  0 THEN DO
+      SAY "A3 PREPARE     SQLCODE="SQLCODE
+      SAY SQLSTMT
+    END
+   SQLTEXT =  " DESCRIBE S1 INTO :OUTSQLDA"
+   Call EXECUTE_SQL_TEXT
+   IF SQLCODE <  0 THEN DO
+      SAY "A3 DESCRIBE    SQLCODE="SQLCODE
+      SAY SQLSTMT
+    END
+
+   If COLTAB_BUILD <> "N" Then do
+      COLS   = ""
+      RXCOLS = ""
+      if datatype(OUTSQLDA.SQLD) = NUM THEN DO CI = 1 TO OUTSQLDA.SQLD
+         cols   = cols OUTSQLDA.CI.SQLNAME
+         rxcols = rxcols  SPACE(RXDB2_PUTSTEM, 0) || I || "." ||  ,
+                          SPACE(OUTSQLDA.CI.SQLNAME, 0)
+       End
+    End
+
+   SQLTEXT =  " OPEN C1"
+   Call EXECUTE_SQL_TEXT
+   IF SQLCODE <  0 THEN DO
+      SAY "A3 OPEN        SQLCODE="SQLCODE
+      SAY SQLSTMT
+    END
+   IVAL = VALUE(SPACE(RXDB2_PUTSTEM, 0) || 0) "= 0"
+   INTERPRET  IVAL
+   DO WHILE SQLCODE = 0
+      SQLTEXT =  " FETCH C1 USING DESCRIPTOR :OUTSQLDA"
+      Call EXECUTE_SQL_TEXT
+      IF SQLCODE  = 100 THEN LEAVE
+      IF SQLCODE <    0 THEN Do
+         call SQLERROR
+         LEAVE
+       End
+      IVAL = "IVAL_I = " VALUE(SPACE(RXDB2_PUTSTEM, 0) || 0) "+ 1"
+      INTERPRET  IVAL
+      IVAL = SPACE(RXDB2_PUTSTEM, 0) || 0  " = IVAL_I"
+      INTERPRET  IVAL
+      DO CI = 1 TO OUTSQLDA.SQLD
+         /* AUSGABE.1.DBNAME = "DSNDB07"   */
+         If Length(OUTSQLDA.CI.SQLDATA) = 1 ,
+          & OUTSQLDA.CI.SQLDATA = x'00' Then OUTSQLDA.CI.SQLDATA = ' '
+         If Length(OUTSQLDA.CI.SQLDATA) = 0 Then
+            OUTSQLDA.CI.SQLDATA = ' '
+
+         IVAL = VALUE(SPACE(RXDB2_PUTSTEM, 0) || IVAL_I) || "." ||  ,
+                SPACE(OUTSQLDA.CI.SQLNAME, 0)
+         INTERPRET IVAL"=OUTSQLDA.CI.SQLDATA"
+
+         IVAL = value(SPACE(OUTSQLDA.CI.SQLNAME, 0))
+
+       END
+    END
+ END
+
+RETURN
+
+OPEN_CURSOR:
+    If DB2_EDITSQL = "Y" | DB2_EDITSQL = "J" Then do
+       SQLSTMT = Edit_SQL(SQLSTMT)
+       DB2_EDITSQL  = 'N'
+     End
+
+    IF DATATYPE(CNR) <> 'NUM' THEN CNR = 1
+    IF DATATYPE(SNR) <> 'NUM' THEN SNR = 1
+
+    SQLTEXT =         " CLOSE C"CNR
+    Call EXECUTE_SQL_TEXT
+    SQLTEXT =         " DECLARE C"CNR" CURSOR FOR S"SNR
+    Call EXECUTE_SQL_TEXT
+    IF SQLCODE <> 0 THEN DO
+       SAY "ERROR ON DECLARE, RC="RC ,
+           "SQLCODE="SQLCODE         ,
+           "SQLERRMC="SQLERRMC       ,
+           ""
+    END
+    SQLTEXT =         " PREPARE S"SNR" FROM :SQLSTMT"
+    Call EXECUTE_SQL_TEXT
+    IF SQLCODE <> 0 THEN DO
+       SAY "ERROR ON PREPARE S"SNR"RC="RC ,
+           "SQLCODE="SQLCODE         ,
+           "SQLERRMC="SQLERRMC       ,
+           ""
+    END
+
+   SQLTEXT =  " DESCRIBE S"SNR" INTO :OUTSQLDA"
+   Call EXECUTE_SQL_TEXT
+   If COLTAB_BUILD <> "N" Then do
+      COLS   = ""
+      RXCOLS = ""
+      if datatype(OUTSQLDA.SQLD) = NUM THEN DO CI = 1 TO OUTSQLDA.SQLD
+         cols   = cols OUTSQLDA.CI.SQLNAME
+         rxcols = cols OUTSQLDA.CI.SQLNAME
+       End
+    End
+
+    SQLTEXT =         " OPEN C"CNR
+    Call EXECUTE_SQL_TEXT
+    IF SQLCODE <> 0 THEN DO
+       SAY "ERROR ON OPEN C"CNR" , RC="RC ,
+           "SQLCODE="SQLCODE         ,
+           "SQLERRMC="SQLERRMC       ,
+           ""
+    END
+
+RETURN
+
+CLOSE_CURSOR:
+
+    IF DATATYPE(CNR) <> 'NUM' THEN CNR = 1
+    SQLTEXT =         " CLOSE C"CNR
+    Call EXECUTE_SQL_TEXT
+
+RETURN
+
+CONNECT_LOCATION:
+   If Length(SYSUID) > 0 & Length(SYSPWD) > 0 Then do
+       SQLTEXT = " CONNECT TO "ARG(1) ,
+                 "USER :SYSUID USING :SYSPWD "
+    End
+   ELSE Do
+       SQLTEXT = " CONNECT TO "ARG(1)
+    End
+   Call EXECUTE_SQL_TEXT
+   IF SQLCODE <> 0 THEN DO
+      SAY "ERROR IN CONNECT TO "ARG(1) "SQLCODE: " SQLCODE
+      RETURN 8
+      END
+    parse value sqlerrp with DB_ENV 4 DB_Vers 6 DB_Rel 8 DB_Mod
+RETURN 0
+
+DISCONNECT_LOCATION:
+   SQLTEXT =  "RELEASE " ARG(1)
+   Call EXECUTE_SQL_TEXT
+   SQLTEXT =  "COMMIT  "
+   Call EXECUTE_SQL_TEXT
+   SQLTEXT =  " CONNECT RESET"
+   Call EXECUTE_SQL_TEXT
+RETURN 0
+
+EXECUTE_SQL_TEXT:
+ Select
+    When ENV = 'TSO' Then Do
+         ADDRESS DSNREXX "EXECSQL "SQLTEXT
+     End
+    When ENV = 'WIN' Then Do
+         CALL SQLEXEC SQLTEXT
+         SQLCODE    = SQLCA.SQLCODE
+         SQLERRMC   = SqlMsg
+     End
+    Otherwise NOP
+  End
+Return
+
+SQLERROR:
+/* VERARBEITEN SQLERROR WENN NOETIG */
+
+  SAY 'SQLCODE        ='SQLCODE
+  SAY 'SQLERRM        ='SQLERRMC
+  SAY 'SQLCAID  ='SQLCAID
+  SAY 'SQLCABC  ='SQLCABC
+  SAY 'SQLCODE  ='SQLCODE
+  SAY 'SQLERRM  ='SQLERRMC
+  SAY 'SQLERRP  ='SQLERRP
+  SAY 'SQLERRD.1='SQLERRD.1
+  SAY 'SQLERRD.2='SQLERRD.2
+  SAY 'SQLERRD.3='SQLERRD.3
+  SAY 'SQLERRD.4='SQLERRD.4
+  SAY 'SQLERRD.5='SQLERRD.5
+  SAY 'SQLERRD.6='SQLERRD.6
+  SAY 'SQLWARN  ='SQLWARN
+  SAY 'SQLWARN0 ='SQLWARN0
+  SAY 'SQLWARN1 ='SQLWARN.1
+  SAY 'SQLWARN2 ='SQLWARN.2
+  SAY 'SQLWARN3 ='SQLWARN.3
+  SAY 'SQLWARN4 ='SQLWARN.4
+  SAY 'SQLWARN5 ='SQLWARN.5
+  SAY 'SQLWARN6 ='SQLWARN.6
+  SAY 'SQLWARN7 ='SQLWARN.7
+  SAY 'SQLWARN8 ='SQLWARN.8
+  SAY 'SQLWARN9 ='SQLWARN.9
+  SAY 'SQLWARNA ='SQLWARNA
+  SAY 'SQLSTATE ='SQLSTATE
+
+RETURN
+
+
+MAKE_WHERELIST: PROCEDURE EXPOSE WHERELIST
+
+COLUMNNAME = ARG(1)
+ARGUMENT   = ARG(2)
+ARGTYPE    = ARG(3)
+ARGUMENT   = TRANSLATE(ARGUMENT, '%', '*')
+IF LENGTH(STRIP(ARGUMENT)) = 0 ,
+ & LENGTH(STRIP(COLUMNNAME)) = 0 THEN RETURN
+
+IF TRANSLATE(WORD(WHERELIST, 1) ) = "WHERE" THEN ANDKZ = "AND"
+ ELSE ANDKZ = "WHERE"
+
+IF LENGTH(STRIP(COLUMNNAME)) = 0 ,
+ & LENGTH(STRIP(ARGUMENT)) > 0 THEN DO
+   WHERELIST = WHERELIST ANDKZ ARGUMENT
+   RETURN
+ END
+
+IF LENGTH(STRIP(ARGUMENT)) = 0 THEN RETURN
+
+If ARGTYPE = "NUM" Then do
+   IF POS('%', ARGUMENT) > 0 THEN DO
+      WHERELIST = WHERELIST ANDKZ COLUMNNAME "LIKE "ARGUMENT
+    END
+   Else Do
+      WHERELIST = WHERELIST ANDKZ COLUMNNAME "= "ARGUMENT
+    END
+ End
+Else Do
+   IF POS('%', ARGUMENT) > 0 ,
+    | POS('_', ARGUMENT) > 0 THEN DO
+      WHERELIST = WHERELIST ANDKZ COLUMNNAME "LIKE '"ARGUMENT"'"
+    END
+   Else Do
+      WHERELIST = WHERELIST ANDKZ COLUMNNAME "= '"ARGUMENT"'"
+    END
+ End
+
+RETURN
+
+Anzeige_Dyn_Panel:
+
+Zeile = 0
+DROP ausgabe.
+ausgabe.0 = 0
+MaxLines = area.0
+curline = 1                                /* set current line #     */
+dyndata  = ""
+ADDRESS ISPEXEC  "VGET (ZSCREENW,ZSCREEND)"
+Do ai = 1 to area.0
+   dyndata = dyndata || Left(area.ai, ZSCREENW, ' ')
+ end
+dyndata = dyndata || endin
+dynarea = substr(dyndata,1+(curline-1)*ZSCREENW) /*set dyn var  */
+dynarea = dyndata
+
+MaxScreenLines = ZSCREEND-5
+dyndata_len = Length(dyndata)
+trenner = in1
+DYNPOS  = POS(in1, dynarea, 1)
+DYNPOS  = DYNPOS + 1
+znr     = 1
+PFTASTEN   = "      PF03=GO    PF04=Cancel "
+
+Do Until disprc > 0
+
+  start   = 1+(curline-1)*ZSCREENW
+  dynarea = substr(dyndata, Start)
+  size = length(dynarea)                   /* Set a scalar variable  */
+  ADDRESS ISPEXEC "DISPLAY PANEL(PDYNPNL1)"
+  MaxScreenLines = DYNDPTH
+  DynArea_len = MaxScreenLines*ZSCREENW
+  dyndata1= Substr(dyndata, 1,  1+(curline-1)*ZSCREENW-1)
+  start   = Length(dyndata1) + Length(dynarea) + 1
+  Dyndata = Dyndata1 || dynarea || Substr(Dyndata, start)
+  Eingabe = dynarea
+
+  disprc = rc                              /* save return code       */
+  ADDRESS ISPEXEC "VGET (ZVERB,ZSCROLLA,ZSCROLLN, ZSCROLLD) "
+  ADDRESS ISPEXEC "VGET (ZXSMAX, ZXSMIN) "
+  dynrc = rc
+  SELECT                                   /* Process scrolling      */
+    When(zverb  = 'UP')   Then Do          /* Scroll up              */
+     If zscrolla = 'MAX' Then Do           /*  if scroll was max     */
+        curline = 1                       /*    scroll to top       */
+      End
+     Else Do                               /*  else a number is known*/
+      curline = curline - MaxScreenLines        /* (max is bottom)   */
+      if curline < 1 then Curline = 1
+      End
+     End
+    When(zverb  = 'DOWN') Then Do          /* Scroll down            */
+     If zscrolla = 'MAX' Then Do           /*  if scroll was max     */
+      curline = maxlines                   /*    scroll to bottom    */
+     end
+     Else do                               /*  else a number is known*/
+      curline = curline + MaxScreenLines        /* (max is bottom)   */
+      If curline > maxlines Then Curline = maxlines
+      if DynArea_len >= dyndata_len Then Do  /* NUR EINE SEITE */
+         curline = 1
+       End
+      end
+     end
+    Otherwise;                      /* could use left & right too    */
+  End
+  if dynrc > 8 then Do
+     say "Display RC="RC
+     say "ZEDSMSG="ZEDSMSG
+     say "ZERRLM="ZERRLM
+     say "ZERRMSG="ZERRMSG
+     say "ZERRSM="ZERRSM
+     say rc object1
+   End
+
+  DO While Length(eingabe) > 0
+     Zeile = zeile + 1
+
+     /*    Keyword Finden   */
+     epos     = Pos(keyw, eingabe, 1)
+     xpos     = Pos(Trenner, eingabe, epos+1)
+     elen     = xpos - epos -1
+     If    elen < 0 Then Leave
+     Keyword  =  Substr(eingabe, epos+1, elen  )
+     Keyword  =  Word(Keyword, 1)
+
+     /*    EINGABE Finden   */
+     epos    = Pos(Trenner, eingabe, 1)
+     if epos < 1 then leave
+     xpos     = Pos(endin, eingabe, epos+1)
+     elen     = xpos - epos -1
+     evalue   =  Substr(eingabe, epos+1, elen  )
+     eingabe  = Substr(eingabe, xpos+ 1)
+
+     Interpret Strip(Keyword) || "_VAL" "= evalue"
+   End
+   If PF = 'PF03'               THEN LEAVE
+   If PF = 'PF04'               THEN EXIT 4
+End                                        /* End of display loop    */
+
+Return
+
+
+browse_temp_File:
+/*  ALLOCATE AND OPEN TEMP DATASET      */
+ADDRESS ISPEXEC "VGET (ZTEMPF) SHARED"
+ADDRESS TSO "ALLOC F(TMP1) DATASET('"ZTEMPF"') LRECL("RECLEN")"
+ADDRESS TSO "EXECIO * DISKW TMP1 (STEM "Arg(1)" FINIS"
+ADDRESS ISPEXEC "browse DATASET('&ZTEMPF') PANEL(ISREFR01)"
+ADDRESS TSO "FREE FILE(TMP1) NOHOLD"
+return 0
+
+NextTab:
+text = arg(1)
+tab  = arg(2)
+ind  = Value(tab || 0)
+ind  = ind + 1
+interpret tab || "0 = ind"
+interpret tab || "ind = arg(1) "
+return 0
+
+Lesen_daten:
+
+LOC  = LOCATION
+FK   = AUSWKZ
+OB   = object
+OB2  = Object2
+OB3  = Object3
+OB4  = Object4
+OB5  = Object5
+TS   = Tablespace
+DB   = DATABASE
+SG   = STGROUP
+LOBJ = ListObject
+
+DDLTEXT = ""
+DDLTEXT = DDLTEXT ZOS91AC3(SSID,   ,           /* SSID    */
+                           EDIT_SQL,,          /* Edit SQL */
+                           LOC,    ,           /* LOCATION */
+                           LNR,    ,           /* TABLENR */
+                           TABNR,  ,           /* TABLENR */
+                           FK,     ,           /* FUKTION */
+                           OB,     ,           /* OBJECT  */
+                           OB2,    ,           /* TABLE   */
+                           OB3,    ,           /* TABLE   */
+                           OB4,    ,           /* TABLE   */
+                           OB5,    ,           /* TABLE   */
+                           TS,     ,           /* TABLESPACE */
+                           DB,     ,           /* DATABASE   */
+                           SG,     ,           /* STORAGEGROUP */
+                           LOBJ,   ,           /* List Object*/
+                          )
+
+DDLTEXT = STRIP(DDLTEXT)
+IF LENGTH(DDLTEXT) = 0 THEN DO
+   X        = MSG('ON')
+   ZEDSMSG = ""
+   ZEDLMSG = " -KEIN TREFFER ZUR AUSWAHL- "
+   ADDRESS ISPEXEC "SETMSG MSG(ISRZ001)"
+   X        = MSG('OFF')
+   RETURN 0
+ End
+
+DO FOREVER
+   PARSE VALUE DDLTEXT WITH LZEILE  '-NR' REST
+   IF SUBSTR(LZEILE, 1, 4) = "*UZ*" THEN DO
+      UZeile = substr(LZeile, 5)
+    end
+   IF REST = '' THEN LEAVE
+   DDLTEXT = REST
+ END
+
+
+return
+
+Load_DSNREXX:
+ADDRESS TSO "SUBCOM DSNREXX"
+IF RC THEN   S_RC = RXSUBCOM('ADD','DSNREXX','DSNREXX')
+
+ADDRESS DSNREXX "CONNECT "DB2_SSID
+IF SQLCODE <  0 THEN SAY "CONNECT     SQLCODE="SQLCODE "<"DB2_SSID">"
+
+Return
+
+UNLoad_DSNREXX:
+
+ADDRESS DSNREXX "DISCONNECT"
+S_RC = RXSUBCOM('DELETE','DSNREXX','DSNREXX')
+
+Return
+
+error: failure: syntax: novalue:
+return

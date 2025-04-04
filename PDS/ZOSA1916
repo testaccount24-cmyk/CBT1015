@@ -1,0 +1,795 @@
+/* REXX */
+/*******************************************************************/
+/*                                                                 */
+/* ProgramNAME      : ZOSA1916 (REXX CLIST)                        */
+/* AUSRUF           : AUS ISPF ODER AUF Program                    */
+/* AUTHER           : ULRICH BRAEUER  24.08.1998                   */
+/* FUNKTION         : DER ENTWICKLER KANN JETZT EINEN EXPLAIN      */
+/*                    AUS DEM ISPF F}R EINE QUERY ABSETZEN         */
+/*                                                                 */
+/*                    DIE QUERY WIRD MIT DEM ZEILENBEFEHL (C, CC)  */
+/*                    MARKIERT, UND IN DER COMMANDLINE WIRD        */
+/*                    DANN ZOSA1916 EINGEGEBEN.                    */
+/*                    DAS Program LIEST DIE QUERY EIN,             */
+/*                    LOESCHT DIE QUERYNO 99999 AUS DER PLAN_TAB   */
+/*                    DES BENUTZERS                                */
+/*                    DANACH WIRD DIE QUERY MIT DEM BEFEHL         */
+/*                      -EXPLAIN ALL SET QUERYNO=99999 FOR         */
+/*                    IN DIE PLAN_TABLE GENERIERT.                 */
+/*                    DANN PLAN_TABLE AUSLESEN UND ANZEIGEN,       */
+/*                    DER REST SOLLTE DEM ENTWICKLER UEBERLASSEN   */
+/*                    WERDEN                                       */
+/*                                                                 */
+/*                    ULI BRAEUER                                  */
+/*                                                                 */
+/*******************************************************************/
+
+
+ENV = "TSO"
+X = MSG('OFF')
+"DELSTACK"
+SYSUID  = ""
+SYSPWD  = ""
+
+PARSE SOURCE SRC.1 SRC.2 SRC.3 SRC.4 SRC.5 SRC.6 SRC.7 SRC.8 SRC.9
+IF SRC.2 = "SUBROUTINE" Then SUBROUTINE    = 'Y'
+ Else                        SUBROUTINE    = 'N'
+ispf_env = SRC.8
+
+
+USER = USERID()
+
+MAXRC = 0
+location  = ""
+EXP_QUERY = ""
+DROP HVLIST.
+HVLIST.0 = 0
+DSNRECON   = "N"
+ADDRESS ISPEXEC 'VGET (DSNRECON) PROFILE'
+ADDRESS ISPEXEC 'VGET (SYSUID)   PROFILE'
+ADDRESS ISPEXEC 'VGET (SYSPWD)   PROFILE'
+
+If ENV = "TSO" Then do
+   If SUBROUTINE = 'Y' Then do
+      SSID       = ARG(1)   /* SSID               */
+      location   = ARG(2)   /* Location (Connect) */
+      CurrSqlid  = ARG(3)   /* Current SQLID      */
+      CurrSchema = ARG(4)   /* Current Schema     */
+      QueryNum   = ARG(5)   /* Query Number       */
+      EXP_QUERY  = ARG(6)   /* SQL TEXT           */
+      If Length(EXP_QUERY) < 0 then Do
+         ZEDLMSG = "SQL TEXT IS EMPTY "
+         ADDRESS ISPEXEC "SETMSG MSG(ISRZ001)"
+         EXIT 12
+       End
+    End
+   ELSE DO
+      ADDRESS ISREDIT "MACRO NOPROCESS (SSID DUMMY)"
+      CALL LOAD_DSNREXX
+      ADDRESS ISREDIT "PROCESS RANGE C"
+      If rc = 0 Then CALL EINLESEN   /* STATEMENT VON ISPF LESEN */
+      Else     DO
+          ZEDLMSG = "MARK WITH C, CC "
+          ADDRESS ISPEXEC "SETMSG MSG(ISRZ001)"
+          EXIT 12
+      END
+    End
+
+   DB2_SSID   = SSID
+   If DSNRECON = "Y" Then Do
+      Call Load_DSNREXX
+    End
+   Ok = Connect_Location(Location)
+   rc = 0
+ End
+
+CALL HostVar
+CALL EXPLAIN_STATEMENT
+
+If DSNRECON = "Y" Then Do
+   Call UNLoad_DSNREXX
+ End
+If SUBROUTINE = 'N' Then CALL AUSGEBEN
+
+RETURN
+
+EXPLAIN_STATEMENT:
+
+EXP_QUERY    = STRIP(EXP_QUERY)
+LPOS         = LENGTH(EXP_QUERY)
+IF SUBSTR(EXP_QUERY, LPOS, 1) = ';' THEN DO
+   LPOS = LPOS - 1
+   EXP_QUERY = SUBSTR(EXP_QUERY, 1, LPOS)
+ END
+
+If Datatype(QueryNum) <> "NUM" Then QueryNum = 99999
+If Length(Strip(CurrSqlid)) > 0 Then do
+   SQLSTMT      = "SET CURRENT SQLID='"CurrSqlid"'"
+   Call EXECUTE_IMMEDIATE
+ End
+If Length(Strip(CurrSchema)) > 0 Then do
+   SQLSTMT      = "SET CURRENT SCHEMA='"CurrSchema"'"
+   Call EXECUTE_IMMEDIATE
+ End
+
+
+SQLSTMT  = "DELETE FROM "CurrSqlid".PLAN_TABLE " ,
+           "WHERE QUERYNO = "QueryNum
+Call EXECUTE_IMMEDIATE
+SQLSTMT  = "DELETE FROM "CurrSqlid".DSN_COLDIST_TABLE  " ,
+           "WHERE QUERYNO = "QueryNum
+Call EXECUTE_IMMEDIATE
+SQLSTMT  = "DELETE FROM "CurrSqlid".DSN_DETCOST_TABLE " ,
+           "WHERE QUERYNO = "QueryNum
+Call EXECUTE_IMMEDIATE
+SQLSTMT  = "DELETE FROM "CurrSqlid".DSN_FILTER_TABLE " ,
+           "WHERE QUERYNO = "QueryNum
+Call EXECUTE_IMMEDIATE
+SQLSTMT  = "DELETE FROM "CurrSqlid".DSN_FUNCTION_TABLE " ,
+           "WHERE QUERYNO = "QueryNum
+Call EXECUTE_IMMEDIATE
+SQLSTMT  = "DELETE FROM "CurrSqlid".DSN_KEYTGTDIST_TABLE " ,
+           "WHERE QUERYNO = "QueryNum
+Call EXECUTE_IMMEDIATE
+SQLSTMT  = "DELETE FROM "CurrSqlid".DSN_PGRANGE_TABLE " ,
+           "WHERE QUERYNO = "QueryNum
+Call EXECUTE_IMMEDIATE
+SQLSTMT  = "DELETE FROM "CurrSqlid".DSN_PGROUP_TABLE " ,
+           "WHERE QUERYNO = "QueryNum
+Call EXECUTE_IMMEDIATE
+SQLSTMT  = "DELETE FROM "CurrSqlid".DSN_PREDICAT_TABLE " ,
+           "WHERE QUERYNO = "QueryNum
+Call EXECUTE_IMMEDIATE
+SQLSTMT  = "DELETE FROM "CurrSqlid".DSN_PTASK_TABLE " ,
+           "WHERE QUERYNO = "QueryNum
+Call EXECUTE_IMMEDIATE
+SQLSTMT  = "DELETE FROM "CurrSqlid".DSN_QUERY_TABLE " ,
+           "WHERE QUERYNO = "QueryNum
+Call EXECUTE_IMMEDIATE
+SQLSTMT  = "DELETE FROM "CurrSqlid".DSN_SORTKEY_TABLE " ,
+           "WHERE QUERYNO = "QueryNum
+Call EXECUTE_IMMEDIATE
+SQLSTMT  = "DELETE FROM "CurrSqlid".DSN_SORT_TABLE " ,
+           "WHERE QUERYNO = "QueryNum
+Call EXECUTE_IMMEDIATE
+SQLSTMT  = "DELETE FROM "CurrSqlid".DSN_STATEMNT_TABLE " ,
+           "WHERE QUERYNO = "QueryNum
+Call EXECUTE_IMMEDIATE
+SQLSTMT  = "DELETE FROM "CurrSqlid".DSN_STRUCT_TABLE " ,
+           "WHERE QUERYNO = "QueryNum
+Call EXECUTE_IMMEDIATE
+SQLSTMT  = "DELETE FROM "CurrSqlid".DSN_USERQUERY_TABLE " ,
+           "WHERE QUERYNO = "QueryNum
+Call EXECUTE_IMMEDIATE
+SQLSTMT  = "DELETE FROM "CurrSqlid".DSN_VIEWREF_TABLE " ,
+           "WHERE QUERYNO = "QueryNum
+Call EXECUTE_IMMEDIATE
+
+SQLSTMT      = "COMMIT "
+Call EXECUTE_IMMEDIATE
+
+SQLSTMT      = "EXPLAIN ALL SET QUERYNO="QueryNum" FOR " EXP_QUERY
+Call EXECUTE_IMMEDIATE
+
+
+EINGABE.0    = 1
+EINGABE.1 = "SELECT * FROM "CurrSqlid".PLAN_TABLE ",
+            "WHERE QUERYNO = "QueryNum ,
+            "ORDER BY PLANNO     ",
+            ""
+
+   RXDB2_PUTSTEM     = 'AUSGABE.'
+   RXDB2_GETSTEM     = 'EINGABE.'
+   CALL EXECUTE_SQL
+   IF SQLCODE       <  0 THEN DO
+      CALL SQLERROR
+      EXIT
+    END
+
+   MAXLEN  = 0
+   /* ERMITTELN MAX LAENGE DER COLUMNS   */
+   DO J=1 TO OUTSQLDA.SQLD
+      IF LENGTH(OUTSQLDA.J.SQLNAME) > MAXLEN THEN
+         MAXLEN = LENGTH(OUTSQLDA.J.SQLNAME)
+    END
+
+   /* AUSGABE DER GELESENEN DATEN IN FORM */
+   /* COL-NAME         COL-WERT           */
+   QUEUE COPIES('- START -', 8)
+   DO I=1 TO AUSGABE.0
+      IF I > 1 THEN DO
+         QUEUE ' '
+         QUEUE COPIES('- NEXT  -', 8)
+       END /* END IF I > 1 */
+      DO J=1 TO OUTSQLDA.SQLD
+         FNAME = STRIP(OUTSQLDA.J.SQLNAME)
+         INTERPRET "B="AUSGABE.I"."FNAME
+
+         COLNAME = OUTSQLDA.J.SQLNAME
+         COLNAME = STRIP(TRANSLATE(COLNAME))
+         COLTEXT = STRIP(TRANSLATE(B))
+         DROP EXTAB.
+         EXTAB.0 = 0
+         OK = EXPLAIN_TEXT(COLNAME, COLTEXT)  /* BESCHREIBUNG */
+         QUEUE SUBSTR(COLNAME, 1, MAXLEN) '=' STRIP(B)
+         DO EXI = 1 TO EXTAB.0 /* WENN BESCHREIBUNG VORHANDEN */
+            QUEUE '--'SUBSTR(' ', 1, MAXLEN) EXTAB.EXI
+          END  /* END EXI = 1  */
+       END   /* END DO J=1 TO OUTSQLDA.SQLD   */
+    END   /* END DO I=1 TO AUSGABE.0  */
+   QUEUE COPIES('- END  -', 8)
+   QUEUE "   "
+
+TAB_READ.0  = 17
+TAB_READ.1  = "DSN_COLDIST_TABLE      QUERYNO "
+TAB_READ.2  = "DSN_DETCOST_TABLE      QUERYNO "
+TAB_READ.3  = "DSN_FILTER_TABLE       QUERYNO "
+TAB_READ.4  = "DSN_FUNCTION_TABLE     QUERYNO "
+TAB_READ.5  = "DSN_KEYTGTDIST_TABLE   QUERYNO "
+TAB_READ.6  = "DSN_PGRANGE_TABLE      QUERYNO "
+TAB_READ.7  = "DSN_PGROUP_TABLE       QUERYNO "
+TAB_READ.8  = "DSN_PREDICAT_TABLE     QUERYNO "
+TAB_READ.9  = "DSN_PTASK_TABLE        QUERYNO "
+TAB_READ.10 = "DSN_QUERYINFO_TABLE    QUERYNO "
+TAB_READ.11 = "DSN_QUERY_TABLE        QUERYNO, TYPE, QUERY_STAGE, " ,
+              "EXPLAIN_TIME, SEQNO "
+TAB_READ.12 = "DSN_SORTKEY_TABLE      QUERYNO "
+TAB_READ.13 = "DSN_SORT_TABLE         QUERYNO "
+TAB_READ.14 = "DSN_STATEMNT_TABLE     QUERYNO "
+TAB_READ.15 = "DSN_STRUCT_TABLE       QUERYNO "
+TAB_READ.16 = "DSN_USERQUERY_TABLE    QUERYNO "
+TAB_READ.17 = "DSN_VIEWREF_TABLE      QUERYNO "
+
+Do tabi = 1 to TAB_READ.0
+   DROP EINGABE.
+   DROP AUSGABE.
+   RXDB2_PUTSTEM  = 'AUSGABE.'
+   RXDB2_GETSTEM  = 'EINGABE.'
+   Table          = Word(TAB_READ.tabi, 1)
+   Order          = SubWord(TAB_READ.tabi, 2)
+   EINGABE.0 = 1
+   EINGABE.1 = "SELECT * FROM "CurrSqlid"."Table ,
+               "WHERE QUERYNO = "QueryNum ,
+               "ORDER BY "Order      ,
+               ""
+
+   CALL EXECUTE_SQL
+   If AUSGABE.0 > 0 then do
+      Call Read_More_Info
+    End
+ End
+
+
+If ENV = "TSO" Then do
+   Ok = DisConnect_Location(location)
+   If SUBROUTINE = 'N' Then do
+      CALL UNLOAD_DSNREXX
+    End
+ End
+
+
+ RETURN
+
+Read_More_Info:
+QUEUE COPIES('- START -'TAB_READ.tabi'- START -', 1)
+DO I=1 TO AUSGABE.0
+   IF I > 1 THEN DO
+      QUEUE '-----'
+      QUEUE COPIES('- NEXT  -', 8)
+    END /* END IF I > 1 */
+   DO J=1 TO OUTSQLDA.SQLD
+      FNAME = STRIP(OUTSQLDA.J.SQLNAME)
+      INTERPRET "B="AUSGABE.I"."FNAME
+      COLNAME = OUTSQLDA.J.SQLNAME
+      COLNAME = STRIP(TRANSLATE(COLNAME))
+      COLTEXT = STRIP(TRANSLATE(B))
+      QUEUE SUBSTR(COLNAME, 1, MAXLEN) '=' STRIP(B)
+    END   /* END DO J=1 TO OUTSQLDA.SQLD   */
+ END   /* END DO I=1 TO AUSGABE.0  */
+QUEUE COPIES('- END  -'TAB_READ.tabi'- END  -', 1)
+QUEUE "    "
+
+Return
+
+AUSGEBEN:
+
+  DO QUEUED()
+     PULL ZEILE
+  /* ADDRESS ISREDIT "LINE_AFTER .ZDEST = (ZEILE)"   */
+     ADDRESS ISREDIT "LINE_AFTER .ZLAST = (ZEILE)"
+   END
+
+ RETURN
+
+EINLESEN:
+
+ ADDRESS ISREDIT "(FI) = LINENUM .ZFRANGE"
+ ADDRESS ISREDIT "(LA) = LINENUM .ZLRANGE"
+
+ EXP_QUERY = ""
+ DO I = FI TO LA BY 1
+    ADDRESS ISREDIT "(ZEILE) = LINE "I""
+    ZEILE = STRIP(ZEILE)
+    IF ZEILE = ''                THEN ITERATE
+    IF SUBSTR(ZEILE, 1, 1) = '-' THEN ITERATE
+    IF SUBSTR(ZEILE, 1, 1) = '*' THEN ITERATE
+    IF SUBSTR(ZEILE, 1, 3) = 'HV=' THEN DO
+       HVLIST.0 = HVLIST.0 + 1
+       HVI      = HVLIST.0
+       HVLIST.HVI = SUBSTR(ZEILE, 4)
+       ITERATE
+     END
+    EXP_QUERY = EXP_QUERY ZEILE
+    EXP_QUERY = STRIP(EXP_QUERY)
+  END
+
+return
+
+HostVar:
+  DO I = 1 TO HVLIST.0
+     SHV = WORD(HVLIST.I, 1)
+     CHV = STRIP(SUBWORD(HVLIST.I, 2))
+     DO FOREVER
+        POS = POS(SHV, EXP_QUERY, 1)
+        NPOS = POS + LENGTH(SHV)
+        POS = POS - 1
+        IF POS < 1 THEN LEAVE
+        TEMP = SUBSTR(EXP_QUERY, 1, POS) ,
+               || CHV ,
+               || SUBSTR(EXP_QUERY, NPOS)
+        EXP_QUERY = TEMP
+      END
+   END
+
+  EXP_QUERY    =  ERSETZEN_STRING(EXP_QUERY, ': H', ':H')
+  EXP_QUERY    =  ERSETZEN_STRING(EXP_QUERY, ':H:H', '?')
+  EXP_QUERY    =  ERSETZEN_STRING(EXP_QUERY, ':H', '?')
+
+INPOS   = POS(" INTO ", EXP_QUERY, 1)
+FROMPOS = POS(" FROM ", EXP_QUERY, 1)
+
+If INPOS > 0 & FROMPOS > 0 Then do
+   EXP_QUERY = Substr(EXP_QUERY, 1, Inpos-1) || ,
+               Substr(EXP_QUERY, Frompos)
+ End
+
+RETURN
+
+EXECUTE_SQL:
+
+If Datatype(CNR) <> "NUM" Then CNR = 1
+If Datatype(SNR) <> "NUM" Then SNR = CNR
+DO STI = 1 TO EINGABE.0
+   SQLSTMT = VALUE(SPACE(RXDB2_GETSTEM, 0) || STI)
+   SQLSTMT = SPACE(SQLSTMT, 1)
+   IF WORD(SQLSTMT, 1) = "CONNECT" & WORD(SQLSTMT, 2) = "TO" THEN DO
+      SQLTEXT =  " "SQLSTMT
+      Call EXECUTE_SQL_TEXT
+      IF SQLCODE <> 0 THEN DO
+         SAY "Error in "SQLSTMT "SQLCODE: " || SQLCODE
+       END
+      ITERATE
+    END
+
+   SQLTEXT =         " CLOSE C"CNR" "
+   Call EXECUTE_SQL_TEXT
+   SQLTEXT =  " DECLARE              C"CNR" CURSOR FOR S"SNR
+   Call EXECUTE_SQL_TEXT
+   IF SQLCODE <> 0 THEN DO
+      SAY "A2 DECLARE     SQLCODE="SQLCODE
+      SAY SQLSTMT
+    END
+   SQLTEXT =  " PREPARE              S"SNR" FROM :SQLSTMT"
+   Call EXECUTE_SQL_TEXT
+   IF SQLCODE <> 0 THEN DO
+      SAY "A2 PREPARE     SQLCODE="SQLCODE
+      SAY SQLSTMT
+    END
+   SQLTEXT =  " DESCRIBE S"SNR" INTO :OUTSQLDA"
+   Call EXECUTE_SQL_TEXT
+   IF SQLCODE <> 0 THEN DO
+      SAY "A2 DESCRIBE    SQLCODE="SQLCODE
+      SAY SQLSTMT
+    END
+   SQLTEXT =  " OPEN C"CNR""
+   Call EXECUTE_SQL_TEXT
+   IF SQLCODE <> 0 THEN DO
+      SAY "A2 OPEN        SQLCODE="SQLCODE
+      SAY SQLSTMT
+    END
+   IVAL = VALUE(SPACE(RXDB2_PUTSTEM, 0) || 0) "= 0"
+   INTERPRET  IVAL
+   DO WHILE SQLCODE = 0
+      SQLTEXT =  " FETCH C"CNR" USING DESCRIPTOR :OUTSQLDA"
+      Call EXECUTE_SQL_TEXT
+      IF SQLCODE <> 0 THEN LEAVE
+      IVAL = "I = " VALUE(SPACE(RXDB2_PUTSTEM, 0) || 0) "+ 1"
+      INTERPRET  IVAL
+      IVAL = SPACE(RXDB2_PUTSTEM, 0) || 0  " = I"
+      INTERPRET  IVAL
+      DO CI = 1 TO OUTSQLDA.SQLD
+         /* AUSGABE.1.DBNAME = "DSNDB07"   */
+         IVAL = VALUE(SPACE(RXDB2_PUTSTEM, 0) || I) || "." ||  ,
+                SPACE(OUTSQLDA.CI.SQLNAME, 0)
+         INTERPRET IVAL"=OUTSQLDA.CI.SQLDATA"
+       END
+    END
+ END
+
+
+RETURN
+
+EXECUTE_IMMEDIATE:
+    SQLSTMT = STRIP(SQLSTMT)
+    SELECT
+       WHEN WORD(SQLSTMT, 1) = 'CONNECT' THEN DO
+            SQLTEXT = " "SQLSTMT
+            Call EXECUTE_SQL_TEXT
+            sqlc = sqlcode
+        END
+       OTHERWISE DO
+          SQLTEXT = " EXECUTE IMMEDIATE :SQLSTMT"
+          Call EXECUTE_SQL_TEXT
+          IF SQLCODE <  0 THEN DO
+             SAY "'"SQLSTMT"'"
+             CALL SQLERROR
+             Call SET_RC(4)
+             sqlc = sqlcode
+             SQLTEXT = " ROLLBACK"
+             Call EXECUTE_SQL_TEXT
+             sqlcode  = sqlc
+           END
+        END
+     END
+
+RETURN MaxRC
+
+
+Load_DSNREXX:
+ADDRESS TSO "SUBCOM DSNREXX"
+IF RC THEN   S_RC = RXSUBCOM('ADD','DSNREXX','DSNREXX')
+
+ADDRESS DSNREXX "CONNECT "DB2_SSID
+IF SQLCODE <  0 THEN SAY "CONNECT     SQLCODE="SQLCODE "<"DB2_SSID">"
+
+Return
+
+UNLoad_DSNREXX:
+
+ADDRESS DSNREXX "DISCONNECT"
+S_RC = RXSUBCOM('DELETE','DSNREXX','DSNREXX')
+
+Return
+
+CONNECT_LOCATION:
+   If Length(SYSUID) > 0 & Length(SYSPWD) > 0 Then do
+       SQLTEXT = " CONNECT TO "ARG(1) ,
+                 "USER :SYSUID USING :SYSPWD "
+    End
+   ELSE Do
+       SQLTEXT = " CONNECT TO "ARG(1)
+    End
+   Call EXECUTE_SQL_TEXT
+RETURN 0
+
+DISCONNECT_LOCATION:
+SQLTEXT =  "RELEASE " ARG(1)
+Call EXECUTE_SQL_TEXT
+SQLTEXT =  "COMMIT  "
+Call EXECUTE_SQL_TEXT
+SQLTEXT =  " CONNECT RESET"
+Call EXECUTE_SQL_TEXT
+RETURN 0
+
+EXECUTE_SQL_TEXT:
+ Select
+    When ENV = 'TSO' Then Do
+         ADDRESS DSNREXX "EXECSQL "SQLTEXT
+         Select
+           When rc =  -2168 Then do
+                SQLCODE    = -99999
+                SQLERRMC   = "Returncode war " RC
+            End
+           Otherwise nop
+          End
+     End
+    When ENV = 'WIN' Then Do
+         CALL SQLEXEC SQLTEXT
+         SQLCODE    = SQLCA.SQLCODE
+         SQLERRMC   = SqlMsg
+     End
+    Otherwise NOP
+  End
+Return
+
+SQLERROR:
+SQLC = D2X(SQLCODE,8)
+SQLC = X2C(SQLC)
+
+
+SQL_ERRD = ""
+Do I = 1 To 6
+   SQL_ERRD = SQL_ERRD||D2C(SQLERRD.I,4)
+End
+SQL_WARN = ""
+Do I = 0 To 10
+   SQL_WARN = SQL_WARN||LEFT(SQLWARN.I,1)
+End
+
+MSG_LEN = 80
+SQLCA = 'SQLCA   '
+SQLCA = SQLCA || X2C(00000088)
+SQLCA = SQLCA || SQLC
+SQLCA = SQLCA || D2C(70,2)
+SQLCA = SQLCA || 'DSN     '
+SQLCA = SQLCA || LEFT(SQLERRMC,70)
+SQLCA = SQLCA || LEFT(SQLERRP,8)
+SQLCA = SQLCA || SQL_ERRD
+SQLCA = SQLCA || SQL_WARN
+SQLCA = SQLCA || LEFT(SQLSTATE,5)
+TIAR_MSG = D2C(MSG_LEN * 12,2) || COPIES(' ',MSG_LEN * 12)
+TEXT_LEN = D2C(MSG_LEN,4)
+ADDRESS ATTCHPGM 'DSNTIAR SQLCA TIAR_MSG TEXT_LEN'
+
+If RC < 5 Then,
+   Do
+   If RC = 4 Then Say "DSNTIAR RC=4 Message Area Truncated"
+   S_POS = 3              /* Bypass the length bytes in Message Area */
+   Do I = 1 to 12         /* Loop through all lines of message */
+      MSG_TEXT = Substr(tiar_msg,S_POS,MSG_LEN) /* Pick out text */
+      MSG_TEXT = Strip(MSG_TEXT,T," ") /* Remove trailing blanks */
+      If MSG_TEXT > " " Then Say MSG_TEXT /* Echo msg to terminal */
+      Else Iterate /* Some msg lines are blank, skip */
+      S_POS = S_POS + MSG_LEN /* Skip to next "line" of MSG data */
+   End I
+End
+Else Do
+   Say "Call to DSNTIAR - Failed. RC=" RC
+   Say 'SQLCODE ='SQLCODE; Say 'SQLERRM ='SQLERRMC
+   Say 'SQLERRP ='SQLERRP; Say 'SQLSTATE='SQLSTATE
+   XX = "SQLERRD ="
+   Do I = 1 to 6 ; XX = XX||SQLERRD.I||',';End;Say XX
+   XX = "SQLWARN ="
+   Do I = 0 to 10; XX = XX||SQLWARN.I||',';End;Say XX
+End
+
+
+RETURN
+
+EXPLAIN_TEXT: PROCEDURE EXPOSE EXTAB.
+
+COLNAME = ARG(1)
+COLTEXT = ARG(2)
+
+EXTAB. = ''
+EXTAB.0 = 0
+
+ SELECT
+   WHEN COLNAME = 'METHOD'              THEN DO
+            SELECT
+               WHEN COLTEXT = '0' THEN DO
+                  EXTAB.0 = 2
+                  EXTAB.1 = 'FIRST TABLE ACCESSED, CONTINUATION OF'
+                  EXTAB.2 = 'PREVIOUS TABLE ACCESSED, OR NOT USED'
+                  END
+               WHEN COLTEXT = '1' THEN DO
+                  EXTAB.0 = 3
+                  EXTAB.1 = 'NESTED LOOP JOIN. FOR EACH ROW OF THE'
+                  EXTAB.2 = 'PRESENT COMPOSITE TABLE, MATCHING ROWS'
+                  EXTAB.3 = 'OF A NEW TABLE ARE FOUND AND JOINED.'
+                  END
+               WHEN COLTEXT = '2' THEN DO
+                  EXTAB.0 = 4
+                  EXTAB.1 = 'MERGE SCAN JOIN. THE PRESENT COMPOSITE'
+                  EXTAB.2 = 'TABLE AND THE NEW TABLE ARE SCANNED IN'
+                  EXTAB.3 = 'THE ORDER OF THE JOIN COLUMNS,'
+                  EXTAB.4 = 'AND MATCHING  ROWS ARE JOINED.'
+                  END
+               WHEN COLTEXT = '3' THEN DO
+                  EXTAB.0 = 4
+                  EXTAB.1 = 'SORTS NEEDED BY ORDER BY, GROUP BY, SELECT'
+                  EXTAB.2 = 'DISTINCT, UNION, A QUANTIFIED PREDICATE, OR'
+                  EXTAB.3 = 'THIS STEP DOES NOT ACCESS AN IN PREDICATE.'
+                  EXTAB.4 = 'A NEW TABLE.'
+                  END
+
+               WHEN COLTEXT = '3' THEN DO
+                  EXTAB.0 = 4
+                  EXTAB.1 = 'HYBRID JOIN. THE CURRENT COMPOSITE TABLE IS'
+                  EXTAB.2 = 'SCANNED IN THE ORDER OF THE JOINCOLUMN'
+                  EXTAB.3 = 'ROWS OF THE NEW TABLE. THE NEW TABLE IS'
+                  EXTAB.4 = 'ACCESSED USING LIST PREFETCH.'
+                  END
+               OTHERWISE EXTAB.0 = 0
+             END
+    END
+   WHEN COLNAME = 'ACCESSTYPE'          THEN DO
+            SELECT
+               WHEN COLTEXT = 'I' THEN DO
+                  EXTAB.0 = 2
+                  EXTAB.1 = 'BY AN INDEX (IDENTIFIED IN ACCESSCREATOR'
+                  EXTAB.2 = 'AND ACCESSNAME)'
+                  END
+               WHEN COLTEXT = 'I1' THEN DO
+                  EXTAB.0 = 1
+                  EXTAB.1 = 'BY A ONEFETCH INDEX SCAN'
+                  END
+               WHEN COLTEXT = 'N' THEN DO
+                  EXTAB.0 = 2
+                  EXTAB.1 = 'BY AN INDEX SCAN WHEN MATCHING PREDICATE'
+                  EXTAB.2 = 'CONTAINS IN KEYWORD'
+                  END
+               WHEN COLTEXT = 'R' THEN DO
+                  EXTAB.0 = 1
+                  EXTAB.1 = 'BY A TABLE SPACE SCAN'
+                  END
+               WHEN COLTEXT = 'M' THEN DO
+                  EXTAB.0 = 2
+                  EXTAB.1 = 'BY A MULTIPLE INDEX SCAN; FOLLOWED BY MX,'
+                  EXTAB.2 = 'MI, OR MU'
+                  END
+               WHEN COLTEXT = 'MX' THEN DO
+                  EXTAB.0 = 2
+                  EXTAB.1 = 'BY AN INDEX SCAN ON THE INDEX NAMED IN'
+                  EXTAB.1 = 'ACCESSNAME'
+                  END
+               WHEN COLTEXT = 'MI' THEN DO
+                  EXTAB.0 = 1
+                  EXTAB.1 = 'BY AN INTERSECTION OF MULTIPLE INDEXES'
+                  END
+               WHEN COLTEXT = 'MU' THEN DO
+                  EXTAB.0 = 2
+                  EXTMU.1 = 'BY A UNION OF MULTIPLE INDEXES  '
+                  END
+               OTHERWISE DO
+                  EXTAB.0 = 1
+                  EXTMU.1 = 'NOT APPLICABLE TO THE CURRENT ROW.     '
+                  END
+             END
+    END
+   WHEN COLNAME = 'TSLOCKMODE'          THEN DO
+            EXTAB.0 = 1
+            SELECT
+               WHEN COLTEXT = 'IS' THEN DO
+                    EXTAB.1 = 'INTENT SHARE LOCK  '
+                END
+               WHEN COLTEXT = 'IX' THEN DO
+                    EXTAB.1 =I'TENT EXCLUSIVE LOCK '
+                END
+               WHEN COLTEXT = 'S' THEN DO
+                    EXTAB.1 = 'SHARE LOCK'
+                END
+               WHEN COLTEXT = 'U'  THEN DO
+                    EXTAB.1 = 'UPDATE LOCK'
+                END
+               WHEN COLTEXT = 'X'  THEN DO
+                    EXTAB.1 = 'EXCLUSIVE LOCK'
+                END
+               WHEN COLTEXT = 'SIX' THEN DO
+                    EXTAB.1 = 'SHARE WITH INTENT EXCLUSIVE LOCK'
+                END
+               WHEN COLTEXT = 'N'  THEN DO
+                    EXTAB.1 = ' UR ISOLATION; NO LOCK'
+                END
+               WHEN COLTEXT = 'NS' THEN DO
+                    EXTAB.0 = 2
+                    EXTAB.1 = 'FOR UR ISOLATION, NO LOCK; FOR CS, RS, OR'
+                    EXTAB.2 = 'RR, AN S LOCK.'
+                END
+               WHEN COLTEXT = 'NIS' THEN DO
+                    EXTAB.0 = 2
+                    EXTAB.1 = 'FOR UR ISOLATION, NO LOCK; FOR CS, RS, OR'
+                    EXTAB.2 = 'RR, AN IS LOCK.'
+                    END
+               WHEN COLTEXT = 'NSS' THEN DO
+                    EXTAB.0 = 2
+                    EXTAB.1 = 'FOR UR ISOLATION, NO LOCK; FOR CS OR RS,'
+                    EXTAB.2 = 'AN IS LOCK; FOR RR, AN S LOCK.'
+                    END
+               WHEN COLTEXT = 'SS' THEN DO
+                    EXTAB.0 = 2
+                    EXTAB.1 = 'FOR UR, CS, OR RS ISOLATION, AN IS LOCK;'
+                    EXTAB.2 = 'FOR RR, AN S LOCK.            '
+                    END
+               OTHERWISE EXTAB.0 = 0
+             END
+    END
+   WHEN COLNAME = 'PARALLELISM_MODE'    THEN DO
+                    EXTAB.0 = 1
+           SELECT
+               WHEN COLTEXT = 'I'  THEN DO
+                    EXTAB.1 = 'QUERY I/O PARALLELISM      '
+                    END
+               WHEN COLTEXT = 'C'  THEN DO
+                    EXTAB.1 = 'QUERY CP PARALLELISM      '
+                    END
+               WHEN COLTEXT = 'X'  THEN DO
+                    EXTAB.1 = 'SYSPLEX QUERY PARALLELISM  '
+                    END
+               OTHERWISE EXTAB.0 = 0
+             END
+    END
+   WHEN COLNAME = 'JOIN_TYPE'           THEN DO
+           EXTAB.0 = 1
+           SELECT
+               WHEN COLTEXT = 'F'  THEN DO
+                    EXTAB.1 = 'FULL OUTER JOIN '
+                    END
+               WHEN COLTEXT = 'L'  THEN DO
+                    EXTAB.1 = 'LEFT OUTER JOIN '
+                    END
+               OTHERWISE DO
+                    EXTAB.1 = 'INNER JOIN OR NO JOIN '
+                    END
+             END
+    END
+   WHEN COLNAME = 'QBLOCK_TYPE'         THEN DO
+           EXTAB.0 = 1
+           SELECT
+               WHEN COLTEXT = 'SELECT'          THEN DO
+                    EXTAB.1 = COLTEXT
+                    END
+               WHEN COLTEXT = 'INSERT'          THEN DO
+                    EXTAB.1 = COLTEXT
+                    END
+               WHEN COLTEXT = 'UPDATE'          THEN DO
+                    EXTAB.1 = COLTEXT
+                    END
+               WHEN COLTEXT = 'DELETE'          THEN DO
+                    EXTAB.1 = COLTEXT
+                    END
+               WHEN COLTEXT = 'SELUPD'          THEN DO
+                    EXTAB.1 = 'SELECT WITH FOR UPDATE OF      '
+                    END
+               WHEN COLTEXT = 'DELCUR'          THEN DO
+                    EXTAB.1 = 'DELETE WHERE CURRENT OF CURSOR '
+                    END
+               WHEN COLTEXT = 'UPDCUR'          THEN DO
+                    EXTAB.1 = 'UPDATE WHERE CURRENT OF CURSOR '
+                    END
+               WHEN COLTEXT = 'CORSUB'          THEN DO
+                    EXTAB.1 = 'CORRELATED SUBQUERY            '
+                    END
+               WHEN COLTEXT = 'NCOSUB'          THEN DO
+                    EXTAB.1 = 'NONCORRELATED SUBQUERY         '
+                    END
+               OTHERWISE DO
+                    EXTAB.0 = 0
+                    END
+             END
+    END
+   OTHERWISE DO
+       EXPTAB.0 = 0
+    END
+  END
+ RETURN 0
+
+ERSETZEN_STRING: PROCEDURE
+
+BEFEHL = ARG(1)
+VON    = ARG(2)
+NACH   = ARG(3)
+X = POS(VON, BEFEHL, 1)
+IF X = 0 THEN X = 1
+DO Z = X TO LENGTH(BEFEHL)
+   X = POS(VON, BEFEHL, Z)
+   IF X = 0 THEN LEAVE
+   ELSE Z = X + 1
+
+   VONLEN = LENGTH(VON)
+   BEFEHL  = DELSTR(BEFEHL, X, VONLEN)
+   K = X - 1
+   BEFEHL  = INSERT(NACH, BEFEHL, K)
+END   /* END DO SCHLEIFE  */
+
+ RETURN BEFEHL
+
+SET_RC:
+   IF ARG(1) > MAXRC THEN Do
+      MAXRC = ARG(1)
+      IF ispf_env = 'ISPF' THEN DO
+         ZISPFRC = ARG(1)
+         ADDRESS ISPEXEC "VPUT (ZISPFRC) SHARED"
+       END
+    END
+Return MaxRC

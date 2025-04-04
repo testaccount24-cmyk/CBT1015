@@ -1,0 +1,612 @@
+/* --------------------------*  REXX  *----------------------------- */
+/*                                                                   */
+/*  COMPARE DB2 TABLES                                              */
+/*                                                                   */
+/* --------------------------*  REXX  *----------------------------- */
+
+ENV = "TSO"
+X = MSG('OFF')
+"DELSTACK"
+USERID      = USERID()
+PARSE SOURCE SRC.1 SRC.2 SRC.3 SRC.4 SRC.5 SRC.6 SRC.7 SRC.8 SRC.9
+IF SRC.2 = "SUBROUTINE" Then SUBROUTINE    = 'Y'
+ Else                        SUBROUTINE    = 'N'
+ispf_env = SRC.8
+parse Upper version rexxType level date
+
+SYSCATS = "SYSCAT"
+SYSIBMS = "SYSIBM"
+SYSIBMA = "SYSIBMADM"
+SYSPROCA= "SYSPROC"
+DSNRECON= "N"
+SYSUID  = ""
+SYSPWD  = ""
+
+If ispf_env = 'ISPF' THEN DO
+   ADDRESS ISPEXEC 'VGET (DSNRECON) PROFILE'
+   ADDRESS ISPEXEC 'VGET (TRACKS) PROFILE'
+   ADDRESS ISPEXEC 'VGET (RECLEN) PROFILE'
+   ADDRESS ISPEXEC 'VGET (SYSIBMS) PROFILE'
+   ADDRESS ISPEXEC 'VGET (SYSCATS) PROFILE'
+   ADDRESS ISPEXEC 'VGET (SYSIBMA) PROFILE'
+   ADDRESS ISPEXEC 'VGET (SYSPROCA) PROFILE'
+   ADDRESS ISPEXEC 'VGET (SYSUID)   PROFILE'
+   ADDRESS ISPEXEC 'VGET (SYSPWD)   PROFILE'
+ End
+
+SMFID    = MVSVAR('SYSNAME')
+
+SSID             = arg(1)
+LOCATION         = arg(2)
+lnr              = arg(3)
+tabnr            = arg(4)
+auswkz           = arg(5)
+OBJECT1          = arg(6)
+OBJECT2          = arg(7)
+TABLESPACE       = arg(8)
+DB2_LIST_OBJ     = arg(9)
+DB2_SSID         = SSID
+
+If DSNRECON = "Y" Then Do
+   Call Load_DSNREXX
+ End
+
+CALL Init
+PFLOC            = LOCATION
+parse upper value object1 with PFTBCR '.' PFTBNA
+PTTBCR  = PFTBCR
+PTTBNA  = PFTBNA
+Call Create_COLCOMP
+
+
+/* ADDRESS ISPEXEC "DISPLAY PANEL(PCOLCOMP)" */
+floc        = ""
+tloc        = ""
+DO Forever
+   ADDRESS ISPEXEC "TBDISPL COLCOMP PANEL(PCOLCOMP)"
+   if rc <> 0 then say rc  ZERRSM ZERRLM
+   com = Strip(Translate(com))   /* UPPER CASE   */
+   Select
+     When COM     = "CAN"  Then leave
+     When COM     = "GEN ALTER"  Then Do
+          com = ""
+          call Gen_Alter_Table_Statement
+      end
+     When COM     = "GEN"        Then Do
+          com = ""
+          call Gen_Alter_Table_Statement
+      end
+     When COM     = "ALTER"  Then Do
+          com = ""
+          call Gen_Alter_Table_Statement
+      end
+     When PFTASTE = 'PF03' Then leave
+     When PFTASTE = 'PF04' Then leave
+     When rc  <> 0 then do
+          LEAVE
+      End
+     Otherwise COM = ""
+    END
+
+    Call Create_COLCOMP
+
+    if length(PTTBNA) = 0 Then PTTBNA = PFTBNA
+    OK  = COMPTAB(PFLOC, PFTBCR,  PFTBNA,   ,
+                  PTLOC, PTTBCR,  PTTBNA,   ,
+                 )
+
+    ADDRESS ISPEXEC "TBTOP  COLCOMP"
+    ADDRESS ISPEXEC "TBSKIP COLCOMP "
+ End
+
+ADDRESS ISPEXEC "TBEND    COLCOMP "
+ADDRESS ISPEXEC "TBCLOSE COLCOMP"
+ADDRESS ISPEXEC "TBERASE  COLCOMP "
+/* if rc <> 0 then say rc  ZERRSM ZERRLM */
+
+
+If DSNRECON = "Y" Then Do
+   Call UNLoad_DSNREXX
+ End
+
+
+Return
+
+Create_COLCOMP:
+ADDRESS ISPEXEC "CONTROL ERRORS RETURN"
+ADDRESS ISPEXEC "TBEND    COLCOMP "
+ADDRESS ISPEXEC "TBERASE  COLCOMP "
+ADDRESS ISPEXEC "TBCREATE COLCOMP "   ,
+                   " KEYS(COLNAME)   ",
+                   "NAMES(COLSEL,    ",
+                   "      FNAME,     ",
+                   "      FTBNAME,   ",
+                   "      FTBCREAT,  ",
+                   "      FCOLNO,    ",
+                   "      FCOLTYPE,  ",
+                   "      FLENGTH,   ",
+                   "      FSCALE,    ",
+                   "      FNULLS,    ",
+                   "      FDEFAULT,  ",
+                   "      FDEFAULV,  ",
+                   "      TTBNAME,   ",
+                   "      TTBCREAT,  ",
+                   "      TNAME,     ",
+                   "      TCOLNO,    ",
+                   "      TCOLTYPE,  ",
+                   "      TLENGTH,   ",
+                   "      TSCALE,    ",
+                   "      TNULLS,    ",
+                   "      TDEFAULT,  ",
+                   "      TDEFAULV)  ",
+                   " REPLACE"
+
+return
+
+Gen_Alter_Table_Statement:
+drop sl.
+sl.0 = 0
+
+ADDRESS ISPEXEC "TBOPEN   COLCOMP"
+ADDRESS ISPEXEC "TBTOP    COLCOMP"
+ADDRESS ISPEXEC "TBSKIP   COLCOMP"
+DO WHILE RC = 0
+
+   IF TNULLS = "Y" THEN NULL = ""
+   ELSE                 NULL = "NOT NULL"
+
+   DEFAULT = ""
+   IF TDEFAULT = "Y" | ,
+      TDEFAULT = "B" | ,
+      TDEFAULT = "1" | ,
+      TDEFAULT = "2" | ,
+      TDEFAULT = "3" | ,
+      TDEFAULT = "4" | ,
+      TDEFAULT = "5" | ,
+      TDEFAULT = "S" | ,
+      TDEFAULT = "U" THEN
+         DEFAULT = "     WITH DEFAULT "
+
+   SELECT
+      WHEN TDEFAULT = "Y" & FNULLS = "Y" THEN
+           DEFAULT = DEFAULT||"NULL "
+      WHEN TDEFAULT = "S" THEN
+           DEFAULT = DEFAULT||"CURRENT SQLID "
+      WHEN TDEFAULT = "U" THEN
+           DEFAULT = DEFAULT||"USER "
+      WHEN TDEFAULT = "A" THEN
+           DEFAULT = DEFAULT||"GENERATED ALWAYS "
+      WHEN TDEFAULT = "D" THEN
+           DEFAULT = DEFAULT||"GENERATED BY DEFAULT "
+      WHEN TDEFAULT = "I" THEN
+           DEFAULT = DEFAULT||"GENERATED ALWAYS AS IDENTITY "
+      WHEN TDEFAULT = "J" THEN
+           DEFAULT = DEFAULT||"GENERATED BY DEFAULT AS IDENTITY "
+      WHEN TDEFAULT = "E" THEN
+           DEFAULT = DEFAULT||"GENERATED ALWAYS "  ,
+                "FOR EACH ROW ON UPDATE AS ROW CHANGE TIMESTAMP  "
+      WHEN TDEFAULT = "F" THEN
+           DEFAULT = DEFAULT||"GENERATED BY DEFAULT " ,
+                "FOR EACH ROW ON UPDATE AS ROW CHANGE TIMESTAMP  "
+      OTHERWISE DEFAULT= DEFAULT
+   END
+
+   SELECT
+      WHEN TCOLTYPE = "CHAR" THEN
+           COLDEF = "CHAR("TLENGTH")"
+      WHEN TCOLTYPE = "DECIMAL" THEN
+           COLDEF = "DECIMAL("TLENGTH" , "TSCALE")"
+      WHEN TCOLTYPE = "DATE"    THEN COLDEF = "DATE"
+      WHEN TCOLTYPE = "TIME"    THEN COLDEF = "TIME"
+      WHEN TCOLTYPE = "TIMESTMP" THEN COLDEF = "TIMESTAMP"
+      WHEN TCOLTYPE = "TIMESTZ" THEN COLDEF = "TIMESTAMP WITH TIME ZONE"
+      WHEN TCOLTYPE = "BIGINT"  THEN COLDEF = "BIGINT"
+      WHEN TCOLTYPE = "INTEGER" THEN COLDEF = "INTEGER"
+      WHEN TCOLTYPE = "SMALLINT" THEN COLDEF = "SMALLINT"
+      WHEN TCOLTYPE = "ROWID"   THEN COLDEF = "ROWID"
+      WHEN TCOLTYPE = "XML"     THEN COLDEF = "XML"
+      WHEN TCOLTYPE = "VARBIN"  THEN COLDEF = "VARBINARY"
+      WHEN TCOLTYPE = "BINARY"  THEN COLDEF = "BINARY"
+      WHEN TCOLTYPE = "FLOAT" & TLENGTH < 5 THEN
+           COLDEF = "FLOAT(21)"
+      WHEN TCOLTYPE = "FLOAT" & TLENGTH < 9 THEN
+           COLDEF = "DOUBLE"
+      WHEN TCOLTYPE = "FLOAT" & TLENGTH > 8 THEN
+           COLDEF = "FLOAT(53)"
+      WHEN TCOLTYPE = "VARCHAR" THEN
+           COLDEF = "VARCHAR("TLENGTH")"
+      WHEN TCOLTYPE = "LONGVAR" THEN
+           COLDEF = "LONG VARCHAR"
+      WHEN TCOLTYPE = "GRAPHIC" THEN
+           COLDEF = "GRAPHIC("TLENGTH")"
+      WHEN TCOLTYPE = "VARG" THEN
+           COLDEF = "VARGRAPHIC("TLENGTH")"
+      WHEN TCOLTYPE = "LONGVARG" THEN
+           COLDEF = "LONG VARGRAPHIC"
+      WHEN TCOLTYPE = "BLOB" THEN    Do
+           COLDEF = "BLOB("TLENGTH2")"
+           IF TLENGTH > 4 Then Do
+              coldef = coldef " Inline length " TLENGTH - 4
+            end
+       end
+      WHEN TCOLTYPE = "CLOB" THEN    Do
+           COLDEF = "CLOB("TLENGTH2")"
+           IF TLENGTH > 4 Then Do
+              coldef = coldef " Inline length " TLENGTH - 4
+            end
+       end
+      WHEN TCOLTYPE = "DBCLOB" THEN
+           COLDEF = "DBCLOB("TLENGTH2")"
+      WHEN TCOLTYPE = "DISTINCT" THEN
+           COLDEF  TRANSLATE(FDEFAULV,' ','00'X)
+      OTHERWISE COLDEF = TCOLTYPE" <===UNKNOWN TYPE"
+   END
+
+
+
+   Select
+     When  COLSEL   = "CNO"   THEN DO
+           NOP
+      End
+     When  COLSEL   = "TYP"   THEN DO
+           NOP
+      End
+     When  COLSEL   = "LEN"   THEN DO
+           NOP
+      End
+     When  COLSEL   = "SCA"   THEN DO
+           NOP
+      End
+     When  COLSEL   = "NUL"   THEN DO
+           NOP
+      End
+     When  COLSEL   = "DEF"   THEN DO
+           NOP
+      End
+     When  COLSEL   = "DEV"   THEN DO
+           NOP
+      End
+     When  COLSEL   = "ADD"   THEN DO
+           OK = NSL("ALTER TABLE "Space(Fromcreator "." Fromname  , 0) )
+           OK = NSL("      ADD COLUMN " Strip(TNAME) Strip(COLDEF)  )
+           OK = NSL("      "NULL DEFAULT " ; "                      )
+      End
+     When  COLSEL   = "DROP"  THEN DO
+           OK = NSL("ALTER TABLE "Space(TTBCREAT "." TTBNAME, 0)    )
+           OK = NSL("      DROP COLUMN " Strip(TNAME) Strip(COLDEF)  )
+           OK = NSL("     ; "                                       )
+      End
+     Otherwise nop
+    End
+
+   ADDRESS ISPEXEC "TBSKIP   COLCOMP "
+ END
+
+ If sl.0 > 0 Then Call Edit_Stmt
+
+Return
+
+NSL: Procedure Expose sl.
+ sl.0   = sl.0 + 1
+ sli    = sl.0
+ sl.sli = Arg(1)
+return 0
+
+/*------------------------------------------------------------------*/
+
+OPEN_CURSOR:
+
+    IF DATATYPE(CURSOR) /= 'NUM' THEN CURSOR = 1
+    IF DATATYPE(STMT)   /= 'NUM' THEN STMT   = 1
+    ADDRESS DSNREXX   "EXECSQL CLOSE C"CURSOR
+    ADDRESS DSNREXX   "EXECSQL DECLARE C"CURSOR" CURSOR FOR S"STMT
+    IF SQLCODE /= 0 THEN DO
+       SAY "ERROR ON DECLARE, RC="RC ,
+           "SQLCODE="SQLCODE         ,
+           "SQLERRMC="SQLERRMC       ,
+           ""
+           OK = SET_RC(4)
+    END
+    ADDRESS DSNREXX   "EXECSQL PREPARE S"STMT" FROM :SQLSTMT"
+    IF SQLCODE /= 0 THEN DO
+       SAY "ERROR ON PREPARE S"STMT"RC="RC ,
+           "SQLCODE="SQLCODE         ,
+           "SQLERRMC="SQLERRMC       ,
+           ""
+           OK = SET_RC(4)
+    END
+
+    ADDRESS DSNREXX   "EXECSQL OPEN C"CURSOR
+    IF SQLCODE /= 0 THEN DO
+       SAY "ERROR ON OPEN C"CURSOR" , RC="RC ,
+           "SQLCODE="SQLCODE         ,
+           "SQLERRMC="SQLERRMC       ,
+           ""
+           OK = SET_RC(4)
+    END
+
+RETURN
+
+CLOSE_CURSOR:
+
+    ADDRESS DSNREXX   "EXECSQL CLOSE C"CURSOR
+
+RETURN
+
+Load_DSNREXX:
+ADDRESS TSO "SUBCOM DSNREXX"
+IF RC THEN   S_RC = RXSUBCOM('ADD','DSNREXX','DSNREXX')
+
+ADDRESS DSNREXX "CONNECT "DB2_SSID
+IF SQLCODE <  0 THEN SAY "CONNECT     SQLCODE="SQLCODE "<"DB2_SSID">"
+
+Return
+
+UNLoad_DSNREXX:
+
+ADDRESS DSNREXX "DISCONNECT"
+S_RC = RXSUBCOM('DELETE','DSNREXX','DSNREXX')
+
+Return
+
+CONNECT_LOCATION:
+   if  sysuid = "SYSUID" Then sysuid = ""
+   if  syspwd = "SYSPWD" Then syspwd = ""
+   IF LENGTH(STRIP(arg(1))) > 0 THEN OK = DISCONNECT_LOCATION(Arg(1))
+   If Length(SYSUID) > 0 & Length(SYSPWD) > 0 Then do
+      ADDRESS DSNREXX "EXECSQL CONNECT TO "ARG(1) ,
+                      "USER :SYSUID USING :SYSPWD "
+    End
+   ELSE Do
+       ADDRESS DSNREXX "EXECSQL CONNECT TO "ARG(1)
+    End
+
+   IF SQLCODE /= 0 THEN DO
+      SAY "ERROR ON DECLARE, RC="RC ,
+          "SQLCODE="SQLCODE         ,
+          "SQLERRMC="SQLERRMC       ,
+          ""
+          OK = SET_RC(8)
+      exit
+    END
+   DB2L   =  SUBSTR(SQLERRP,1,3)
+   DB2V   =  SUBSTR(SQLERRP,4,2)
+   DB2R   =  SUBSTR(SQLERRP,6,2)
+
+   If DB2L  = "DSN" then do
+      REMOTE_LOC = 'N'
+    End
+   Else Do
+      REMOTE_LOC = 'Y'
+    End
+RETURN 0
+
+DISCONNECT_LOCATION:
+ADDRESS DSNREXX "EXECSQL RELEASE " arg(1)
+ADDRESS DSNREXX "EXECSQL COMMIT  "
+ADDRESS DSNREXX "EXECSQL CONNECT RESET"
+RETURN 0
+
+Init:
+
+CURSOR        = 1
+STMT          = 1
+DROP OU.
+OU.0          = 0
+MAXRC         = 0
+OK            = SET_RC(0)
+FROMLOCATION  = ARG(1)
+FROMCREATOR   = ARG(2)
+FROMNAME      = ARG(3)
+TOLOCATION    = ARG(4)
+TOCREATOR     = ARG(5)
+TONAME        = ARG(6)
+
+return
+
+SET_RC:
+   IF ARG(1) > MAXRC THEN MAXRC = ARG(1)
+   IF SRC.8 = 'ISPF' THEN DO
+      ZISPFRC = MAXRC
+      ADDRESS ISPEXEC "VPUT (ZISPFRC) SHARED"
+    END
+Return MAXRC
+/* --------------------------*  REXX  *----------------------------- */
+/*                                                                   */
+/*  COMPARE TABLE                                                   */
+/*                                                                   */
+/* --------------------------*  REXX  *----------------------------- */
+
+COMPTAB:
+
+FROMLOCATION  = ARG(1)
+FROMCREATOR   = ARG(2)
+FROMNAME      = ARG(3)
+
+TOLOCATION    = ARG(4)
+TOCREATOR     = ARG(5)
+TONAME        = ARG(6)
+
+CURSOR        = 1
+STMT          = 1
+DROP OU.
+OU.0          = 0
+MAXRC         = 0
+OK            = SET_RC(0)
+
+OK = GET_COLLISTE("F", Fromlocation, Fromcreator, Fromname, SYSIBMS)
+OK = GET_COLLISTE("T", Tolocation,   Tocreator,   Toname,   SYSIBMS)
+
+RETURN MAXRC
+
+GET_COLLISTE:  PROCEDURE
+FT      = arg(1)
+LOC     = arg(2)
+CREATOR = arg(3)
+NAME    = arg(4)
+SYSIBMS = arg(5)
+
+
+REMOTE_LOC = 'N'
+IF LENGTH(STRIP(loc)) > 0 THEN Do
+   OK = CONNECT_LOCATION(LOC)
+ End
+
+SQLSTMT  = "SELECT CO.TBNAME                       ",
+           "    ,  CO.TBCREATOR                    ",
+           "    ,  CO.NAME                         ",
+           "    ,  CO.COLNO                        ",
+           "    ,  CO.COLTYPE                      ",
+           "    ,  CO.LENGTH                       ",
+           "    ,  CO.SCALE                        ",
+           "    ,  CO.NULLS                        ",
+           ""
+
+If REMOTE_LOC = 'N' Then do
+   sqlstmt = sqlstmt ||  "    ,  CO.DEFAULT        "
+   sqlstmt = sqlstmt ||  "    ,  CO.DEFAULTVALUE   "
+ End
+else do
+   sqlstmt = sqlstmt ||  ", CASE When CO.DEFAULT IS NULL THEN 'N'" ,
+                         " ELSE 'Y' END AS DEFAULT               "
+   sqlstmt = sqlstmt ||  "    ,  CO.DEFAULT AS DEFAULTVALUE "
+ End
+ sqlstmt = sqlstmt || ,
+           "FROM  "SYSIBMS".SYSCOLUMNS CO          ",
+           "WHERE CO.TBNAME    = '"NAME"'          ",
+           "AND   CO.TBCREATOR ='"CREATOR"'        ",
+           "ORDER BY CO.TBNAME, CO.TBCREATOR, CO.COLNO ",
+           ""
+CURSOR = 20
+STMT   = 20
+CALL OPEN_CURSOR  /*  PREPARE/DECLARE/OPEN  CURSOR */
+
+DO WHILE SQLCODE = 0   /* EIGENTLICHE VERARBEITUNG   */
+    ADDRESS DSNREXX   "EXECSQL FETCH C"CURSOR" INTO :TBNAME        " ,
+                      "                   ,         :TBCREATOR     " ,
+                      "                   ,         :NAME          " ,
+                      "                   ,         :COLNO         " ,
+                      "                   ,         :COLTYPE       " ,
+                      "                   ,         :LENGTH        " ,
+                      "                   ,         :SCALE         " ,
+                      "                   ,         :NULLS         " ,
+                      "                   ,         :DEFAULT  :I1  " ,
+                      "                   ,         :DEFAULTVALUE :I2" ,
+                      ""
+    select
+        When SQLCODE = 100 THEN DO
+             CALL CLOSE_CURSOR    /* CLOSE CURSOR */
+             LEAVE
+          End
+        When SQLCODE /= 0  THEN DO
+             SAY "ERROR ON FETCH C"CURSOR", RC="RC ,
+                 "SQLCODE="SQLCODE         ,
+                 "SQLERRMC="SQLERRMC       ,
+                 ""
+             CALL CLOSE_CURSOR    /* CLOSE CURSOR */
+             OK = SET_RC(8)
+             RETURN MAXRC
+          End
+        Otherwise NOP
+     End
+
+    If REMOTE_LOC = 'Y' Then COLNO = COLNO + 1
+    If COLTYPE <> "DECIMAL" THEN SCALE = 0
+    IF FT = "F" Then do
+       COLNAME   = NAME
+       COLSEL    = "DROP"
+       FTBNAME   = TBNAME
+       FTBCREAT  = TBCREATOR
+       FNAME     = NAME
+       FCOLNO    = COLNO
+       FCOLTYPE  = COLTYPE
+       FLENGTH   = LENGTH
+       FSCALE    = SCALE
+       FNULLS    = NULLS
+       FDEFAULT  = DEFAULT
+       FDEFAULV  = DEFAULTVALUE
+       ADDRESS ISPEXEC "TBADD COLCOMP"
+     End
+    Else Do
+       COLNAME   = NAME
+       ADDRESS ISPEXEC "TBTOP  COLCOMP"
+       ADDRESS ISPEXEC "TBSCAN COLCOMP ARGLIST(COLNAME) CONDLIST(EQ)"
+       If rc =  0 Then do
+          COLSEL    = " "
+        End
+       ELSE Do
+          COLNAME   = NAME
+          COLSEL    = "ADD"
+          FTBNAME   = " "
+          FTBCREAT  = " "
+          FNAME     = " "
+          FCOLNO    = " "
+          FCOLTYPE  = " "
+          FLENGTH   = " "
+          FSCALE    = " "
+          FNULLS    = " "
+          FDEFAULT  = " "
+          FDEFAULV  = " "
+        End
+       TTBNAME   = TBNAME
+       TTBCREAT  = TBCREATOR
+       TNAME     = NAME
+       TCOLNO    = COLNO
+       TCOLTYPE  = COLTYPE
+       TLENGTH   = LENGTH
+       TSCALE    = SCALE
+       TNULLS    = NULLS
+       TDEFAULT  = DEFAULT
+       TDEFAULV  = DEFAULTVALUE
+       IF COLSEL    = "" THEN DO
+          SELECT
+             When  TCOLNO    <> FCOLNO   THEN COLSEL    = "CNO"
+             When  TCOLTYPE  <> FCOLTYPE THEN COLSEL    = "TYP"
+             When  TLENGTH   <> FLENGTH  THEN COLSEL    = "LEN"
+             When  TSCALE    <> FSCALE   THEN COLSEL    = "SCA"
+             When  TNULLS    <> FNULLS   THEN COLSEL    = "NUL"
+             When  TDEFAULT  <> FDEFAULT THEN COLSEL    = "DEF"
+             When  TDEFAULV  <> FDEFAULV THEN COLSEL    = "DEV"
+             Otherwise NOP
+           End
+        End
+       ADDRESS ISPEXEC "TBMOD  COLCOMP"
+     End
+
+  END
+
+IF LENGTH(STRIP(loc)) > 0 THEN OK = DISCONNECT_LOCATION(LOC)
+CALL CLOSE_CURSOR    /* CLOSE CURSOR */
+RETURN 0
+/*------------------------------------------------------------------*/
+Edit_Stmt:
+
+DSNAME = ZOSB1900("ZOSB1","DSNAME", "STMT", LNR)
+LRECL   = RECLEN
+
+IF LISTDSI(DSNAME) = 0 THEN do
+    ADDRESS "TSO" "ALLOC F(SELDD) DA("DSNAME") SHR"
+ end
+else do
+    ADDRESS "TSO" "ALLOC F(SELDD) DA("DSNAME") NEW CATALOG ,
+          SPACE("TRACKS","TRACKS") TRACKS REUSE,
+          LRECL("RECLEN") UNIT(SYSDA)"
+ end
+
+
+ADDRESS "TSO" "EXECIO * DISKW SELDD ( STEM SL. FINIS"
+ADDRESS "TSO" "FREE FI(SELDD)"
+
+ok   = ZOSB1911(SSID,     ,
+                LOCATION,  ,
+                EINGABE,   ,
+                OBJ,       ,
+                DSNAME,    ,
+                LNR   )
+
+
+If DSNRECON = "Y" Then Do
+   Call Load_DSNREXX
+ End
+
+return

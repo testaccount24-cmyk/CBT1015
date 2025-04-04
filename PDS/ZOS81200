@@ -1,0 +1,462 @@
+/* REXX */
+/*******************************************************************/
+/*                                                                 */
+/* PROGRAMMNAME     : ZOS81200  (fuer zOS V8  Nr 200)              */
+/* AUSRUF           : AUS ISPF                                     */
+/* AUTHER           : ULRICH BRAEUER                               */
+/* FUNKTION         : Auswahl Catalog Informationen                */
+/*                                                                 */
+/*                                                                 */
+/*******************************************************************/
+
+"DELSTACK"
+ENV      = "TSO"
+X        = MSG('OFF')
+USER     = USERID()
+SMFID    = MVSVAR('SYSNAME')
+SYSUID  = ""
+SYSPWD  = ""
+
+ADDRESS ISPEXEC "CONTROL ERRORS RETURN"
+
+ADDRESS ISPEXEC 'VGET (SYSUID)   PROFILE'
+ADDRESS ISPEXEC 'VGET (SYSPWD)   PROFILE'
+ADDRESS ISPEXEC 'VGET (UDBAUSW2 UDBOBJ UDBTRACE) PROFILE'
+IF UDBTRACE = 'ON' THEN TRACE I
+ELSE                    TRACE
+
+DSNRECON   = "N"
+ADDRESS ISPEXEC 'VGET (DSNRECON) PROFILE'
+
+ssid     = arg(1)
+location = arg(2)
+lnr      = arg(3)
+tabnr    = arg(4)
+DB2Vers  = arg(5)
+proclib  = arg(6)
+auswahl  = UDBAUSW2
+Object   = UDBOBJ
+editsql  = ""
+
+if DSNRECON <> "Y" Then Do
+   call LOAD_DSNREXX
+   call CONNECT_DSNREXX
+ End
+OK = DISConnect_Location(location)
+Version = UDBVERS
+if DSNRECON =  "Y" Then Do
+   call DISCONNECT_DSNREXX
+   call UNLOAD_DSNREXX
+ End
+
+Call Init_Menu
+
+DO FOREVER
+   ADDRESS ISPEXEC 'VGET (UDBTRACE) PROFILE'
+   IF UDBTRACE = 'ON' THEN TRACE I
+   ELSE                    TRACE
+
+   dynarea = substr(dyndata,1+(curline-1)*80) /*set dynamic variable */
+   size = length(dynarea)                     /*Set scalar variable  */
+   ADDRESS ISPEXEC "DISPLAY PANEL(PAUSW200)"
+   COMMAND = ZCMD
+   ADDRESS ISPEXEC "VGET (ZVERB,ZSCROLLA,ZSCROLLN)"
+   MaxScreenLines = DYNDPTH
+
+   /* PF Tasten Pruefen  */
+   Select
+      When zverb  = 'UP'   Then Do     /* Scroll up              */
+           If zscrolla = 'MAX' Then Do          /*  if scroll was max */
+              curline = 1                       /*    scroll to top   */
+           End
+           Else Do
+              curline = curline - MaxScreenLines    /* (max bottom)   */
+              if curline < 1 then Curline = 1
+            End
+           ZCMD    = ""
+           Iterate
+       End
+      When zverb  = 'DOWN'  Then Do
+           If zscrolla = 'MAX' Then Do
+            curline = maxlines
+           end
+           Else do
+            curline_Act = curline
+            curline = curline + MaxScreenLines
+            If curline > maxlines Then Curline = curline_Act
+            if DynArea_len >= dyndata_len Then Do
+               curline = 1
+             End
+            end
+           ZCMD    = ""
+           Iterate
+       End
+      When SUBSTR(COMMAND,1,3) = "CAN"  THEN LEAVE
+      WHEN SUBSTR(COMMAND,1,5) = "ZPARM"  THEN DO
+           Call ZOSZPARM ssid, lnr
+           ZCMD    = ""
+           Iterate
+       end
+      WHEN WORD(COMMAND, 1) = "CONNECT" ,
+         | WORD(COMMAND, 1) = "RESET" Then do
+           Select
+             When Word(Command, 1) = "RESET" Then Location = ""
+             When Word(Command, 2) = "RESET" Then Location = ""
+             When Words(Command) = 3  Then Location = Word(Command, 3)
+             When Words(Command) = 2  Then Location = Word(Command, 2)
+             Otherwise                     Location = ""
+            End
+             If length(LOCation) > 0 Then do
+                RETC = Connect_Location(Location)
+                IF RETC > 0 then do
+                   Location = ""
+                   ZCMD     = ""
+                   ITERATE
+                 END
+              End
+             Else Do
+                RETC = 4
+              End
+
+             If RETC = 0 Then Do
+                parse value sqlerrp with DB_ENV 4 DB_Vers 6 DB_Rel 8
+                sqlerrp_s = sqlerrp
+                DB2_ENV = DB_ENV
+                RETC = DISConnect_Location(Location)
+                DB_ENV = DB2_ENV
+                parse value sqlerrp_s with DB_ENV 4 DB_Vers 6 DB_Rel 8
+                Select
+                  WHEN DB_ENV = "DSN" Then NOP
+                  WHEN DB_ENV = "SQL" Then DO
+                       Select
+                         When DB_Vers = 10 Then do
+                              CALL LUWA1200 ssid, location, lnr, Tabnr
+                          End
+                         Otherwise do
+                              CALL LUW97200 ssid, location, lnr, Tabnr
+                          End
+                        End
+                       Location = ""
+                       RETC = DISConnect_Location(Location)
+                       if DSNRECON <> "Y" Then Do
+                          call DISCONNECT_DSNREXX
+                          call UNLOAD_DSNREXX
+                          call LOAD_DSNREXX
+                          call CONNECT_DSNREXX
+                        End
+                   End
+                  Otherwise Location = ""
+                 End
+              End
+             Else Do
+                Location = ""
+            End
+            ZCMD    = ""
+            Iterate
+       end
+      WHEN WORD(COMMAND,1) = "TRACE" then do
+           IF WORD(COMMAND, 2) = "ON"  Then trace('I')
+           IF WORD(COMMAND, 2) = "OFF" Then trace('O')
+           UDBTRACE = word(COMMAND, 2)
+           UDBAUSW2 = auswahl
+           UDBOBJ   = Object
+           ADDRESS ISPEXEC 'VPUT (UDBTRACE) PROFILE'
+           ZCMD = ''
+           Iterate
+       end
+      WHEN SUBSTR(COMMAND,1,6) = "SQLERR"  THEN DO
+           Call SQLERR
+           ZCMD = ''
+           Iterate
+       end
+      WHEN SUBSTR(COMMAND,1,3) = "SQL"  THEN DO
+           command = "SQL"
+           call AUFRUF_ZOS81910
+           ZCMD = ''
+           Iterate
+       end
+      WHEN SUBSTR(COMMAND,1,3) = "OPT"  THEN DO
+           call ARXPARM1 SSID
+           ZCMD = ''
+           Iterate
+       end
+      WHEN SUBSTR(COMMAND,1,7) = "DSNTIAD"     ,
+         | SUBSTR(COMMAND,1,8) = "DSNTIAUL"    ,
+         | SUBSTR(COMMAND,1,7) = "DSNTEP2"     ,
+         | SUBSTR(COMMAND,1,7) = "DSNTEP4"     ,
+         | SUBSTR(COMMAND,1,8) = "DSNJU003"    ,
+         | SUBSTR(COMMAND,1,8) = "DSNJU004"    Then Do
+           EINGABE    = COMMAND
+           OBJECT1    = ""
+           OBJECT2    = ""
+           OBJECT3    = ""
+           OBJECT4    = ""
+           OBJECT5    = ""
+           CALL AUFRUF_ZOS81915
+           ZCMD = ''
+           Iterate
+       end
+      When PF                  = 'PF03' THEN LEAVE
+      When PF                  = 'PF04' THEN DO
+           if DSNRECON <> "Y" Then Do
+             call UNLOAD_DSNREXX
+             call DISCONNECT_DSNREXX
+            End
+           EXIT 0
+       End
+      Otherwise DO
+           UDBAUSW2 = auswahl
+           UDBOBJ   = Object
+           ADDRESS ISPEXEC 'VPUT (UDBAUSW2 UDBOBJ) PROFILE'
+       End
+     End
+
+   If Object = '' Then do
+      Object = '%'
+      MSGLINE = "Bitte Object angeben || (Wildcard *, %)"
+    end
+
+   AwOk = ZOS81900("ZOS81210" ,,
+                   "CHKFKAW"  ,,
+                    auswahl    ,,
+                    lnr    )
+
+   If AwOk = '' Then do
+      MSGLINE = "Bitte richtige auswahl treffen "
+      iterate
+    end
+
+   Object = Strip(Translate(Object))
+   Object = TRANSLATE(Object, '%', '*')
+
+   /* Aufruf der gewaehlten Funktion */
+   MSGLINE = " "
+   CALL zOS81210 SSID,     ,
+                 EDITSQL , ,
+                 LOCATION, ,
+                 lnr,      ,
+                 tabnr,    ,
+                 DB2Vers,  ,
+                 proclib,  ,
+                 AUSWAHL,  ,
+                 OBJECT
+   if RESULT /= 0 Then do
+      MSGLINE = "Returncode zOS81210 = "RESULT
+    end
+ end
+
+if DSNRECON <> "Y" Then Do
+   call DISCONNECT_DSNREXX
+   call UNLOAD_DSNREXX
+ End
+
+Return 0
+
+/* -------------------------------------------------------------*/
+
+LOAD_DSNREXX:
+    'SUBCOM DSNREXX'
+    RC2 = RXSUBCOM('ADD','DSNREXX','DSNREXX')
+    IF RC2 <> 0 THEN DO
+       SAY "Error on LOAD DSNREXX RC2:"RC2
+       OK = SET_RC(12)
+       EXIT MAXRC
+     End
+RETURN
+
+UNLOAD_DSNREXX:
+    S_RC = RXSUBCOM('DELETE','DSNREXX','DSNREXX')
+RETURN
+
+CONNECT_DSNREXX:
+    ADDRESS DSNREXX 'CONNECT 'SSID
+    IF RC <  0 THEN DO
+       SAY "ERROR ON CONNECT, RC="RC ,
+           "SQLCODE="SQLCODE         ,
+           "SQLERRMC="SQLERRMC       ,
+           ""
+    OK = SET_RC(12)
+    EXIT MAXRC
+    END
+RETURN 0
+
+DISCONNECT_DSNREXX:
+ADDRESS TSO "SUBCOM DSNREXX"
+If RC = 0 Then do
+   ADDRESS DSNREXX "DISCONNECT"
+ End
+Return 0
+
+Connect_Location:
+
+if DSNRECON =  "Y" Then Do
+   call LOAD_DSNREXX
+   call CONNECT_DSNREXX
+ end
+
+ADDRESS DSNREXX "EXECSQL CONNECT TO "ARG(1)
+If sqlcode =  0 then OK = DisConnect_Location(ARG(1) )
+ ELSE Do
+      OK = GetPWD()
+      IF Datatype(OK) = 'NUM' Then Return 8
+      ELSE PARSE VALUE OK WITH SYSUID SYSPWD .
+  End
+
+   If Length(SYSUID) > 0 & Length(SYSPWD) > 0 Then do
+      ADDRESS DSNREXX "EXECSQL CONNECT TO "ARG(1) ,
+                      "USER :SYSUID USING :SYSPWD "
+    End
+   ELSE Do
+       ADDRESS DSNREXX "EXECSQL CONNECT TO "ARG(1)
+    End
+ IF SQLCODE <> 0 THEN DO
+    MSGTXT = 'ERROR IN CONNECT TO ' || LOCATION ||,
+             ' SQLCODE: ' || SQLCODE
+    SAY MSGTXT
+    maxrc = 8
+  END
+ ElSE Do
+    MAXRC = 0
+    parse value sqlerrp with DB_ENV 4 DB_Vers 6 DB_Rel 8 DB_Mod
+    UDBVERS = DB_VERS || "." || DB_Rel || "." || DB_MOD
+    select
+        when DB_MOD = 0 THEN UDBVERS = UDBVERS "(CM)"
+        when DB_MOD = 1 THEN UDBVERS = UDBVERS "(ENF)"
+        when DB_MOD = 2 THEN UDBVERS = UDBVERS "(ENF)"
+        OTHERWISE            UDBVERS = UDBVERS "(NFM)"
+      end
+  END
+
+if DSNRECON =  "Y" Then Do
+   call DISCONNECT_DSNREXX
+   call UNLOAD_DSNREXX
+ End
+Return maxrc
+
+DisConnect_Location:
+
+if DSNRECON =  "Y" Then Do
+   call LOAD_DSNREXX
+   call CONNECT_DSNREXX
+ end
+
+ ADDRESS DSNREXX "EXECSQL RELEASE " arg(1)
+ ADDRESS DSNREXX "EXECSQL COMMIT  "
+ ADDRESS DSNREXX "EXECSQL CONNECT RESET "
+ parse value sqlerrp with DB_ENV 4 DB_Vers 6 DB_Rel 8 DB_Mod
+ UDBVERS = DB_VERS || "." || DB_Rel || "." || DB_MOD
+ select
+     when DB_MOD = 0 THEN UDBVERS = UDBVERS "(CM)"
+     when DB_MOD = 1 THEN UDBVERS = UDBVERS "(ENF)"
+     when DB_MOD = 2 THEN UDBVERS = UDBVERS "(ENF)"
+     OTHERWISE            UDBVERS = UDBVERS "(NFM)"
+   end
+if DSNRECON =  "Y" Then Do
+   call DISCONNECT_DSNREXX
+   call UNLOAD_DSNREXX
+ End
+
+ IF SQLCODE <> 0 THEN DO
+    Return 8
+  END
+Return 0
+
+AUFRUF_ZOS81910:
+
+  object1     = ''
+  object2     = ''
+  tablespace  = ''
+  EDIT = 'YES'
+
+  Stmt = ZOS81910(SSID,     ,
+                 LOCATION,  ,
+                 EINGABE,   ,
+                 OBJECT1,   ,
+                 EDIT,      ,
+                 LNR )
+
+ return
+
+AUFRUF_ZOS81915:
+
+  EDIT = 'YES'
+  TABLE   = COLTAB
+
+  Stmt = ZOS81915(SSID,     ,
+                 LOCATION,  ,
+                 AUSWKZ,    ,
+                 lnr,       ,
+                 tabnr   ,  ,
+                 DO_ALL,    ,
+                 EINGABE,   ,
+                 EINGABE2,  ,
+                 STATEMENT, ,
+                 OBJECT1,   ,
+                 OBJECT2,   ,
+                 OBJECT3,   ,
+                 OBJECT4,   ,
+                 OBJECT5,   ,
+                 EDIT,      ,
+                 Object_List,,
+                 DB2Vers,   ,
+                 proclib    )
+
+return
+
+SET_RC:
+   IF ARG(1) > MAXRC THEN MAXRC = ARG(1)
+   IF SRC.8 = 'ISPF' THEN DO
+      ZISPFRC = MAXRC
+      ADDRESS ISPEXEC "VPUT (ZISPFRC) SHARED"
+    END
+Return MAXRC
+
+Init_Menu:
+
+red   = '01'x                              /* Assign colors to       */
+blue  = '02'x                              /*   Attribute bytes      */
+green = '03'x                              /*   found in the data    */
+white = '04'x
+maxlines = 0                               /* set max number of lines*/
+dyndata  = ''                              /* initialize data        */
+cmddata  = ''                              /* initialize data        */
+wl     = 21
+curline = 1;                               /* set current line #     */
+
+area.0 = 17
+area.1  = "                                                           "
+area.2  = "%SG  Storegegroup %AL  Alias          %RO   Role           "
+area.3  = "%DB  Database     %SY  Synonyme       %UA   User Author    "
+area.4  = "%TS  TableSpace   %PL  Plans          %ST   Statements     "
+area.5  = "%TB  Table        %PG  Packages       %CK   Checks         "
+area.6  = "%IX  Index        %TG  Trigger        %SE   Sequences      "
+area.7  = "%VW  Views        %MQT Mat.Query Table%FK   Foreign key    "
+area.8  = "%CO  Columns      %RT  Routines       %DBRM DBRM           "
+area.9  = "%DT  Datatypes    %SE  Sequences      %LO   Locations      "
+area.10 = "                                                           "
+area.11 = "%Stored Procedure :                                        "
+area.12 = "%BP  Bufferpool   %DSINFO DS Memberlist %                  "
+area.13 = "%                 %                     %                  "
+area.14 = "                                                           "
+area.15 = "                                                           "
+area.16 = "                                                           "
+area.17 = "                                                           "
+
+MaxLines = area.0
+FUNC     = "Function: "
+Do ai = 1 to area.0
+   parse value area.ai with '%' W1 '%' W2 '%' W3
+   dynzeil = ""
+   dynzeil = dynzeil || red || func || White || Substr(W1, 1, wl)
+   dynzeil = dynzeil || White || Substr(W2, 1, wl)
+   dynzeil = dynzeil || White || Substr(W3, 1, wl)
+   dyndata = dyndata || left(dynzeil, 80, ' ' )
+   FUNC    = "          "
+ end
+
+ADDRESS ISPEXEC  "VGET (ZSCREENW,ZSCREEND)"
+MaxScreenLines = ZSCREEND-5
+dyndata_len = Length(dyndata)
+znr     = 1
+
+Return

@@ -1,0 +1,366 @@
+/* REXX */
+/*******************************************************************/
+/*                                                                 */
+/* ProgramNAME      : LUWB1905  (fuer LUB V11.1 Nr 905)            */
+/* AUTHER           : ULRICH BRAEUER                               */
+/* FUNKTION         : AG : Skeletons Dynamisch ausgeben            */
+/*                                                                 */
+/*                                                                 */
+/*******************************************************************/
+
+ENV        = "TSO"
+X          = MSG('OFF')
+USER       = USERID()
+SYSCATS    = "SYSCAT"
+SYSIBMS    = "SYSIBM"
+SYSIBMA    = "SYSIBMADM"
+SYSPROCA   = "SYSPROC"
+ADDRESS ISPEXEC 'VGET (SYSIBMS) PROFILE'
+ADDRESS ISPEXEC 'VGET (SYSCATS) PROFILE'
+ADDRESS ISPEXEC 'VGET (SYSIBMA) PROFILE'
+ADDRESS ISPEXEC 'VGET (SYSPROCA) PROFILE'
+
+ADDRESS ISPEXEC 'VGET (UDBTRACE) PROFILE'
+IF UDBTRACE = 'ON' THEN TRACE R
+ELSE                    TRACE
+
+DROP WLine.
+
+PARSE SOURCE SRC.1 SRC.2 SRC.3 SRC.4 SRC.5 SRC.6 SRC.7 SRC.8 SRC.9
+OBJLIB  = ARG(1)   /* SKELS UND PANEL LIB */
+OBJLIB1 = Strip(Translate(OBJLIB, " ", "'") )
+OBJLIB  = "'" || Space(OBJLIB1, 0) || "'"
+
+ADDRESS "TSO" "ALLOC F(OBJLIB) DA("OBJLIB") OLD"
+Call GetMem
+ADDRESS "TSO" "FREE  F(OBJLIB) "
+
+If SKELV     = SRC.3  Then do
+   /* Gleiche Version dann Return */
+   Return
+ End
+
+ADDRESS "TSO" "ALLOC F(OBJLIB) DA("OBJLIB") OLD"
+
+MemName = "SKELVER"
+WLine.0 = 1
+WLine.1 = SRC.3
+Call Write_Mem
+
+
+skel.0   = 3
+skel.1   = "SKALTS9            SKEL_SKALTS9           "
+skel.2   = "PDYNPNL1           PAN_PDYNPNL1           "
+skel.3   = "PZO97911           PAN_PZO97911           "
+
+do skeli = 1 to skel.0
+   Drop WLine.
+   WLine.0  = 0
+   MemName  = Word(skel.skeli, 1)
+   MemProc  = Word(skel.skeli, 2)
+   If MemName = "" Then Iterate
+   Interpret "Call "MemProc
+   Call Write_Mem
+ End
+
+ADDRESS "TSO" "FREE FI(OBJLIB)"
+Return 0
+
+WL:
+if Datatype(WLine.0) <> "NUM" Then WLine.0 = 0
+WLine.0 = WLine.0 + 1
+WLineI  = WLine.0
+
+WLine.WLineI = Arg(1)
+
+Return 0
+
+Write_Mem:
+ADDRESS ISPEXEC
+'LMINIT DATAID(DID) DDNAME(OBJLIB) ENQ(EXCLU)'
+'LMOPEN DATAID(&DID) OPTION(OUTPUT)'
+'LMMDEL DATAID(&DID) MEMBER('MemName')'
+
+Do i = 1 to WLine.0
+  P1 = WLine.i
+  "LMPUT DATAID(&DID) MODE(INVAR) DATALOC(P1) DATALEN(80)"
+ End
+
+'LMMADD DATAID(&DID) MEMBER('MemName')'
+'LMFREE DATAID(&DID)'
+
+ Return 0
+
+GetMem:
+ADDRESS ISPEXEC
+SKELV  = ""
+pdsmbr = 'SKELVER'
+'LMINIT DATAID(DID) DDNAME(OBJLIB) ENQ(EXCLU)'
+'LMOPEN DATAID(&DID) OPTION(INPUT)'
+'LMMLIST DATAID(&DID) OPTION(LIST) MEMBER(PDSMBR) STATS(YES)'
+
+'LMMFIND DATAID(&DID) MEMBER('PDSMBR')',
+    'LRECL(reclen) RECFM(recfmvr)',
+    'STATS(NO)'
+
+'lmget dataid(&DID) mode(invar) dataloc(SKELV) ',
+                   ' datalen(datavar) maxlen(80)'
+
+'LMFREE DATAID(&DID)'
+
+ Return 0
+
+SKEL_SKALTS9:
+Z=")DEFAULT  )#?ü<~>                                                   "
+OK=WL(Z)
+Z=")SEL #JOB EQ Y                                                      "
+OK=WL(Z)
+Z="//ALTERTS EXEC PGM=IKJEFT01,DYNAMNBR=20                             "
+OK=WL(Z)
+Z=")IM SKSTEPLI                                                        "
+OK=WL(Z)
+Z="//SYSTSPRT DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSPRINT DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSUDUMP DD  SYSOUT=*                                             "
+OK=WL(Z)
+Z="//SYSTSIN  DD  *                                                    "
+OK=WL(Z)
+Z="  DSN SYSTEM(#SSID.)                                                "
+OK=WL(Z)
+Z=")SEL #STOPTS = Y                                                    "
+OK=WL(Z)
+Z="     -STOP  DATABASE(#DBNAME) SPACENAM(#TSNAME) AT(COMMIT)          "
+OK=WL(Z)
+Z=")ENDSEL                                                             "
+OK=WL(Z)
+Z="      RUN  PROGRAM(DSNTEP4) -                                       "
+OK=WL(Z)
+Z="           PLAN(DSNTEP4)    -                                       "
+OK=WL(Z)
+Z=")SEL #RUNLIB NE #BLANK                                              "
+OK=WL(Z)
+Z="           LIB('#RUNLIB')   -                                       "
+OK=WL(Z)
+Z=")ENDSEL                                                             "
+OK=WL(Z)
+Z="           PARMS('/ALIGN(MID)')                                     "
+OK=WL(Z)
+Z=")SEL #STOPTS = Y                                                    "
+OK=WL(Z)
+Z="     -START DATABASE(#DBNAME) SPACENAM(#TSNAME) ACCESS(RW)          "
+OK=WL(Z)
+Z=")ENDSEL                                                             "
+OK=WL(Z)
+Z="   END                                                              "
+OK=WL(Z)
+Z="//SYSIN DD *                                                        "
+OK=WL(Z)
+Z="--##SET ROWS_FETCH -1                                               "
+OK=WL(Z)
+Z="--##SET ROWS_OUT   -1                                               "
+OK=WL(Z)
+Z="--##SET TOLWARN    YES                                              "
+OK=WL(Z)
+Z="--##SET TERMINATOR ;                                                "
+OK=WL(Z)
+Z="--##SET TOLARTHWRN YES                                              "
+OK=WL(Z)
+Z="--##SET MAXERRORS  -1                                               "
+OK=WL(Z)
+Z="--##SET MULT_FETCH 1000                                             "
+OK=WL(Z)
+Z=")ENDSEL                                                             "
+OK=WL(Z)
+Z=")SEL #STMT EQ Y                                                     "
+OK=WL(Z)
+Z="  #SQLSTMT                                                          "
+OK=WL(Z)
+Z=")ENDSEL                                                             "
+OK=WL(Z)
+
+RETURN
+
+PAN_PDYNPNL1:
+Z=")ATTR                                                               "
+OK=WL(Z)
+Z=" § AREA(DYNAMIC)   SCROLL(ON) EXTEND(ON) DATAMOD(05)                "
+Z=" § AREA(DYNAMIC)   SCROLL(ON) EXTEND(ON)                            "
+OK=WL(Z)
+Z=" @ AREA(DYNAMIC)   SCROLL(ON) EXTEND(ON) DATAMOD(05)                "
+OK=WL(Z)
+Z=" 01 TYPE(DATAOUT)  COLOR(RED)   SKIP(ON)                            "
+OK=WL(Z)
+Z=" 02 TYPE(DATAOUT)  COLOR(BLUE)  SKIP(ON)                            "
+OK=WL(Z)
+Z=" 03 TYPE(DATAOUT)  COLOR(GREEN) SKIP(ON)                            "
+OK=WL(Z)
+Z=" 04 TYPE(DATAOUT)  COLOR(WHITE) SKIP(ON)                            "
+OK=WL(Z)
+Z=" 05 TYPE(DATAIN)   PAS(OFF)      CAPS(ON)                           "
+OK=WL(Z)
+Z=" 06 TYPE(DATAIN)   PAS(OFF)      CAPS(OFF)                          "
+OK=WL(Z)
+Z=" 07 TYPE(DATAIN)   COLOR(RED)    CAPS(ON) JUST(LEFT)                "
+OK=WL(Z)
+Z=" 08 TYPE(DATAIN)   INTENS(HIGH)  CAPS(OFF) HILITE(USCORE)           "
+OK=WL(Z)
+Z=" 09 TYPE(DATAIN)   INTENS(NON)   CAPS(OFF)                          "
+OK=WL(Z)
+Z=" 3b TYPE(DATAOUT)  COLOR(WHITE) SKIP(ON)                            "
+OK=WL(Z)
+Z=" 3a TYPE(DATAOUT)  SKIP(ON)                                         "
+OK=WL(Z)
+Z=" $  TYPE(DATAOUT)           COLOR(YELLOW)                           "
+OK=WL(Z)
+Z=" | TYPE(OUTPUT) COLOR(YELLOW)  SKIP(ON)                             "
+OK=WL(Z)
+Z=")BODY                                                               "
+OK=WL(Z)
+Z="%------------------  EXAMPLE FOR USING A DYNAMIC AREA  --------" || ,
+  "--------------%"
+OK=WL(Z)
+Z="%COMMAND ===>_ZCMD                                            %" || ,
+  "SCROLL ===>_AMT +"
+OK=WL(Z)
+Z="%                                                                   "
+OK=WL(Z)
+Z="+                                                                   "
+OK=WL(Z)
+Z="§DYNAREA                                                       " || ,
+  "                §"
+OK=WL(Z)
+Z="                                                                    "
+OK=WL(Z)
+Z="|PFTASTEN                                                      " || ,
+  "                +"
+OK=WL(Z)
+Z="|MSGLINE                                                       " || ,
+  "                +"
+OK=WL(Z)
+Z="%-----------------------------------END-----------------------------"
+OK=WL(Z)
+Z=")INIT                                                               "
+OK=WL(Z)
+Z="  .CURSOR   = DYNAREA                                               "
+OK=WL(Z)
+Z="  .CSRPOS   = &DYNPOS                                               "
+OK=WL(Z)
+Z="  &USER     = &USER                                                 "
+OK=WL(Z)
+Z="  &SSID     = &SSID                                                 "
+OK=WL(Z)
+Z="  &LOCATION = &LOCATION                                             "
+OK=WL(Z)
+Z="  &EDITSQL  = &EDITSQL                                              "
+OK=WL(Z)
+Z="  &Object   = &Object                                               "
+OK=WL(Z)
+Z="  &MSGLINE  = &MSGLINE                                              "
+OK=WL(Z)
+Z="  &PFTASTEN = &PFTASTEN                                             "
+OK=WL(Z)
+Z=")PROC                                                               "
+OK=WL(Z)
+Z="&PF      = .PFKEY                                                   "
+OK=WL(Z)
+Z="&RESP    = .RESP                                                    "
+OK=WL(Z)
+Z="&DYNKEY  = .PFKEY                                                   "
+OK=WL(Z)
+Z="&DYNPOS  = .CSRPOS                                                  "
+OK=WL(Z)
+Z="&DYNDPTH = LVLINE(DYNAREA)                                          "
+OK=WL(Z)
+Z=")END                                                                "
+OK=WL(Z)
+
+RETURN
+
+PAN_PZO97911:
+Z=")ATTR                                                               "
+OK=WL(Z)
+Z="  + TYPE(TEXT) INTENS(LOW) SKIP(ON)                                 "
+OK=WL(Z)
+Z="  $ TYPE(TEXT) INTENS(HIGH) SKIP(ON) color(pink)                    "
+OK=WL(Z)
+Z="  * TYPE(OUTPUT) INTENS(LOW) SKIP(ON)                               "
+OK=WL(Z)
+Z="  | TYPE(OUTPUT) INTENS(HIGH) SKIP(ON)                              "
+OK=WL(Z)
+Z=")BODY EXPAND(~~)                                                    "
+OK=WL(Z)
+Z="%~-~ Edit Execute Statement ~-~                                     "
+OK=WL(Z)
+Z="%Command ===>_ZCMD                                                 +"
+OK=WL(Z)
+Z="+                                                                   "
+OK=WL(Z)
+Z="+ User-ID |USER    + SSID |Ssid +LOCATION |Location                 "
+OK=WL(Z)
+Z="+                                                                   "
+OK=WL(Z)
+Z="+                                                                   "
+OK=WL(Z)
+Z="+ Edit STMT     %===>_Z+   %Y/N +                                   "
+OK=WL(Z)
+Z="+ Execute       %===>_Z+   %Y/N +                                   "
+OK=WL(Z)
+Z="+ Edit Liste    %===>_Z+   %Y/N +                                   "
+OK=WL(Z)
+Z="+ Auto Commit   %===>_Z+   %Y/N +                                   "
+OK=WL(Z)
+Z="+ SPUFI FORMAT  %===>_Z+   %Y/N +                                   "
+OK=WL(Z)
+Z="+                                                                   "
+OK=WL(Z)
+Z="+ Output Format %===>_Z  + %FIX, FNH, VAR, CSV, WWR, WWD XML " ||   ,
+  "HTM INS +"
+OK=WL(Z)
+Z="+                                                                   "
+OK=WL(Z)
+Z="+ COLDEL        %===>_Z+                                            "
+OK=WL(Z)
+Z="+ CHARDEL       %===>_Z+                                            "
+OK=WL(Z)
+Z="+                                                                   "
+OK=WL(Z)
+Z="+                                                                   "
+OK=WL(Z)
+Z="+                                                                   "
+OK=WL(Z)
+Z="+|Z                                                                +"
+OK=WL(Z)
+Z="%~-~  E n d e  ~-~                                                  "
+OK=WL(Z)
+Z=")INIT                                                               "
+OK=WL(Z)
+Z="  .ZVARS = '(EDSTMT EXSTMT EDLISTE ACOMMIT SPUFIIN OUTFORM  +       "
+OK=WL(Z)
+Z="             COLDEL CHARDEL MSGLINE)'                               "
+OK=WL(Z)
+Z="  .CURSOR   = EDSTMT                                                "
+OK=WL(Z)
+Z="  &USER     = &USER                                                 "
+OK=WL(Z)
+Z="  &SSID     = &SSID                                                 "
+OK=WL(Z)
+Z="  &LOCATION = &LOCATION                                             "
+OK=WL(Z)
+Z="  &EDSTMT   = &EDSTMT                                               "
+OK=WL(Z)
+Z="  &EXSTMT   = &EXSTMT                                               "
+OK=WL(Z)
+Z="  &EDLISTE  = &EDLISTE                                              "
+OK=WL(Z)
+Z="  &MSGLINE  = &MSGLINE                                              "
+OK=WL(Z)
+Z=")PROC                                                               "
+OK=WL(Z)
+Z="&PF = .PFKEY                                                        "
+OK=WL(Z)
+Z=")END                                                                "
+OK=WL(Z)
+
+RETURN

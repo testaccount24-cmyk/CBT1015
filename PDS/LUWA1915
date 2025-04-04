@@ -1,0 +1,339 @@
+/* REXX */
+/*******************************************************************/
+/*                                                                 */
+/* ProgramNAME      : LUWA1915                                     */
+/* AUSRUF           : Procedure  x=LUWA1915(ssid,loc,ausw,obj)     */
+/* AUTHER           : ULRICH BRAEUER                               */
+/* FUNKTION         : AG : Build Statements (UTILITIES oder delete)*/
+/*                                                                 */
+/*                                                                 */
+/*******************************************************************/
+
+ENV        = "TSO"
+X          = MSG('OFF')
+USER       = USERID()
+ADDRESS ISPEXEC 'VGET (UDBTRACE) PROFILE'
+IF UDBTRACE = 'ON' THEN TRACE I
+ELSE                    TRACE
+RECLEN  = 4096
+ADDRESS ISPEXEC 'VGET (RECLEN) PROFILE'
+TRACKS  = 60
+ADDRESS ISPEXEC 'VGET (TRACKS) PROFILE'
+
+stmt       = ''
+ddltext    = ""
+
+ssid        = arg(1)
+location    = arg(2)
+auswkz      = arg(3)
+LUWTABLE    = arg(4)
+Do_All      = arg(5)
+EINGABE     = arg(6)
+EINGABE2    = arg(7)
+STATEMENT   = arg(8)
+object1     = arg(9)
+object2     = arg(10)
+object3     = arg(11)
+object4     = arg(12)
+object5     = arg(13)
+EDIT        = arg(14)
+Object_list = arg(15)
+LNR         = arg(16)
+DB2Vers     = arg(17)
+proclib     = arg(18)
+obj         = ""
+tablespace  = ""
+
+parse value DB2Vers with DBENV 4 DBVers 6 DBRel 8 DBMod
+parse value Object1 with DB2_CREATOR1 '.' DB2_NAME1
+parse value Object2 with DB2_CREATOR2 '.' DB2_NAME2
+parse value Object3 with DB2_CREATOR3 '.' DB2_NAME3
+parse value Object4 with DB2_CREATOR4 '.' DB2_NAME4
+parse value Object5 with DB2_CREATOR5 '.' DB2_NAME5
+
+select
+
+  when eingabe   = "REFRESH" Then do
+       CALL REFRESH_MQT
+   End
+  when eingabe   = "DROP" Then do
+       CALL Drop_Auswahl
+   End
+  when eingabe   = "REVOKE" Then do
+       CALL revoke_Auswahl
+   End
+  when eingabe   = "UP" Then do
+       CALL Update_DBM_CFG
+   End
+  when eingabe   = "PRUNE" Then Do
+       CALL Gen_Prune
+   End
+  when auswkz  = 'PERM' & object3  = "R"        Then Do
+       Select
+         when eingabe  = "ACTIVATE" Then Do
+              OK = NextSl("Alter Table " Object1)
+              OK = NextSl("      ACTIVATE ROW ACCESS CONTROL;")
+          End
+         when eingabe = "DEACTIVATE" Then Do
+              OK = NextSl("Alter Table " Object1)
+              OK = NextSl("      DEACTIVATE ROW ACCESS CONTROL;")
+          End
+         when eingabe  = "ENABLE" Then Do
+              OK = NextSl("Alter permission" Object1 "ENABLE; ")
+          End
+         when eingabe  = "DISABLE" Then Do
+              OK = NextSl("Alter permission" Object1 "DISABLE; ")
+          End
+         when eingabe  = "REGENERATE" Then Do
+              OK = NextSl("Alter permission" Object1 "REGENERATE; ")
+          End
+          Otherwise NOP
+         End
+   End
+  when auswkz  = 'PERM' & object3  = "C"        Then Do
+       Select
+         when eingabe  = "ACTIVATE" Then Do
+              OK = NextSl("Alter Table " Object1)
+              OK = NextSl("      ACTIVATE COLUMN ACCESS CONTROL; ")
+          End
+         when eingabe = "DEACTIVATE" Then Do
+              OK = NextSl("Alter Table " Object1)
+              OK = NextSl("      DEACTIVATE COLUMN ACCESS CONTROL; ")
+          End
+         when eingabe  = "ENABLE" Then Do
+              OK = NextSl("Alter MASK  " OBject1 "ENABLE;")
+          End
+         when eingabe  = "DISABLE" Then Do
+              OK = NextSl("Alter MASK  " OBject1 "DISABLE;")
+          End
+         when eingabe  = "REGENERATE" Then Do
+              OK = NextSl("Alter MASK  " OBject1 "REGENERATE;")
+          End
+          Otherwise NOP
+         End
+   End
+  Otherwise do
+       CALL Utility_Auswahl
+   End
+ End
+
+if anzcols = 0 THEN RETURN 12
+if EDIT = "YES" THEN Call Edit_Stmt  /* Anzeige Erwuenscht */
+
+
+Return Stmt
+
+Utility_Auswahl:
+
+drop sl.
+sl.0 = 0
+select
+  when eingabe = "RUNSTATS" Then do
+       OK = NextSl("Call ADMIN_CMD ('" )
+       OK = NextSl("   RUNSTATS ON TABLE " ,
+                       DB2_CREATOR1 || '.' || DB2_NAME1 )
+       OK = NextSl("   WITH DISTRIBUTION ON ALL COLUMNS")
+       OK = NextSl("   ALLOW WRITE ACCESS ")
+       OK = NextSl("   ') " )
+       OK = NextSl(" ; ")
+   End
+  when eingabe = "INTEGRITY" Then do
+       OK = NextSl("   SET INTEGRITY FOR " ,
+                       DB2_CREATOR1 || '.' || DB2_NAME1 )
+       OK = NextSl("   IMMEDIATE CHECKED ")
+       OK = NextSl(" ; ")
+   End
+   Otherwise Nop
+  end
+
+return
+
+Gen_Prune:
+
+parse value Object2 with DB2_CREATOR2 ':' DB2_NAME2
+drop sl.
+sl.0 = 0
+select
+  when eingabe2 = "LOGS" Then do
+       OK = NextSl("Call ADMIN_CMD ('" )
+       OK = NextSl("   PRUNE LOGFILE PRIOR TO " DB2_CREATOR2 )
+       OK = NextSl("   ') " )
+       OK = NextSl(" ; ")
+   End
+  Otherwise Do
+       OK = NextSl("Call ADMIN_CMD ('" )
+       OK = NextSl("   PRUNE HISTORY " DB2_CREATOR1 )
+       OK = NEXTSL("         WITH FORCE OPTION AND DELETE  ")
+       OK = NextSl("               ')" )
+       OK = NextSl(" ; ")
+   End
+  end
+
+return
+
+Update_DBM_CFG:
+
+drop sl.
+sl.0 = 0
+select
+  when auswkz  = "DBMCFG" Then do
+       OK = NextSl("Call ADMIN_CMD ('" )
+       OK = NextSl("   UPDATE DBM CFG USING " )
+       OK = NextSl("  "OBJECT1 OBJECT2)
+       OK = NextSl("   ') " )
+       OK = NextSl(" ; ")
+   End
+  when auswkz  = "DBCFG" Then do
+       OK = NextSl("Call ADMIN_CMD ('" )
+       OK = NextSl("   UPDATE DB CFG USING " )
+       OK = NextSl("  "OBJECT1 OBJECT2)
+       OK = NextSl("   ') " )
+       OK = NextSl(" ; ")
+   End
+   Otherwise Nop
+  end
+
+return
+
+Drop_Auswahl:
+
+drop sl.
+sl.0 = 0
+select
+  when auswkz = "BP"   THEN DO
+       OK = NextSl("DROP BUFFERPOOL "Object1 ";" )
+   End
+  when auswkz = "SG"   THEN DO
+       OK = NextSl("DROP STOGROUP   "Object1 ";" )
+   End
+  when auswkz = "TS"   THEN DO
+       OK = NextSl("DROP TABLESPACE "Object1 ";" )
+   End
+  when auswkz = "TB"   THEN DO
+       OK = NextSl("DROP TABLE "Object1 ";" )
+   End
+  when auswkz = "VW"   THEN DO
+       OK = NextSl("DROP VIEW  "Object1 ";" )
+   End
+  when auswkz = "IX"   THEN DO
+       OK = NextSl("DROP INDEX "Object1 ";" )
+   End
+  when auswkz = "TG"   THEN DO
+       OK = NextSl("DROP TRIGGER "Object1 ";" )
+   End
+  when auswkz = "NN"   THEN DO
+       OK = NextSl("DROP NICKNAME "Object1 ";" )
+   End
+  when auswkz = "FN"   THEN DO
+       OK = NextSl("DROP SPECIFIC FUNCTION " Object1 " ;"  )
+   End
+  when auswkz = "PR"   THEN DO
+       OK = NextSl("DROP SPECIFIC PROCEDURE " Object1 " ;"  )
+   End
+  when auswkz = "SE"   THEN DO
+       OK = NextSl("DROP SEQUENCE " Object1 " ;"  )
+   End
+  when auswkz = "EM"   THEN DO
+       OK = NextSl("DROP EVENT MONITOR " Object1 " ;"  )
+   End
+  when auswkz = "WR"   THEN DO
+       OK = NextSl("DROP WRAPPER " Object1 " ;"  )
+   End
+  when auswkz = "SV"   THEN DO
+       OK = NextSl("DROP SERVER  " Object1 " ;"  )
+   End
+  when auswkz = "WL"   THEN DO
+       OK = NextSl("DROP WORKLOAD " Object1 " ;"  )
+   End
+  when auswkz = "PG"   THEN DO
+       OK = NextSl("DROP PACKAGE  " Object1 " ;"  )
+   End
+  when auswkz = "AL"   THEN DO
+       OK = NextSl("DROP ALIAS    " Object1 " ;"  )
+   End
+  when auswkz = "SC"   THEN DO
+       OK = NextSl("DROP SCHEMA   " Object1 " ;"  )
+   End
+  when auswkz = "RO"   THEN DO
+       OK = NextSl("DROP ROLE     " Object1 " ;"  )
+   End
+  when auswkz = "FK"   THEN DO
+       OK = NextSl("ALTER TABLE  " Object1       )
+       OK = NextSl("       DROP FOREIGN KEY" Object2 ";"   )
+   End
+   Otherwise OK = NextSl('-- "DROP " Nicht erlaubt '  )
+  end
+
+return
+
+Revoke_Auswahl:
+
+drop sl.
+sl.0 = 0
+AW.1 = "SELECT"
+AW.2 = "INSERT"
+AW.3 = "UPDATE"
+AW.4 = "DELETE"
+AW.5 = "CONTROL"
+AW.6 = "ALTER"
+AW.7 = "INDEX"
+AW.8 = "REFERENCE"
+aw.0 = 8
+Do awi = 1 to aw.0
+   check = Substr(object3, awi, 1)
+   If Check = 'N' Then Iterate
+   OK = NextSl("REVOKE "aw.awi" ON TABLE "OBJECT2 )
+   OK = NextSl("       FROM "DB2_NAME1" BY " DB2_CREATOR1" ;")
+ End
+
+return
+
+REFRESH_MQT:
+
+drop sl.
+sl.0 = 0
+
+OK = NextSl("REFRESH TABLE "OBJECT1 )
+OK = NextSl("--      INCREMENTAL " )
+OK = NextSl("--      NOT INCREMENTAL " )
+OK = NextSl(";  " )
+
+return
+
+NextSl: Procedure Expose sl.
+ If Datatype(sl.0) /= "NUM" Then Do
+    Drop Sl.
+    Sl.0 = 0
+  End
+ sl.0   = sl.0 + 1
+ sli    = sl.0
+ sl.sli = Arg(1)
+return 0
+
+
+Edit_Stmt:
+
+DSNAME = LUWA1900("LUWA1","DSNAME", "STMT", LNR)
+LRECL   = RECLEN
+
+IF LISTDSI(DSNAME) = 0 THEN do
+    ADDRESS "TSO" "ALLOC F(SELDD) DA("DSNAME") SHR"
+ end
+else do
+    ADDRESS "TSO" "ALLOC F(SELDD) DA("DSNAME") NEW CATALOG ,
+          SPACE("TRACKS","TRACKS") TRACKS REUSE,
+          LRECL("RECLEN") UNIT(SYSDA)"
+ end
+
+
+ADDRESS "TSO" "EXECIO * DISKW SELDD ( STEM SL. FINIS"
+ADDRESS "TSO" "FREE FI(SELDD)"
+
+ok   = LUWA1911(SSID,     ,
+                LOCATION,  ,
+                EINGABE,   ,
+                OBJ,       ,
+                DSNAME,    ,
+                LNR   )
+
+return

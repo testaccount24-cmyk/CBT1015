@@ -1,0 +1,233 @@
+/* REXX */
+/*******************************************************************/
+/*                                                                 */
+/* ProgramNAME      : GETPWD                                       */
+/* AUSRUF           : Procedure  x=GETPWD() eingabe Userid/Passwd  */
+/* AUTHER           : ULRICH BRAEUER                               */
+/* FUNKTION         : AG : Einlesen von USERID und PASSWD / connect*/
+/*                                                                 */
+/*******************************************************************/
+
+SIGNAL ON ERROR
+SIGNAL OFF FAILURE
+SIGNAL OFF ERROR
+
+PARSE SOURCE SRC.1  , /* ENVIRONMENT  (TSO)            */
+             SRC.2  , /* AUFRUF ALS (COMMAND)          */
+             SRC.3  , /* Program NAME (LUW97000)       */
+             SRC.4  , /* SYS00186 (TEMP FILE)          */
+             SRC.5  , /* AUFRUF AUS LIB (X.X.CLISTUDB) */
+             SRC.6  , /* ?                             */
+             SRC.7  , /* TSO                           */
+             SRC.8  , /* ISPF                          */
+             SRC.9  , /* ?                             */
+
+ENV        = "TSO"
+X          = MSG('OFF')
+USER       = USERID()
+SYSUID  = ""
+SYSPWD  = ""
+ADDRESS ISPEXEC 'VGET (SYSUID)   PROFILE'
+ADDRESS ISPEXEC 'VGET (SYSPWD)   PROFILE'
+
+red   = '01'x                              /* Assign colors to       */
+blue  = '02'x                              /*   Attribute bytes      */
+green = '03'x                              /*   found in the data    */
+white = '04'x
+in1   = '05'x
+in2   = '06'x
+in3   = '07'x
+uid   = '08'x
+pwd   = '09'x
+endin = '3a'x
+keyw  = '3b'x
+maxlines = 0                               /* set max number of lines*/
+dyndata  = ''                              /* initialize data        */
+cmddata  = ''                              /* initialize data        */
+curline = 1                                /* set current line #     */
+
+drop sl.
+sl.0 = 0
+
+USERID      = Left(USER, 30, " ")
+PASSWD      = Left(" " , 30, " ")
+
+
+EnterBack = "Y"
+DO FOREVER
+   area.0 =  7
+   area.1  = white"Enter Userid and Password "
+   area.2  = white" "
+   area.3  = white" "
+   area.4  = white"       "keyw"User       "uid || Userid || endin
+   area.5  = white"       "keyw"Password   "pwd || Passwd || endin
+   area.6  =      " "
+   area.7  =      " "
+
+   keytab.0 = 5
+   keytab.1 = pwd
+   keytab.2 = uid
+   keytab.3 = in1
+   keytab.4 = in2
+   keytab.5 = in3
+
+   Call Anzeige_Dyn_Panel
+
+   If RC > 8 Then do
+      say "ZEDSMSG="ZEDSMSG
+      say "ZERRLM="ZERRLM
+      say "ZERRMSG="ZERRMSG
+      say "ZERRSM="ZERRSM
+      say rc object1
+      return 8
+    End
+   COMMAND = ZCMD
+
+
+
+   /* PF Tasten Pruefen  */
+   Select
+      When SUBSTR(COMMAND,1,3) = "CAN"  THEN Return 8
+      When PF                  = 'PF03' THEN Return 8
+      When PF                  = 'PF04' THEN Return 8
+      Otherwise NOP
+     End
+
+   SYSUID = User_val
+   SYSPWD = Password_Val
+   USERID = Left(User_val     , 30, " ")
+   PASSWD = Left(Password_Val , 30, " ")
+
+   If ENV = "TSO"        ,
+    & Length(SYSUID) > 0 ,
+    & Length(SYSPWD) > 0 Then Do
+      ADDRESS ISPEXEC 'VPUT (SYSUID)   PROFILE'
+      ADDRESS ISPEXEC 'VPUT (SYSPWD)   PROFILE'
+      Leave
+    End
+
+ end
+
+Return Strip(SYSUID)  Strip(SYSPWD)
+
+
+Anzeige_Dyn_Panel:
+
+Zeile = 0
+DROP ausgabe.
+ausgabe.0 = 0
+MaxLines = area.0
+curline = 1                                /* set current line #     */
+dyndata  = ""
+ADDRESS ISPEXEC  "VGET (ZSCREENW,ZSCREEND)"
+Do ai = 1 to area.0
+   dyndata = dyndata || Left(area.ai, ZSCREENW, ' ')
+ end
+dyndata = dyndata || endin
+dynarea = substr(dyndata,1+(curline-1)*ZSCREENW) /*set dyn var  */
+dynarea = dyndata
+
+MaxScreenLines = ZSCREEND-5
+dyndata_len = Length(dyndata)
+trenner = in1
+DYNPOS  = 0
+IF DYNPOS = 0 Then  DYNPOS  = POS(in1, dynarea, 1)
+IF DYNPOS = 0 Then  DYNPOS  = POS(in2, dynarea, 1)
+IF DYNPOS = 0 Then  DYNPOS  = POS(in3, dynarea, 1)
+IF DYNPOS = 0 Then  DYNPOS  = POS(pwd, dynarea, 1)
+IF DYNPOS = 0 Then  DYNPOS  = POS(uid, dynarea, 1)
+DYNPOS  = DYNPOS + 1
+znr     = 1
+
+If EnterBack = "Y" Then PFTASTEN = "ENTER=GO PF03=RETURN PF04=Cancel"
+else                    PFTASTEN = "      PF03=GO    PF04=Cancel "
+
+Do Until disprc > 0
+
+  start   = 1+(curline-1)*ZSCREENW
+  dynarea = substr(dyndata, Start)
+  size = length(dynarea)                   /* Set a scalar variable  */
+  ADDRESS ISPEXEC "DISPLAY PANEL(PDYNPNL1)"
+  MaxScreenLines = DYNDPTH
+  DynArea_len = MaxScreenLines*ZSCREENW
+  dyndata1= Substr(dyndata, 1,  1+(curline-1)*ZSCREENW-1)
+  start   = Length(dyndata1) + Length(dynarea) + 1
+  Dyndata = Dyndata1 || dynarea || Substr(Dyndata, start)
+  Eingabe = dynarea
+
+  disprc = rc                              /* save return code       */
+  ADDRESS ISPEXEC "VGET (ZVERB,ZSCROLLA,ZSCROLLN, ZSCROLLD) "
+  ADDRESS ISPEXEC "VGET (ZXSMAX, ZXSMIN) "
+  dynrc = rc
+  SELECT                                   /* Process scrolling      */
+    When PF   = 'PF03'      THEN RETURN 0
+    When PF   = 'PF04'      THEN RETURN 0
+    When(zverb  = 'UP')   Then Do          /* Scroll up              */
+     If zscrolla = 'MAX' Then Do           /*  if scroll was max     */
+        curline = 1                       /*    scroll to top       */
+      End
+     Else Do                               /*  else a number is known*/
+      curline = curline - MaxScreenLines        /* (max is bottom)   */
+      if curline < 1 then Curline = 1
+      End
+     End
+    When(zverb  = 'DOWN') Then Do          /* Scroll down            */
+     If zscrolla = 'MAX' Then Do           /*  if scroll was max     */
+      curline = maxlines                   /*    scroll to bottom    */
+     end
+     Else do                               /*  else a number is known*/
+      curline = curline + MaxScreenLines        /* (max is bottom)   */
+      If curline > maxlines Then Curline = maxlines
+      if DynArea_len >= dyndata_len Then Do  /* NUR EINE SEITE */
+         curline = 1
+       End
+      end
+     end
+    Otherwise NOP                   /* could use left & right too    */
+  End
+  if dynrc > 8 then Do
+     say "Display RC="RC
+     say "ZEDSMSG="ZEDSMSG
+     say "ZERRLM="ZERRLM
+     say "ZERRMSG="ZERRMSG
+     say "ZERRSM="ZERRSM
+     say rc object1
+   End
+
+  epos     = Pos(keyw, eingabe, 1)
+  If Epos > 0 Then eingabe = Substr(Eingabe, epos)
+  Eingabe = Translate(eingabe, ' ', '04'x)
+  drop etab.
+  etab.0 = 0
+  Do While length(eingabe) > 0
+     endf = Pos(endin, eingabe, 1)
+     If endf < 1 then leave
+     etab.0    = etab.0 + 1
+     eti       = etab.0
+     etab.eti  = Substr(eingabe, 1, endf)
+     etab.eti  = Translate(etab.eti, ' ', '3a'x)
+     eingabe = Substr(eingabe, endf+1)
+     Eingabe = strip(Eingabe)
+   End
+
+  DO eti = 1 to etab.0
+     epos    = Pos(keyw, etab.eti)
+     do KeyF = 1 to keytab.0
+        kpos  = Pos(KeyTab.KeyF, etab.eti, 1)
+        If kpos > 0 Then Leave
+      end
+      if kpos < 1 then Iterate
+      keyword = Strip(Substr(etab.eti, 2, kpos-2) )
+      If Length(keyword) < 1 Then Keyword = "COL" || eti
+      evalue  = Substr(etab.eti, kpos+1)
+      Interpret Strip(Keyword) || "_VAL" "= evalue"
+   End
+
+
+
+   If RESP = "ENTER" & EnterBack = "Y" Then return 0
+End                                        /* End of display loop    */
+
+Return 0
+error: failure: syntax: novalue:
+return  8

@@ -1,0 +1,241 @@
+/* REXX */
+/*******************************************************************/
+/*                                                                 */
+/* PROGRAMMNAME     : ARXPARM1                                     */
+/* AUSRUF           : Procedure  x=ARXPARM1()                      */
+/* AUTHER           : ULRICH BRAEUER                               */
+/* FUNKTION         : Verwalten Options                            */
+/*                                                                 */
+/*                                                                 */
+/*******************************************************************/
+
+SIGNAL ON FAILURE
+SIGNAL ON ERROR
+SIGNAL OFF FAILURE
+SIGNAL OFF ERROR
+
+PARSE SOURCE SRC.1  , /* ENVIRONMENT  (TSO)            */
+             SRC.2  , /* AUFRUF ALS (COMMAND)          */
+             SRC.3  , /* Program NAME (LUW97000)       */
+             SRC.4  , /* SYS00186 (TEMP FILE)          */
+             SRC.5  , /* AUFRUF AUS LIB (X.X.CLISTUDB) */
+             SRC.6  , /* ?                             */
+             SRC.7  , /* TSO                           */
+             SRC.8  , /* ISPF                          */
+             SRC.9  , /* ?                             */
+
+
+ENV        = "TSO"
+X          = MSG('OFF')
+USER       = USERID()
+ADDRESS ISPEXEC 'VGET (UDBTRACE) PROFILE'
+IF UDBTRACE = 'ON' THEN TRACE I
+ELSE                    TRACE
+
+
+SSID           = ARG(1)
+RXPARMS        = "RXPARM01"
+address ispexec  'TBERASE 'RXPARMS
+If RC > 12  Then do
+   say "Error on TBERASE RC="RC "TABLE="RXPARMS
+ End
+address ispexec  'TBOPEN 'RXPARMS
+if rc /= 0 then Do
+   ADDRESS ISPEXEC "TBCREATE "RXPARMS ,
+                   " KEYS(NAME)             ",
+                   " NAMES(OVal, NVal, DVal) ",
+                   " REPLACE"
+ End
+
+
+VALDEF.0  = 18
+VALDEF.1  = "SYSIBMS       SYSIBM_SCHEMA    SYSIBM"
+VALDEF.2  = "SYSCATS       SYSCAT_SCHEMA    SYSCAT"
+VALDEF.3  = "SYSIBMA       SYSADM_SCHEMA    SYSIBMADM"
+VALDEF.4  = "SYSPROCA      SYSPROC_SCHEMA   SYSPROC"
+VALDEF.5  = "CURSCHEM      CURRENT_SCHEMA   "USER
+VALDEF.6  = "CURSQLID      CURRENT_SQLID    "USER
+VALDEF.7  = "CURRULE       CURRENT_RULE     STD or DB2 "
+VALDEF.8  = STRIP(SSID)"SQID       CURRENT_SQLID_"SSID "     "USER
+VALDEF.9  = "MAXBLOBS      MAX_BLOB_SIZE    1M   "
+VALDEF.10 = "MAXROWS       MAXROWS          0    "
+VALDEF.11 = "STMTLEN       MAX_STMTLEN     200   "
+VALDEF.12 = "RECLEN        MAX_LISTLEN    4096   "
+VALDEF.13 = "TRACKS        TRACKS           60   "
+VALDEF.14 = "DSNRECON      DSNRECON         Y    "
+VALDEF.15 = "ALTERJOB      ALTERJOB         JOB or SQL"
+VALDEF.16 = "DDLSPUFI      DDLSPUFI_FORMAT  N         "
+VALDEF.17 = "ACOMMIT       AUTO_COMMIT      Y         "
+VALDEF.18 = "WLTYPE        WORKLIST_TYPE    1 or 2    "
+
+
+NVAL = ''
+address ISPEXEC 'TBCLOSE 'RXPARMS
+address ISPEXEC 'TBOPEN  'RXPARMS
+
+
+Do i = 1 to Valdef.0
+   ADDRESS ISPEXEC 'VGET ('Word(Valdef.i, 1)') PROFILE'
+   IF RC <> 0 Then Do
+      Interpret  Word(Valdef.i, 1) "=" Word(Valdef.i, 3)
+    End
+   NAME = Word(Valdef.i, 2)
+   OVal = Value(Word(Valdef.i, 1))
+   NVal = ""
+/* DVal = Value(SubWord(Valdef.i, 3)) */
+   DVal = SubWord(Valdef.i, 3)
+   ADDRESS ISPEXEC 'TBADD 'RXPARMS
+ End
+
+
+address ispexec  'TBCLOSE 'RXPARMS
+address ispexec  'TBOPEN 'RXPARMS
+CURSOR = 'CURSOR(ZCMD)'
+CSRROW  = 'CSRROW(1)'
+RETCODE = RC
+MESSAGE = 'MSG( )'
+ZTDSELS = 0
+ZTDTOP  = 0
+LNR     = 1
+address ISPEXEC 'TBCLOSE 'RXPARMS
+DO FOREVER
+   address ISPEXEC 'TBOPEN 'RXPARMS
+   address ISPEXEC 'TBTOP  'RXPARMS
+   address ISPEXEC 'TBSKIP 'RXPARMS' NUMBER('ZTDTOP')'
+   address ispexec 'TBDISPL 'RXPARMS' PANEL(PLUPARM)',
+                   MESSAGE CURSOR 'CSRROW('LNR')' ,
+                   'AUTOSEL(NO) POSITION(CRP)'
+   If rc > 4 then do
+      Say "*** Error on Display Alter RC="rc
+      Say " ZERRSM =" ZERRSM
+      Say " ZERRLM =" ZERRLM
+      retuen
+    End
+   COMMAND = ZCMD
+
+      /* PF Tasten Pruefen  */
+   Select
+      WHEN SUBSTR(COMMAND,1,3) = "CAN"  THEN DO
+           address ispexec 'TBCLOSE 'RXPARMS
+           address ispexec 'TBERASE 'RXPARMS
+           Return
+       end
+      WHEN WORD(ZCMD,1) = "TRACE" then do
+           IF WORD(ZCMD, 2) = "ON"     Then trace('I')
+           IF WORD(ZCMD, 2) = "OFF" Then trace('O')
+           UDBTRACE = word(ZCMD, 2)
+           ADDRESS ISPEXEC 'VPUT (UDBTRACE) PROFILE'
+           ZCMD = ''
+       end
+      When PF                  = 'PF03' THEN DO
+           address ispexec 'TBCLOSE 'RXPARMS
+           address ispexec 'TBERASE 'RXPARMS
+           Return
+       end
+      When PF                  = 'PF04' THEN DO
+           address ispexec 'TBCLOSE 'RXPARMS
+           address ispexec 'TBERASE 'RXPARMS
+           Return
+       end
+      Otherwise NOP
+    End
+
+   if ZTDSELS > 0 Then    LAUFNR = crp
+   do cnt = 1 to  ZTDSELS            /* Verarbeiten ZeilenCommand */
+      ADDRESS ISPEXEC 'TBMOD   'RXPARMS
+      address ispexec 'TBDISPL 'RXPARMS' AUTOSEL(NO) POSITION(CRP)'
+      If cnt = ZTDSELS Then Iterate
+    end
+   Address ispexec 'TBCLOSE 'RXPARMS
+   Leave
+ End
+
+
+address ispexec 'TBCLOSE 'RXPARMS
+address ispexec 'TBOPEN  'RXPARMS
+address ispexec 'TBTOP   'RXPARMS
+
+Do while RC = 0
+   If NVal = '' Then do
+      address ispexec 'TBSKIP   'RXPARMS
+      Iterate
+    End
+   If NVal <> Oval Then do
+      Do srci = 1 to Valdef.0
+         If Word(Valdef.srci, 2) = Name Then Do
+            Keyword = Word(Valdef.srci, 1)
+            Select
+               When Keyword  = "RECLEN"             Then Do
+                  Select
+                    When NVAL > 32000 Then NVAL = 32000
+                    When NVAL <    72 Then NVAL = 72
+                    Otherwise NOP
+                   End
+                End
+               When Keyword  = "STMTLEN"            Then Do
+                  Select
+                    When NVAL > 32000 Then NVAL = 32000
+                    When NVAL <    80 Then NVAL = 80
+                    Otherwise NOP
+                   End
+                End
+               When Keyword  = "DSNRECON"           Then Do
+                  Select
+                    When NVAL = "Y" Then NOP
+                    When NVAL = "N" Then NOP
+                    Otherwise NVal = "Y"
+                   End
+                End
+               When Keyword  = "ACOMMIT"            Then Do
+                  Select
+                    When NVAL = "Y" Then NOP
+                    When NVAL = "N" Then NOP
+                    Otherwise NVal = "Y"
+                   End
+                End
+               When Keyword  = "DDLSPUFI"           Then Do
+                  Select
+                    When NVAL = "Y" Then NOP
+                    When NVAL = "N" Then NOP
+                    Otherwise NVal = "N"
+                   End
+                End
+               When Keyword  = "ALTERJOB"           Then Do
+                  Select
+                    When NVAL = "JOB" Then NOP
+                    When NVAL = "SQL" Then NOP
+                    Otherwise NVal = "SQL"
+                   End
+                End
+               When Keyword  = "TRACKS"  & NVAL <    1   Then Do
+                    NVal =    15
+                End
+               When Keyword  = "CURRULE"            Then Do
+                  Select
+                    When NVAL = 'DB2'  Then NOP
+                    When NVAL = 'STD'  Then NOP
+                    Otherwise NVal = "STD"
+                   End
+                End
+               When Keyword  = "WLTYPE"             Then Do
+                  Select
+                    When NVAL = 1 Then NOP
+                    When NVAL = 2 Then NOP
+                    Otherwise NVal = 1
+                   End
+                End
+               Otherwise NOP
+            End
+            Interpret  Word(Valdef.Srci, 1) "=" NVal
+            ADDRESS ISPEXEC 'VPUT ('Word(Valdef.srci, 1)') PROFILE'
+            Leave
+          End
+       End
+    End
+   address ispexec 'TBSKIP   'RXPARMS
+ End
+
+Return
+
+error: failure: syntax: novalue:
+return

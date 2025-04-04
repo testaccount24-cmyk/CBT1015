@@ -1,0 +1,184 @@
+/* --------------------------*  REXX  *----------------------------- */
+/*                                                                   */
+/*  ERSTELLEN IEBUPDTE DATASET AUS PODATEI                           */
+/*  UBRAEUER   : 16.06.1997                                          */
+/*  Aenderung  : 17.08.2017  USED eingebaut, es werden nur member    */
+/*                           gezogen die geaendert wurden            */
+/*                                                                   */
+/* --------------------------*  REXX  *----------------------------- */
+OK = MSG('OFF')
+RUN_ENV = LISTDSI(SYSUT1 FILE)
+PODSN = SYSDSNAME
+SAY  ARG(1) ARG(2)
+SELECT
+   WHEN ARG(1)    = "ALL" THEN DO
+        TODO      = "ALL"
+        INCLIST.0 = 0
+    END
+   WHEN ARG(1)    = "USED" THEN DO
+        TODO      = "USED"
+        INCLIST.0 = 0
+    END
+   WHEN ARG(1)   = "MEMLIST" THEN DO
+        TODO     = "MEMLIST"
+        ADDRESS TSO "EXECIO * DISKR MEMLIST (STEM INCLIST. FINIS"
+    END
+   OTHERWISE DO
+        TODO      = "ALL"
+        INCLIST.0 = 0
+    END
+ END
+
+
+SKIP  = 0
+COUNT = 999999999999999
+
+DROP CMDLIST.
+CMDLIST.0 = 0
+
+CMDA = LISTDSI(CMDFILE FILE)
+IF CMDA = 0 | (CMDA=16 & SYSREASON  <> 2) THEN DO
+   ADDRESS TSO "EXECIO * DISKR CMDFILE (STEM CMDLIST. FINIS"
+   IF RC = 0 THEN DO I = 1 TO CMDLIST.0
+      CMDLIST.I = STRIP(CMDLIST.I)
+      IF SUBSTR(CMDLIST.I, 1) = '-' THEN ITERATE
+      INTERPRET  CMDLIST.I
+      SAY CMDLIST.I
+    END
+ END
+
+
+DROP MEMBERS.
+DROP MEMBERSU.
+MEMBERS.0    = 0
+MEMBERSU.0   = 0
+
+CALL GET_PO_ENTRY
+
+say "entries="MEMBERS.0 "changed members="changed_members
+
+PARSE VALUE PODSN WITH HLQ "." LLQDSN
+DROP UPD.
+UPD.0 = 0
+
+ADDRESS TSO "FREE FI(PODSN)"
+
+
+OK = ADDLIST("// SET  PRI=10                                   " )
+OK = ADDLIST("// SET  SEC=10                                   " )
+OK = ADDLIST("// SET  DIRBLK=100                               " )
+OK = ADDLIST("// SET  HLQ=&SYSUID                              " )
+OK = ADDLIST("// SET  DSNOUT=&HLQ.."LLQDSN" ANPASSEN           " )
+OK = ADDLIST("//* //STEP1    EXEC PGM=IEFBR14                  " )
+OK = ADDLIST("//* //DDOUT    DD  DISP=(NEW,CATLG,DELETE),      " )
+OK = ADDLIST("//* //         SPACE=(CYL,(&PRI,&SEC,&DIRBLK)),  " )
+OK = ADDLIST("//* //         DCB=(RECFM=FB,LRECL=80),          " )
+OK = ADDLIST("//* //         DSN=&DSNOUT                       " )
+OK = ADDLIST("/*                                               " )
+OK = ADDLIST("//IEBUPD EXEC PGM=IEBUPDTE,PARM=NEW              " )
+OK = ADDLIST("//SYSPRINT DD   SYSOUT=*                         " )
+OK = ADDLIST("//** PARM=UPD SYSUT1 PARM=NEW SYSUT2             " )
+OK = ADDLIST("//***   SYSUT1   DD DISP=SHR,DSN=&DSNOUT         " )
+OK = ADDLIST("//SYSUT2   DD DISP=SHR,DSN=&DSNOUT               " )
+OK = ADDLIST("//SYSIN    DD   DATA,DLM='%%'                    " )
+
+
+START = SKIP
+if start = 0 Then Start = 1
+
+IF INCLIST.0 > 0 THEN DO
+   DO I = START TO MEMBERS.0
+      FOUND = 'N'
+      DO Y = 1 TO INCLIST.0
+         IF INCLIST.Y = MEMBERS.I THEN DO
+            FOUND = 'Y'
+            LEAVE
+          END
+       END
+      IF FOUND = 'N' THEN MEMBERS.I = ""
+    END
+ END
+
+MAXANZ = 0
+DO I = START  TO MEMBERS.0
+
+   IF MEMBERS.I = "" THEN ITERATE                   /* kein eintrag   */
+   IF TODO = "USED" & MEMBERSU.i = "" Then Iterate /* Nur Aenderungen */
+
+   MAXANZ    = MAXANZ + 1            /* FUER COUNT PARM */
+   IF MAXANZ > COUNT THEN LEAVE /* FUER COUNT PARM */
+
+   DSN    = SPACE(PODSN"("MEMBERS.I")", 0)
+   ADDRESS TSO "ALLOCATE FI(PODSN) DSN('"DSN"') SHR"
+   DROP POMEM.
+   ADDRESS TSO "EXECIO * DISKR PODSN (STEM POMEM. FINIS"
+   ADDRESS TSO "FREE FI(PODSN)"
+   OK = ADDLIST("./ ADD NAME="SPACE(MEMBERS.I,0))
+   DO POI = 1 TO POMEM.0
+      OK = ADDLIST(POMEM.POI)
+    END
+ END
+OK = ADDLIST('./ ENDUP')
+OK = ADDLIST("%%                                      " )
+ADDRESS TSO "FREE FI(PODSN)"
+ADDRESS TSO "EXECIO * DISKW SYSUT2 (STEM UPD. FINIS"
+RETURN
+ADDLIST:
+  UPD.0    = UPD.0 + 1
+  UPDI     = UPD.0
+  UPD.UPDI = ARG(1)
+RETURN 0
+
+GET_PO_ENTRY:
+
+Address tso
+dsn = PODSN
+"ALLOC F(AREAD) DS('"DSN"') SHR REUSE DSORG(PS) LRECL(256) RECFM(F B)"
+"EXECIO * DISKR AREAD ( FINIS STEM ENTRY."
+"FREE F(AREAD)"
+
+changed_members = 0
+Do IX = 1 to ENTRY.0
+   part  = ENTRY.IX
+   Parse Var ENTRY.IX bl 3 part
+   part = substr(part,1,c2d(bl)-2)
+   DO WHILE part   <>  ""
+      Parse Var part name 9 ttr 12 c 13 part
+      C  =  C2D(BITAND(C,'1F'X))
+      If name='FFFFFFFFFFFFFFFF'x Then Leave IX
+
+      IF C=15 & SYSRECFM <> "U" THEN DO
+         Direntry = substr(part,1,30)
+         PARSE VAR DIRENTRY,
+           VV       2  ,
+           MM       3  ,
+           FLAGS    4  ,
+           SS       5  ,
+           CRECC    6  ,
+           CRDATE   9  ,
+           MODCC   10  ,
+           MODDATE 13  ,
+           HH      14  ,
+           TM      15  ,
+           LINES   17  ,
+           INIT    19  ,
+           MOD     21  ,
+           UID     28  ,
+           .
+         changed_members = changed_members + 1
+       END
+      Else do
+         UID = ""
+       END
+
+      MEMBERS.0    = MEMBERS.0 + 1
+      MEMI         = MEMBERS.0
+      MEMBERS.MEMI = NAME
+      IF UID    = "" THEN MEMBERSU.MEMI = ""
+       ELSE               MEMBERSU.MEMI = "U"
+
+      part=delstr(part,1,c*2)
+    End
+ End
+Return
+

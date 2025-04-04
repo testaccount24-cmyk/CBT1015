@@ -1,0 +1,140 @@
+//************************************************************
+//* ERSTELLEN SYSIN FUER FOLGEJOBS   INITIAL (SOURCE SYSTEM) *
+//************************************************************
+//*
+//DELETE   EXEC PGM=IDCAMS
+//SYSPRINT DD SYSOUT=*
+//SYSIN    DD *
+  DELETE MGDB05.ISPF.DDLOUT
+  IF LASTCC LE 8 THEN SET MAXCC = 00
+/*
+//ZOSB192B EXEC PGM=IKJEFT01
+//STEPLIB  DD DISP=SHR,DSN=DB2.DB2B.SDSNLOAD
+//SYSPROC  DD DISP=SHR,DSN=MGDB05.ISPF.CLISTUDB.SYSCEXEC
+//         DD DISP=SHR,DSN=MGDB05.ISPF.CLISTUDB
+//ISPLOG   DD  SYSOUT=T,DCB=(LRECL=125,BLKSIZE=129,RECFM=VA)
+//ISPLIST  DD  SYSOUT=T,DCB=(LRECL=121,BLKSIZE=12100,RECFM=FBA)
+//*
+//ISPPROF  DD  DISP=(,DELETE),DSN=&&PROFILE,SPACE=(CYL,(5,10,60)),
+//             UNIT=SYSDA,DCB=(RECFM=FB,LRECL=80,BLKSIZE=3120)
+//ISPSPROF DD  DISP=(,DELETE),DSN=&&SPROFILE,SPACE=(CYL,(5,10,60)),
+//             UNIT=SYSDA,DCB=(RECFM=FB,LRECL=80,BLKSIZE=3120)
+//ISPPLIB  DD  DISP=SHR,DSN=ISP.SISPPENU
+//ISPMLIB  DD  DISP=SHR,DSN=ISP.SISPMENU
+//ISPTLIB  DD  DISP=SHR,DSN=ISP.SISPTENU
+//ISPTABL  DD  DISP=SHR,DSN=ISP.SISPMENU
+//ISPSLIB  DD  DISP=SHR,DSN=ISP.SISPMENU
+//ISPFILE  DD  DISP=(,DELETE),DSN=&&FILE,SPACE=(CYL,(5,10,60)),
+//             UNIT=SYSDA,DCB=(RECFM=FB,LRECL=80,BLKSIZE=3120)
+//ISPLOG   DD  SYSOUT=T,DCB=(LRECL=125,BLKSIZE=129,RECFM=VA)
+//ISPLIST  DD  SYSOUT=T,DCB=(LRECL=121,BLKSIZE=12100,RECFM=FBA)
+//ISPWRK1  DD UNIT=SYSDA,
+//            LRECL=80,BLKSIZE=0,RECFM=FB,SPACE=(TRK,(100,,1))
+//OUTDD  DD DSN=MGDB05.ISPF.DDLOUT,
+//            DISP=(MOD,CATLG,CATLG),
+//            SPACE=(CYL,(10,20),RLSE),
+//            DCB=(RECFM=FB,LRECL=400,BLKSIZE=0,DSORG=PS)
+//RXPARM   DD *
+SSID              = "DB2B"            /* DB2 SSID            */
+LOCATION          = ""                /* LOCATION TO CONNECT */
+AUSWAHL           = "DB"              /* DB, SC, TS,TB, ...  */
+OBJECT            = "A2IMDB"          /* Object Name         */
+lcmd              = "HDDL"            /* Command DDL oder HDDL */
+trace             = "OFF"             /* Set trace ON or OFF */
+
+                                /* Generate Statements           */
+G_DATABASE        =  "Y"        /*  DB /        Y/N              */
+G_Tablespace      =  "Y"        /*  DB / SC     Y/N              */
+G_Table           =  "Y"        /*  DB / SC     Y/N              */
+G_Index           =  "Y"        /*  DB / SC     Y/N              */
+G_Comment         =  "Y"        /*  DB / SC     Y/N              */
+G_Auxtable        =  "Y"        /*  DB / SC     Y/N              */
+G_View            =  "Y"        /*  DB / SC     Y/N              */
+G_PrimaryKey      =  "Y"        /*  DB / SC     Y/N              */
+G_ForeignKey      =  "Y"        /*  DB / SC     Y/N              */
+G_Trigger         =  "Y"        /*  DB / SC     Y/N              */
+G_SProc           =  "Y"        /*  DB / SC     Y/N              */
+G_Synonym         =  "Y"        /*  DB / SC     Y/N              */
+G_Permission      =  "Y"        /*  DB / SC     Y/N              */
+
+G_Sequence        =  "N"        /*     / SC     Y/N              */
+G_Alias           =  "N"        /*     / SC     Y/N              */
+G_Variable        =  "N"        /*     / SC     Y/N              */
+G_Datatype        =  "N"        /*     / SC     Y/N              */
+
+G_GRANTTABLE      =  "N"        /*  DB / SC     Y/N              */
+G_GRANTVIEW       =  "N"        /*  DB / SC     Y/N              */
+G_GRANTSQ         =  "N"        /*  DB / SC     Y/N              */
+G_GRANTRT         =  "N"        /*  DB / SC     Y/N              */
+
+/*
+//SYSPRINT DD SYSOUT=*
+//SYSTSPRT DD SYSOUT=*
+//SYSTSIN  DD *
+  ISPSTART CMD(%ZOSB192B          )
+/*
+//ZOSB192B EXEC PGM=IKJEFT01
+//STEPLIB  DD DISP=SHR,DSN=DB2.DB2B.SDSNLOAD
+//SYSPROC  DD DISP=SHR,DSN=MGDB05.ISPF.CLISTUDB.SYSCEXEC
+//         DD DISP=SHR,DSN=MGDB05.ISPF.CLISTUDB
+//ISPLOG   DD  SYSOUT=T,DCB=(LRECL=125,BLKSIZE=129,RECFM=VA)
+//ISPLIST  DD  SYSOUT=T,DCB=(LRECL=121,BLKSIZE=12100,RECFM=FBA)
+//*
+//ISPPROF  DD  DISP=(,DELETE),DSN=&&PROFILE,SPACE=(CYL,(5,10,60)),
+//             UNIT=SYSDA,DCB=(RECFM=FB,LRECL=80,BLKSIZE=3120)
+//ISPSPROF DD  DISP=(,DELETE),DSN=&&SPROFILE,SPACE=(CYL,(5,10,60)),
+//             UNIT=SYSDA,DCB=(RECFM=FB,LRECL=80,BLKSIZE=3120)
+//ISPPLIB  DD  DISP=SHR,DSN=ISP.SISPPENU
+//ISPMLIB  DD  DISP=SHR,DSN=ISP.SISPMENU
+//ISPTLIB  DD  DISP=SHR,DSN=ISP.SISPTENU
+//ISPTABL  DD  DISP=SHR,DSN=ISP.SISPMENU
+//ISPSLIB  DD  DISP=SHR,DSN=ISP.SISPMENU
+//ISPFILE  DD  DISP=(,DELETE),DSN=&&FILE,SPACE=(CYL,(5,10,60)),
+//             UNIT=SYSDA,DCB=(RECFM=FB,LRECL=80,BLKSIZE=3120)
+//ISPLOG   DD  SYSOUT=T,DCB=(LRECL=125,BLKSIZE=129,RECFM=VA)
+//ISPLIST  DD  SYSOUT=T,DCB=(LRECL=121,BLKSIZE=12100,RECFM=FBA)
+//ISPWRK1  DD UNIT=SYSDA,
+//            LRECL=80,BLKSIZE=0,RECFM=FB,SPACE=(TRK,(100,,1))
+//OUTDD  DD DSN=MGDB05.ISPF.DDLOUT,
+//            DISP=(MOD,CATLG,CATLG),
+//            SPACE=(CYL,(10,20),RLSE),
+//            DCB=(RECFM=FB,LRECL=400,BLKSIZE=0,DSORG=PS)
+//RXPARM   DD *
+SSID              = "DB2B"            /* DB2 SSID            */
+LOCATION          = ""                /* LOCATION TO CONNECT */
+AUSWAHL           = "SC"              /* DB, SC, TS,TB, ...  */
+OBJECT            = "PAPIMP"          /* Object Name         */
+lcmd              = "HDDL"            /* Command DDL oder HDDL */
+trace             = "OFF"             /* Set trace ON or OFF */
+
+                                /* Generate Statements           */
+G_DATABASE        =  "N"        /*  DB /        Y/N              */
+G_Tablespace      =  "N"        /*  DB / SC     Y/N              */
+G_Table           =  "N"        /*  DB / SC     Y/N              */
+G_Index           =  "N"        /*  DB / SC     Y/N              */
+G_Comment         =  "N"        /*  DB / SC     Y/N              */
+G_Auxtable        =  "N"        /*  DB / SC     Y/N              */
+G_View            =  "N"        /*  DB / SC     Y/N              */
+G_PrimaryKey      =  "N"        /*  DB / SC     Y/N              */
+G_ForeignKey      =  "N"        /*  DB / SC     Y/N              */
+G_Trigger         =  "N"        /*  DB / SC     Y/N              */
+G_SProc           =  "N"        /*  DB / SC     Y/N              */
+G_Synonym         =  "N"        /*  DB / SC     Y/N              */
+G_Permission      =  "N"        /*  DB / SC     Y/N              */
+
+G_Sequence        =  "Y"        /*     / SC     Y/N              */
+G_Alias           =  "Y"        /*     / SC     Y/N              */
+G_Variable        =  "Y"        /*     / SC     Y/N              */
+G_Datatype        =  "Y"        /*     / SC     Y/N              */
+
+G_GRANTTABLE      =  "N"        /*  DB / SC     Y/N              */
+G_GRANTVIEW       =  "N"        /*  DB / SC     Y/N              */
+G_GRANTSQ         =  "N"        /*  DB / SC     Y/N              */
+G_GRANTRT         =  "N"        /*  DB / SC     Y/N              */
+
+/*
+//SYSPRINT DD SYSOUT=*
+//SYSTSPRT DD SYSOUT=*
+//SYSTSIN  DD *
+  ISPSTART CMD(%ZOSB192B          )
+/*

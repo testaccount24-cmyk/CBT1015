@@ -1,0 +1,956 @@
+SG VO           OBJECT1    = STRIP(CR) || '.' || STRIP(NM)
+SG VO           OBJECT2    = ""
+SG VO           AUSWAHLOK  = 'Y'
+
+SG DB           DATABASE   = ""
+SG DB           TABLESPACE = ""
+SG DB           OBJECT1    = ""
+SG DB           OBJECT2    = ""
+SG DB           STGROUP    = NM
+SG DB           AUSWAHLOK  = 'Y'
+
+SG TS           DATABASE   = ""
+SG TS           TABLESPACE = ""
+SG TS           OBJECT1    = ""
+SG TS           OBJECT2    = ""
+SG TS           STGROUP    = NM
+SG TS           AUSWAHLOK  = 'Y'
+
+SG IX           DATABASE   = ""
+SG IX           TABLESPACE = ""
+SG IX           OBJECT1    = ""
+SG IX           OBJECT2    = ""
+SG IX           STGROUP    = NM
+SG IX           AUSWAHLOK  = 'Y'
+
+SG TB           DATABASE   = ""
+SG TB           TABLESPACE = ""
+SG TB           OBJECT1    = ""
+SG TB           OBJECT2    = ""
+SG TB           STGROUP    = NM
+SG TB           AUSWAHLOK  = 'Y'
+
+SG D            DATABASE   = ""
+SG D            TABLESPACE = ""
+SG D            OBJECT1    = NM
+SG D            OBJECT2    = ""
+SG D            DB2_LIST_OBJ = SYSIBMS".SYSSTOGROUP"
+SG D            AUSWAHLOK = 'Y'
+
+SG DDL          OBJECT1    = NM
+SG DDL          OBJECT2    = ""
+SG DDL          CALL AUFRUF_ZOS81920
+SG DDL          AUSWAHLOK = 'N'
+
+SG HDDL         OBJECT1    = NM
+SG HDDL         OBJECT2    = ""
+SG HDDL         CALL AUFRUF_ZOS81920
+SG HDDL         AUSWAHLOK = 'N'
+
+SG STOSPACE     OBJECT1    = NM
+SG STOSPACE     CALL AUFRUF_ZOS81915
+SG STOSPACE     AUSWAHLOK = 'N'
+
+DB SG           DATABASE   = ""
+DB SG           TABLESPACE = ""
+DB SG           OBJECT1    = SG
+DB SG           OBJECT2    = ""
+DB SG           AUSWAHLOK = 'Y'
+
+DB TS           DATABASE   = ""
+DB TS           TABLESPACE = ""
+DB TS           OBJECT1    = DN || ".%"
+DB TS           OBJECT2    = ""
+DB TS           AUSWAHLOK = 'Y'
+
+DB TB           DATABASE   = DN
+DB TB           TABLESPACE = ""
+DB TB           OBJECT1    = ""
+DB TB           OBJECT2    = ""
+DB TB           AUSWAHLOK = 'Y'
+
+DB IX           DATABASE   = DN
+DB IX           TABLESPACE = ""
+DB IX           OBJECT1    = ""
+DB IX           OBJECT2    = ""
+DB IX           AUSWAHLOK = 'Y'
+
+DB D            DATABASE   = ""
+DB D            TABLESPACE = ""
+DB D            OBJECT1    = CR || "." || DN
+DB D            OBJECT2    = ""
+DB D            DB2_LIST_OBJ = SYSIBMS".SYSDATABASE"
+DB D            AUSWAHLOK = 'Y'
+
+DB BP           OBJECT1    = "*." || BP
+DB BP           AUSWAHLOK = 'Y'
+
+DB IBP          OBJECT1    = "*." || IXBP
+DB IBP          EINGABE   = 'BP'
+DB IBP          AUSWAHLOK = 'Y'
+
+DB DDL          OBJECT1    = CR || "." || DN
+DB DDL          OBJECT2    = ""
+DB DDL          CALL AUFRUF_ZOS81920
+DB DDL          AUSWAHLOK = 'N'
+
+DB HDDL         OBJECT1    = CR || "." || DN
+DB HDDL         OBJECT2    = ""
+DB HDDL         CALL AUFRUF_ZOS81920
+DB HDDL         AUSWAHLOK = 'N'
+
+DB DIS          OBJECT1    = DN
+DB DIS          CALL AUFRUF_ZOS81915
+DB DIS          AUSWAHLOK = 'N'
+
+DB START        OBJECT1    = DN
+DB START        CALL AUFRUF_ZOS81915
+DB START        AUSWAHLOK = 'N'
+
+DB STOP         OBJECT1    = DN
+DB STOP         CALL AUFRUF_ZOS81915
+DB STOP         AUSWAHLOK = 'N'
+
+DB REPORT       OBJECT1    = DN || ".*"
+DB REPORT       CALL AUFRUF_ZOS81915
+DB REPORT       AUSWAHLOK = 'N'
+
+DB COPY         OBJECT1    = DN || ".*"
+DB COPY         CALL AUFRUF_ZOS81915
+DB COPY         AUSWAHLOK = 'N'
+
+DB REORG        OBJECT1    = DN || ".*"
+DB REORG        CALL AUFRUF_ZOS81915
+DB REORG        AUSWAHLOK = 'N'
+
+DB RUNSTATS     OBJECT1    = DN || ".*"
+DB RUNSTATS     CALL AUFRUF_ZOS81915
+DB RUNSTATS     AUSWAHLOK = 'N'
+
+DB UNLOAD       OBJECT1    = DN || ".*"
+DB UNLOAD       CALL AUFRUF_ZOS81915
+DB UNLOAD       AUSWAHLOK = 'N'
+
+DB REBUILD      OBJECT1    = DN || ".*"
+DB REBUILD      CALL AUFRUF_ZOS81915
+DB REBUILD      AUSWAHLOK = 'N'
+
+DB QUIESCE      OBJECT1    = DN || ".*"
+DB QUIESCE      CALL AUFRUF_ZOS81915
+DB QUIESCE      AUSWAHLOK = 'N'
+
+TS TB           DATABASE   = ""
+TS TB           TABLESPACE = ""
+TS TB           OBJECT1    = ""
+TS TB           OBJECT2    = DB || "." || TS
+TS TB           AUSWAHLOK = 'Y'
+
+TS DB           DATABASE   = ""
+TS DB           TABLESPACE = ""
+TS DB           OBJECT1    = DB
+TS DB           OBJECT2    = ""
+TS DB           AUSWAHLOK = 'Y'
+
+TS TP           DATABASE   = ""
+TS TP           TABLESPACE = ""
+TS TP           OBJECT1    = DB || "." || TS
+TS TP           OBJECT2    = ""
+TS TP           AUSWAHLOK = 'Y'
+
+TS IC           DATABASE   = ""
+TS IC           TABLESPACE = ""
+TS IC           OBJECT1    = DB || "." || TS
+TS IC           OBJECT2    = ""
+TS IC           AUSWAHLOK = 'Y'
+
+TS IX           OBJECT1    = ""
+TS IX           OBJECT2    = ""
+TS IX           OBJECT3    = DB || "." || TS
+TS IX           AUSWAHLOK = 'Y'
+
+TS KC           OBJECT1    = ""
+TS KC           OBJECT2    = ""
+TS KC           OBJECT3    = DB || "." || TS
+TS KC           AUSWAHLOK = 'Y'
+
+TS RTS          EINGABE    = 'D'
+TS RTS          OBJECT1    = DB || "." || TS
+TS RTS          OBJECT2    = ""
+TS RTS          DB2_LIST_OBJ = SYSIBMS".SYSTABLESPACESTATS"
+TS RTS          AUSWAHLOK = 'Y'
+
+TS SG           OBJECT1    = SG
+TS SG           OBJECT2    = ""
+TS SG           AUSWAHLOK = 'Y'
+
+TS D            DATABASE   = ""
+TS D            TABLESPACE = ""
+TS D            OBJECT1    = DB || "." || TS
+TS D            OBJECT2    = ""
+TS D            DB2_LIST_OBJ = SYSIBMS".SYSTABLESPACE"
+TS D            AUSWAHLOK = 'Y'
+
+TS BP           OBJECT1    = "*." || BP
+TS BP           AUSWAHLOK = 'Y'
+
+TS DDL          OBJECT1    = DB || "." || TS
+TS DDL          OBJECT2    = ""
+TS DDL          CALL AUFRUF_ZOS81920
+TS DDL          AUSWAHLOK = 'N'
+
+TS HDDL         OBJECT1    = DB || "." || TS
+TS HDDL         OBJECT2    = ""
+TS HDDL         CALL AUFRUF_ZOS81920
+TS HDDL         AUSWAHLOK = 'N'
+
+TS DIS          OBJECT1    = DB || "." || TS
+TS DIS          CALL AUFRUF_ZOS81915
+TS DIS          AUSWAHLOK = 'N'
+
+TS START        OBJECT1    = DB || "." || TS
+TS START        CALL AUFRUF_ZOS81915
+TS START        AUSWAHLOK = 'N'
+
+TS STOP         OBJECT1    = DB || "." || TS
+TS STOP         CALL AUFRUF_ZOS81915
+TS STOP         AUSWAHLOK = 'N'
+
+TS RUNSTATS     OBJECT1    = DB || "." || TS
+TS RUNSTATS     OBJECT2    = ""
+TS RUNSTATS     CALL AUFRUF_ZOS81915
+TS RUNSTATS     AUSWAHLOK = 'N'
+
+TS REORG        OBJECT1    = DB || "." || TS
+TS REORG        OBJECT2    = ""
+TS REORG        CALL AUFRUF_ZOS81915
+TS REORG        AUSWAHLOK = 'N'
+
+TS REBUILD      OBJECT1    = DB || "." || TS
+TS REBUILD      OBJECT2    = ""
+TS REBUILD      CALL AUFRUF_ZOS81915
+TS REBUILD      AUSWAHLOK = 'N'
+
+TS COPY         OBJECT1    = DB || "." || TS
+TS COPY         OBJECT2    = ""
+TS COPY         CALL AUFRUF_ZOS81915
+TS COPY         AUSWAHLOK = 'N'
+
+TS REPORT       OBJECT1    = DB || "." || TS
+TS REPORT       OBJECT2    = ""
+TS REPORT       CALL AUFRUF_ZOS81915
+TS REPORT       AUSWAHLOK = 'N'
+
+TS UNLOAD       OBJECT1    = DB || "." || TS
+TS UNLOAD       OBJECT2    = ""
+TS UNLOAD       CALL AUFRUF_ZOS81915
+TS UNLOAD       AUSWAHLOK = 'N'
+
+TS QUIESCE      OBJECT1    = DB || "." || TS
+TS QUIESCE      OBJECT2    = ""
+TS QUIESCE      CALL AUFRUF_ZOS81915
+TS QUIESCE      AUSWAHLOK = 'N'
+
+TS RECOVER      OBJECT1    = DB || "." || TS
+TS RECOVER      OBJECT2    = ""
+TS RECOVER      CALL AUFRUF_ZOS81915
+TS RECOVER      AUSWAHLOK = 'N'
+
+TS MODRECOVER   OBJECT1    = DB || "." || TS
+TS MODRECOVER   OBJECT2    = ""
+TS MODRECOVER   CALL AUFRUF_ZOS81915
+TS MODRECOVER   AUSWAHLOK = 'N'
+
+TS MODHIST      OBJECT1    = DB || "." || TS
+TS MODHIST      OBJECT2    = ""
+TS MODHIST      CALL AUFRUF_ZOS81915
+TS MODHIST      AUSWAHLOK = 'N'
+
+TS MODIFY       OBJECT1    = DB || "." || TS
+TS MODIFY       OBJECT2    = ""
+TS MODIFY       CALL AUFRUF_ZOS81915
+TS MODIFY       AUSWAHLOK = 'N'
+
+TS MERGECOPY    OBJECT1    = DB || "." || TS
+TS MERGECOPY    CALL AUFRUF_ZOS81915
+TS MERGECOPY    AUSWAHLOK = 'N'
+
+TS COPYTOCOPY   OBJECT1    = DB || "." || TS
+TS COPYTOCOPY   OBJECT2    = ""
+TS COPYTOCOPY   CALL AUFRUF_ZOS81915
+TS COPYTOCOPY   AUSWAHLOK = 'N'
+
+TS ALTER        OBJECT1    = DB || "." || TS
+TS ALTER        CALL AUFRUF_ZOS81925
+TS ALTER        AUSWAHLOK = 'N'
+
+TS CHECK        OBJECT1    = DB || "." || TS
+TS CHECK        CALL AUFRUF_ZOS81915
+TS CHECK        AUSWAHLOK = 'N'
+
+TB DB           OBJECT1   = DB
+TB DB           OBJECT2   = ""
+TB DB           DATABASE  = ""
+TB DB           AUSWAHLOK = 'Y'
+
+TB TS           OBJECT1 = STRIP(DB) || "." || STRIP(TS)
+TB TS           OBJECT2 = ""
+TB TS           AUSWAHLOK = 'Y'
+
+TB TP           OBJECT1 = STRIP(DB) || "." || STRIP(TS)
+TB TP           OBJECT2 = ""
+TB TP           AUSWAHLOK = 'Y'
+
+TB CO           OBJECT2 = STRIP(CR) || '.' || STRIP(NM)
+TB CO           OBJECT1 = ""
+TB CO           AUSWAHLOK = 'Y'
+
+TB FK           OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+TB FK           OBJECT2 = ""
+TB FK           AUSWAHLOK = 'Y'
+
+TB IX           OBJECT1 = ""
+TB IX           OBJECT2 = STRIP(CR) || '.' || STRIP(NM)
+TB IX           AUSWAHLOK = 'Y'
+
+TB IP           OBJECT1 = ""
+TB IP           OBJECT2 = STRIP(CR) || '.' || STRIP(NM)
+TB IP           AUSWAHLOK = 'Y'
+
+TB SY           OBJECT2 = STRIP(CR) || '.' || STRIP(NM)
+TB SY           OBJECT1 = ""
+TB SY           AUSWAHLOK = 'Y'
+
+TB VW           OBJECT1 = ""
+TB VW           OBJECT2 = STRIP(CR) || '.' || STRIP(NM)
+TB VW           AUSWAHLOK = 'Y'
+
+TB UA           OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+TB UA           OBJECT2 = ""
+TB UA           AUSWAHLOK = 'Y'
+
+TB IC           OBJECT1 = STRIP(DB) || "." || STRIP(TS)
+TB IC           OBJECT2 = ""
+TB IC           AUSWAHLOK = 'Y'
+
+TB TC           OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+TB TC           OBJECT2 = ""
+TB TC           CALL AUFRUF_CCOMPTAB
+TB TC           AUSWAHLOK = 'N'
+
+TB KC           OBJECT1 = ""
+TB KC           OBJECT2 = STRIP(CR) || '.' || STRIP(NM)
+TB KC           AUSWAHLOK = 'Y'
+
+TB D            OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+TB D            OBJECT2 = ""
+TB D            DB2_LIST_OBJ = SYSIBMS".SYSTABLES "
+TB D            AUSWAHLOK = 'Y'
+
+TB RTS          EINGABE    = 'D'
+TB RTS          OBJECT1    = DB || "." || TS
+TB RTS          OBJECT2    = ""
+TB RTS          DB2_LIST_OBJ = SYSIBMS".SYSTABLESPACESTATS"
+TB RTS          AUSWAHLOK = 'Y'
+
+TB DIS          OBJECT1    = DB || "." || TS
+TB DIS          OBJECT2    = ""
+TB DIS          CALL AUFRUF_ZOS81915
+TB DIS          AUSWAHLOK = 'N'
+
+TB TG           OBJECT1 = ""
+TB TG           OBJECT2 = STRIP(CR) || '.' || STRIP(NM)
+TB TG           AUSWAHLOK = 'Y'
+
+TB AL           OBJECT1 = ""
+TB AL           OBJECT2 = STRIP(CR) || '.' || STRIP(NM)
+TB AL           AUSWAHLOK = 'Y'
+
+TB CK           OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+TB CK           OBJECT2 = ""
+TB CK           AUSWAHLOK = 'Y'
+
+TB IC           DATABASE   = ""
+TB IC           TABLESPACE = ""
+TB IC           OBJECT1    = DB || "." || TS
+TB IC           OBJECT2    = ""
+TB IC           AUSWAHLOK = 'Y'
+
+TB RUNSTATS     OBJECT1    = DB || "." || TS
+TB RUNSTATS     OBJECT2    = ""
+TB RUNSTATS     CALL AUFRUF_ZOS81915
+TB RUNSTATS     AUSWAHLOK = 'N'
+
+TB UNLOAD       OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+TB UNLOAD       OBJECT2 = STRIP(DB) || "." || STRIP(TS)
+TB UNLOAD       CALL AUFRUF_ZOS81915
+TB UNLOAD       AUSWAHLOK = 'N'
+
+TB DSNTEP2      OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+TB DSNTEP2      OBJECT2 = STRIP(DB) || "." || STRIP(TS)
+TB DSNTEP2      CALL AUFRUF_ZOS81915
+TB DSNTEP2      AUSWAHLOK = 'N'
+
+TB DSNTEP4      OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+TB DSNTEP4      OBJECT2 = STRIP(DB) || "." || STRIP(TS)
+TB DSNTEP4      CALL AUFRUF_ZOS81915
+TB DSNTEP4      AUSWAHLOK = 'N'
+
+TB DSNTIAD      OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+TB DSNTIAD      OBJECT2 = STRIP(DB) || "." || STRIP(TS)
+TB DSNTIAD      CALL AUFRUF_ZOS81915
+TB DSNTIAD      AUSWAHLOK = 'N'
+
+TB DSNTIAUL     OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+TB DSNTIAUL     OBJECT2 = STRIP(DB) || "." || STRIP(TS)
+TB DSNTIAUL     CALL AUFRUF_ZOS81915
+TB DSNTIAUL     AUSWAHLOK = 'N'
+
+TB REORG        OBJECT1    = DB || "." || TS
+TB REORG        OBJECT2    = ""
+TB REORG        CALL AUFRUF_ZOS81915
+TB REORG        AUSWAHLOK = 'N'
+
+TB REBUILD      OBJECT1    = DB || "." || TS
+TB REBUILD      OBJECT2    = ""
+TB REBUILD      CALL AUFRUF_ZOS81915
+TB REBUILD      AUSWAHLOK = 'N'
+
+TB COPY         OBJECT1    = DB || "." || TS
+TB COPY         OBJECT2    = ""
+TB COPY         CALL AUFRUF_ZOS81915
+TB COPY         AUSWAHLOK = 'N'
+
+TB REPORT       OBJECT1    = DB || "." || TS
+TB REPORT       OBJECT2    = ""
+TB REPORT       CALL AUFRUF_ZOS81915
+TB REPORT       AUSWAHLOK = 'N'
+
+TB QUIESCE      OBJECT1    = DB || "." || TS
+TB QUIESCE      OBJECT2    = ""
+TB QUIESCE      CALL AUFRUF_ZOS81915
+TB QUIESCE      AUSWAHLOK = 'N'
+
+TB RECOVER      OBJECT1    = DB || "." || TS
+TB RECOVER      OBJECT2    = ""
+TB RECOVER      CALL AUFRUF_ZOS81915
+TB RECOVER      AUSWAHLOK = 'N'
+
+TB MODRECOVER   OBJECT1    = DB || "." || TS
+TB MODRECOVER   OBJECT2    = ""
+TB MODRECOVER   CALL AUFRUF_ZOS81915
+TB MODRECOVER   AUSWAHLOK = 'N'
+
+TB MODHIST      OBJECT1    = DB || "." || TS
+TB MODHIST      OBJECT2    = ""
+TB MODHIST      CALL AUFRUF_ZOS81915
+TB MODHIST      AUSWAHLOK = 'N'
+
+TB MODIFY       OBJECT1    = DB || "." || TS
+TB MODIFY       OBJECT2    = ""
+TB MODIFY       CALL AUFRUF_ZOS81915
+TB MODIFY       AUSWAHLOK = 'N'
+
+TB MERGECOPY    OBJECT1    = DB || "." || TS
+TB MERGECOPY    CALL AUFRUF_ZOS81915
+TB MERGECOPY    AUSWAHLOK = 'N'
+
+TB COPYTOCOPY   OBJECT1    = DB || "." || TS
+TB COPYTOCOPY   OBJECT2    = ""
+TB COPYTOCOPY   CALL AUFRUF_ZOS81915
+TB COPYTOCOPY   AUSWAHLOK = 'N'
+
+TB TRUNCATE     OBJECT1    = CR || "." || NM
+TB TRUNCATE     CALL AUFRUF_ZOS81910
+TB TRUNCATE     AUSWAHLOK = 'N'
+
+VW IX           OBJECT1 = STRIP(TC) || '.' || STRIP(TN)
+VW IX           AUSWAHLOK = 'Y'
+
+VW CO           OBJECT1 = ""
+VW CO           OBJECT2 = STRIP(CR) || '.' || STRIP(NM)
+VW CO           AUSWAHLOK = 'Y'
+
+VW TC           OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+VW TC           OBJECT2 = ""
+VW TC           CALL AUFRUF_CCOMPTAB
+VW TC           AUSWAHLOK = 'N'
+
+VW UA           OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+VW UA           AUSWAHLOK = 'Y'
+
+VW D            OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+VW D            OBJECT2 = ""
+VW D            DB2_LIST_OBJ = SYSIBMS".SYSVIEWS"
+VW D            AUSWAHLOK = 'Y'
+
+VW TB           OBJECT1 = STRIP(TC) || '.' || STRIP(TN)
+VW TB           AUSWAHLOK = 'Y'
+
+VW DDL          OBJECT1    = STRIP(CR) || '.' || STRIP(NM)
+VW DDL          OBJECT2    = ""
+VW DDL          CALL AUFRUF_ZOS81920
+VW DDL          AUSWAHLOK = 'N'
+
+VW HDDL         OBJECT1    = STRIP(CR) || '.' || STRIP(NM)
+VW HDDL         OBJECT2    = ""
+VW HDDL         CALL AUFRUF_ZOS81920
+VW HDDL         AUSWAHLOK = 'N'
+
+MQT VW          OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+MQT VW          OBJECT2 = ""
+MQT VW          AUSWAHLOK = 'Y'
+
+MQT TS          OBJECT1 = STRIP(DB) || '.' || STRIP(TS)
+MQT TS          OBJECT2 = ""
+MQT TS          AUSWAHLOK = 'Y'
+
+MQT DB          OBJECT1 = STRIP(DB)
+MQT DB          OBJECT2 = ""
+MQT DB          AUSWAHLOK = 'Y'
+
+MQT D           OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+MQT D           OBJECT2 = ""
+MQT D           DB2_LIST_OBJ = SYSIBMS".SYSVIEWS"
+MQT D           AUSWAHLOK = 'Y'
+
+MQT DDL         OBJECT1    = STRIP(CR) || '.' || STRIP(NM)
+MQT DDL         OBJECT2    = ""
+MQT DDL         CALL AUFRUF_ZOS81920
+MQT DDL         AUSWAHLOK = 'N'
+
+MQT HDDL        OBJECT1    = STRIP(CR) || '.' || STRIP(NM)
+MQT HDDL        OBJECT2    = ""
+MQT HDDL        CALL AUFRUF_ZOS81920
+MQT HDDL        AUSWAHLOK = 'N'
+
+IX DB           OBJECT1 = STRIP(DB)
+IX DB           AUSWAHLOK = 'Y'
+
+IX TB           OBJECT1 = STRIP(TC) || '.' || STRIP(TN)
+IX TB           AUSWAHLOK = 'Y'
+
+IX IP           OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+IX IP           AUSWAHLOK = 'Y'
+
+IX KC           OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+IX KC           AUSWAHLOK = 'Y'
+
+IX BP           OBJECT1 = '*.' || STRIP(BP)
+IX BP           AUSWAHLOK = 'Y'
+
+IX D            OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+IX D            OBJECT2 = ""
+IX D            DB2_LIST_OBJ = SYSIBMS".SYSINDEXES"
+IX D            AUSWAHLOK = 'Y'
+
+IX RTS          EINGABE    = 'D'
+IX RTS          OBJECT1    = CR || "." || NM
+IX RTS          OBJECT2    = ""
+IX RTS          DB2_LIST_OBJ = SYSIBMS".SYSINDEXSPACESTATS"
+IX RTS          AUSWAHLOK = 'Y'
+
+IX DDL          OBJECT1    = STRIP(CR) || '.' || STRIP(NM)
+IX DDL          OBJECT2    = ""
+IX DDL          CALL AUFRUF_ZOS81920
+IX DDL          AUSWAHLOK = 'N'
+
+IX HDDL         OBJECT1    = STRIP(CR) || '.' || STRIP(NM)
+IX HDDL         OBJECT2    = ""
+IX HDDL         CALL AUFRUF_ZOS81920
+IX HDDL         AUSWAHLOK = 'N'
+
+IX DIS          OBJECT1    = STRIP(DB) || '.' || STRIP(IS)
+IX DIS          CALL AUFRUF_ZOS81915
+IX DIS          AUSWAHLOK = 'N'
+
+IX START        OBJECT1    = STRIP(DB) || '.' || STRIP(IS)
+IX START        CALL AUFRUF_ZOS81915
+IX START        AUSWAHLOK = 'N'
+
+IX STOP         OBJECT1    = STRIP(DB) || '.' || STRIP(IS)
+IX STOP         CALL AUFRUF_ZOS81915
+IX STOP         AUSWAHLOK = 'N'
+
+IX RUNSTATS     OBJECT1    = STRIP(CR) || '.' || STRIP(NM)
+IX RUNSTATS     OBJECT2    = ''
+IX RUNSTATS     CALL AUFRUF_ZOS81915
+IX RUNSTATS     AUSWAHLOK = 'N'
+
+IX REORG        OBJECT1    = STRIP(CR) || '.' || STRIP(NM)
+IX REORG        OBJECT2    = ''
+IX REORG        CALL AUFRUF_ZOS81915
+IX REORG        AUSWAHLOK = 'N'
+
+IX REBUILD      OBJECT1    = STRIP(CR) || '.' || STRIP(NM)
+IX REBUILD      OBJECT2    = ''
+IX REBUILD      CALL AUFRUF_ZOS81915
+IX REBUILD      AUSWAHLOK = 'N'
+
+IX CHECK        OBJECT1    = STRIP(CR) || '.' || STRIP(NM)
+IX CHECK        OBJECT2    = ''
+IX CHECK        CALL AUFRUF_ZOS81915
+IX CHECK        AUSWAHLOK = 'N'
+
+IP IX           OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+IP IX           OBJECT2 = ''
+IP IX           AUSWAHLOK = 'Y'
+
+IP DIS          OBJECT1 = STRIP(DB) || '.' || STRIP(IS)
+IP DIS          OBJECT2 = PA
+IP DIS          CALL AUFRUF_ZOS81915
+IP DIS          AUSWAHLOK = 'N'
+
+IP LC           OBJECT1 = VSAM
+IP LC           CALL AUFRUF_ZOS81915
+IP LC           AUSWAHLOK = 'N'
+
+IP D            OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+IP D            OBJECT2 = PA
+IP D            DB2_LIST_OBJ = SYSIBMS".SYSINDEXPART "
+IP D            AUSWAHLOK = 'Y'
+
+UA D            OBJECT1 = STRIP(TC) || '.' || STRIP(TN)
+UA D            OBJECT2 = STRIP(GO) || '.' || STRIP(GE)
+UA D            DB2_LIST_OBJ = SYSIBMS".SYSTABAUTH"
+UA D            AUSWAHLOK = 'Y'
+
+TP TS           OBJECT1 = STRIP(DB) || '.' || STRIP(TS)
+TP TS           AUSWAHLOK = 'Y'
+
+TP DIS          OBJECT1    = DB || "." || TS
+TP DIS          OBJECT2    = PA
+TP DIS          CALL AUFRUF_ZOS81915
+TP DIS          AUSWAHLOK = 'N'
+
+TP LC           OBJECT1    = VSAM
+TP LC           CALL AUFRUF_ZOS81915
+TP LC           AUSWAHLOK = 'N'
+
+TP D            OBJECT1 = STRIP(DB) || '.' || STRIP(TS)
+TP D            OBJECT2 = PA
+TP D            DB2_LIST_OBJ = SYSIBMS".SYSTABLEPART "
+TP D            AUSWAHLOK = 'Y'
+
+KC TB           OBJECT1 = STRIP(TC) || '.' || STRIP(TN)
+KC TB           AUSWAHLOK = 'Y'
+
+KC IX           OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+KC IX           AUSWAHLOK = 'Y'
+
+KC CO           EINGABE = 'D'
+KC CO           OBJECT1 = STRIP(CO)
+KC CO           OBJECT2 = STRIP(TC) || '.' || STRIP(TN)
+KC CO           DB2_LIST_OBJ = SYSIBMS".SYSCOLUMNS"
+KC CO           AUSWAHLOK = 'Y'
+
+KC D            OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+KC D            OBJECT2 = CO
+KC D            DB2_LIST_OBJ = SYSIBMS".SYSKEYS"
+KC D            AUSWAHLOK = 'Y'
+
+TG D            OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+TG D            OBJECT2 = ""
+TG D            DB2_LIST_OBJ = SYSIBMS".SYSTRIGGERS"
+TG D            AUSWAHLOK = 'Y'
+
+TG TB           OBJECT1 = STRIP(TC) || '.' || STRIP(TN)
+TG TB           OBJECT2 = ""
+TG TB           AUSWAHLOK = 'Y'
+
+TG VW           OBJECT1 = STRIP(TC) || '.' || STRIP(TN)
+TG VW           OBJECT2 = ""
+TG VW           AUSWAHLOK = 'Y'
+
+TG DDL          OBJECT1    = STRIP(CR) || '.' || STRIP(NM)
+TG DDL          OBJECT2    = ""
+TG DDL          CALL AUFRUF_ZOS81920
+TG DDL          AUSWAHLOK = 'N'
+
+TG HDDL         OBJECT1    = STRIP(CR) || '.' || STRIP(NM)
+TG HDDL         OBJECT2    = ""
+TG HDDL         CALL AUFRUF_ZOS81920
+TG HDDL         AUSWAHLOK = 'N'
+
+AL TB           OBJECT1 = STRIP(TC) || '.' || STRIP(TN)
+AL TB           AUSWAHLOK = 'Y'
+
+AL D            OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+AL D            OBJECT2 = ""
+AL D            DB2_LIST_OBJ = SYSIBMS".SYSTABLES "
+AL D            AUSWAHLOK = 'Y'
+
+AL DDL          OBJECT1    = STRIP(CR) || '.' || STRIP(NM)
+AL DDL          OBJECT2    = STRIP(TC) || '.' || STRIP(TN)
+AL DDL          CALL AUFRUF_ZOS81920
+AL DDL          AUSWAHLOK = 'N'
+
+AL HDDL         OBJECT1    = STRIP(CR) || '.' || STRIP(NM)
+AL HDDL         OBJECT2    = STRIP(TC) || '.' || STRIP(TN)
+AL HDDL         CALL AUFRUF_ZOS81920
+AL HDDL         AUSWAHLOK = 'N'
+
+SY TB           OBJECT1 = STRIP(TC) || '.' || STRIP(TN)
+SY TB           AUSWAHLOK = 'Y'
+
+SY VW           OBJECT1 = STRIP(TC) || '.' || STRIP(TN)
+SY VW           AUSWAHLOK = 'Y'
+
+SY D            OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+SY D            OBJECT2 = ""
+SY D            DB2_LIST_OBJ = SYSIBMS".SYSSYNONYMS"
+SY D            AUSWAHLOK = 'Y'
+
+SY DDL          OBJECT1    = STRIP(CR) || '.' || STRIP(NM)
+SY DDL          OBJECT2    = ""
+SY DDL          CALL AUFRUF_ZOS81920
+SY DDL          AUSWAHLOK = 'N'
+
+SY HDDL         OBJECT1    = STRIP(CR) || '.' || STRIP(NM)
+SY HDDL         OBJECT2    = ""
+SY HDDL         CALL AUFRUF_ZOS81920
+SY HDDL         AUSWAHLOK = 'N'
+
+SE D            OBJECT1 = STRIP(SC) || '.' || STRIP(SN)
+SE D            OBJECT2 = ""
+SE D            DB2_LIST_OBJ = SYSIBMS".SYSSEQUENCES"
+SE D            AUSWAHLOK = 'Y'
+
+SE TB           OBJECT1 = STRIP(DC) || '.' || STRIP(DN)
+SE TB           AUSWAHLOK = 'Y'
+
+SE CO           OBJECT1 = "*." || STRIP(COL)
+SE CO           OBJECT2 = STRIP(DC) || '.' || STRIP(DN)
+SE CO           AUSWAHLOK = 'Y'
+
+SE DDL          OBJECT1    = STRIP(SC) || '.' || STRIP(SN)
+SE DDL          OBJECT2    = ""
+SE DDL          CALL AUFRUF_ZOS81920
+SE DDL          AUSWAHLOK = 'N'
+
+SE HDDL         OBJECT1    = STRIP(SC) || '.' || STRIP(SN)
+SE HDDL         OBJECT2    = ""
+SE HDDL         CALL AUFRUF_ZOS81920
+SE HDDL         AUSWAHLOK = 'N'
+
+RT DIS          OBJECT1    = STRIP(NM)
+RT DIS          OBJECT2    = STRIP(TC) || '.' || STRIP(TN)
+RT DIS          OBJECT3    = STRIP(TP)
+RT DIS          CALL AUFRUF_ZOS81915
+RT DIS          AUSWAHLOK = 'N'
+
+RT D            OBJECT1 = STRIP(NM)
+RT D            OBJECT2 = STRIP(TC) || '.' || STRIP(TN)
+RT D            DB2_LIST_OBJ = SYSIBMS".SYSROUTINES"
+RT D            AUSWAHLOK = 'Y'
+
+CO TB           OBJECT1    = STRIP(TC) || '.' || STRIP(TN)
+CO TB           OBJECT2    = ""
+CO TB           AUSWAHLOK  = 'Y'
+
+CO VW           OBJECT1    = STRIP(TC) || '.' || STRIP(TN)
+CO VW           OBJECT2    = ""
+CO VW           AUSWAHLOK  = 'Y'
+
+CO D            OBJECT1 = STRIP(NM)
+CO D            OBJECT2 = STRIP(TC) || '.' || STRIP(TN)
+CO D            DB2_LIST_OBJ = SYSIBMS".SYSCOLUMNS"
+CO D            AUSWAHLOK = 'Y'
+
+VO SG           OBJECT1    = STRIP(SC) || '.' || STRIP(SN)
+VO SG           OBJECT2    = ""
+VO SG           AUSWAHLOK  = 'Y'
+
+VO VW           OBJECT1    = STRIP(SC) || '.' || STRIP(SN)
+VO VW           OBJECT2    = ""
+VO VW           AUSWAHLOK  = 'Y'
+
+VO D            OBJECT1 = VO
+VO D            OBJECT2 = STRIP(SC) || '.' || STRIP(SN)
+VO D            DB2_LIST_OBJ = SYSIBMS".SYSVOLUMES"
+VO D            AUSWAHLOK = 'Y'
+
+SR D            OBJECT1 = TG || "." || SO
+SR D            OBJECT2 = ""
+SR D            DB2_LIST_OBJ = SYSIBMS".SYSSTRINGS"
+SR D            AUSWAHLOK = 'Y'
+
+PL DBRM         OBJECT1 = ""
+PL DBRM         OBJECT2 = CR || "." || NA
+PL DBRM         AUSWAHLOK = 'Y'
+
+PL D            OBJECT1 = CR || "." || NA
+PL D            OBJECT2 = ""
+PL D            DB2_LIST_OBJ = SYSIBMS".SYSPLAN"
+PL D            AUSWAHLOK = 'Y'
+
+PL REBIND       OBJECT1 = CR || "." || NA
+PL REBIND       CALL AUFRUF_ZOS81915
+PL REBIND       AUSWAHLOK = 'N'
+
+PG ST           OBJECT1 = CO || "." || NM
+PG ST           OBJECT2 = VER
+PG ST           AUSWAHLOK = 'Y'
+
+PG D            OBJECT1 = LO
+PG D            OBJECT2 = CO || "." || NM
+PG D            DB2_LIST_OBJ = SYSIBMS".SYSPACKAGE"
+PG D            AUSWAHLOK = 'Y'
+
+PG REBIND       OBJECT1 = LO
+PG REBIND       OBJECT2 = CO || "." || NM
+PG REBIND       OBJECT3 = VER
+PG REBIND       CALL AUFRUF_ZOS81915
+PG REBIND       AUSWAHLOK = 'N'
+
+CK D            OBJECT1 = TC || "." || TN
+CK D            OBJECT2 = CN
+CK D            DB2_LIST_OBJ = SYSIBMS".SYSCHECKS"
+CK D            AUSWAHLOK = 'Y'
+
+CK TB           OBJECT1 = TC || "." || TN
+CK TB           OBJECT2 = ""
+CK TB           AUSWAHLOK = 'Y'
+
+FK TB           OBJECT1   =  STRIP(TC) || '.' || STRIP(TN)
+FK TB           OBJECT2   = ""
+FK TB           DATABASE  = ""
+FK TB           AUSWAHLOK = 'Y'
+
+FK RTB          EINGABE = 'TB'
+FK RTB          OBJECT1   =  STRIP(RC) || '.' || STRIP(RN)
+FK RTB          OBJECT2   = ""
+FK RTB          DATABASE  = ""
+FK RTB          AUSWAHLOK = 'Y'
+
+FK DDL          OBJECT1   =  STRIP(TC) || '.' || STRIP(TN)
+FK DDL          OBJECT2    = ""
+FK DDL          OBJECT3    = STRIP(REL)
+FK DDL          CALL AUFRUF_ZOS81920
+FK DDL          AUSWAHLOK = 'N'
+
+FK HDDL         OBJECT1   =  STRIP(TC) || '.' || STRIP(TN)
+FK HDDL         OBJECT2    = ""
+FK HDDL         OBJECT3    = STRIP(REL)
+FK HDDL         CALL AUFRUF_ZOS81920
+FK HDDL         AUSWAHLOK = 'N'
+
+IC DB           OBJECT1   =  STRIP(DB)
+IC DB           OBJECT2   = ""
+IC DB           DATABASE  = ""
+IC DB           AUSWAHLOK = 'Y'
+
+IC TS           OBJECT1   =  STRIP(DB) || '.' || STRIP(TS)
+IC TS           OBJECT2   = ""
+IC TS           DATABASE  = ""
+IC TS           AUSWAHLOK = 'Y'
+
+IC TB           OBJECT1   = ""
+IC TB           OBJECT2   =  STRIP(DB) || '.' || STRIP(TS)
+IC TB           DATABASE  = ""
+IC TB           AUSWAHLOK = 'Y'
+
+IC D            OBJECT1 = STRIP(DB) || '.' || STRIP(TS)
+IC D            OBJECT2 = TIS
+IC D            DB2_LIST_OBJ = SYSIBMS".SYSCOPY"
+IC D            AUSWAHLOK = 'Y'
+
+IC RECOVER      OBJECT1    = DB || "." || TS
+IC RECOVER      OBJECT2    = SRBA
+IC RECOVER      OBJECT3    = DSN
+IC RECOVER      CALL AUFRUF_ZOS81915
+IC RECOVER      AUSWAHLOK = 'N'
+
+IC MERGECOPY    OBJECT1    = DB || "." || TS
+IC MERGECOPY    CALL AUFRUF_ZOS81915
+IC MERGECOPY    AUSWAHLOK = 'N'
+
+IC COPYTOCOPY   OBJECT1    = DB || "." || TS
+IC COPYTOCOPY   OBJECT2    = DSN
+IC COPYTOCOPY   CALL AUFRUF_ZOS81915
+IC COPYTOCOPY   AUSWAHLOK = 'N'
+
+IC UNLOAD       OBJECT1    = DB || "." || TS
+IC UNLOAD       OBJECT2    = DSN
+IC UNLOAD       IF LENGTH(DSN) > 0 THEN CALL AUFRUF_ZOS81915
+IC UNLOAD       AUSWAHLOK = 'N'
+
+IC DSN1COPY     OBJECT1    = DB || "." || TS
+IC DSN1COPY     OBJECT2    = DSN
+IC DSN1COPY     IF ICT = 'F'  THEN CALL AUFRUF_ZOS81915
+IC DSN1COPY     AUSWAHLOK = 'N'
+
+RO DDL          OBJECT1 = STRIP(NA)
+RO DDL          OBJECT2 = ""
+RO DDL          CALL AUFRUF_ZOS81920
+RO DDL          AUSWAHLOK = 'N'
+
+RO HDDL         OBJECT1 = STRIP(NA)
+RO HDDL         OBJECT2 = ""
+RO HDDL         CALL AUFRUF_ZOS81920
+RO HDDL         AUSWAHLOK = 'N'
+
+RO D            OBJECT1 = STRIP(CR) || '.' || STRIP(NA)
+RO D            OBJECT2 = TIS
+RO D            DB2_LIST_OBJ = SYSIBMS".SYSROLES"
+RO D            AUSWAHLOK = 'Y'
+
+RO DIS          OBJECT1    = NA
+RO DIS          OBJECT2    = ""
+RO DIS          CALL AUFRUF_ZOS81915
+RO DIS          AUSWAHLOK = 'N'
+
+LO IPN          OBJECT1   =  STRIP(LK)
+LO IPN          AUSWAHLOK = 'Y'
+
+LO UN           OBJECT1   =  STRIP(LK)
+LO UN           AUSWAHLOK = 'Y'
+
+LO D            OBJECT1 = STRIP(LK) || '.' || STRIP(LO)
+LO D            DB2_LIST_OBJ = SYSIBMS".LOCATIONS"
+LO D            AUSWAHLOK = 'Y'
+
+LU UN           OBJECT1   =  STRIP(LU)
+LU UN           AUSWAHLOK = 'Y'
+
+LU D            OBJECT1 = STRIP(LU)
+LU D            DB2_LIST_OBJ = SYSIBMS".LUNAMES"
+LU D            AUSWAHLOK = 'Y'
+
+IPN UN          OBJECT1   =  STRIP(LK)
+IPN UN          AUSWAHLOK = 'Y'
+
+IPN LO          OBJECT1   =  STRIP(LK) || ".%"
+IPN LO          AUSWAHLOK = 'Y'
+
+IPN D           OBJECT1 = STRIP(LK)
+IPN D           DB2_LIST_OBJ = SYSIBMS".IPNAMES"
+IPN D           AUSWAHLOK = 'Y'
+
+UN IPN          OBJECT1   =  STRIP(LK)
+UN IPN          AUSWAHLOK = 'Y'
+
+UN LO           OBJECT1   =  STRIP(LK) || ".%"
+UN LO           AUSWAHLOK = 'Y'
+
+UN D            OBJECT1 = STRIP(AI) || '.' || STRIP(LK)
+UN D            OBJECT2 = STRIP(TY)
+UN D            DB2_LIST_OBJ = SYSIBMS".USERNAMES"
+UN D            AUSWAHLOK = 'Y'
+
+DBRM PL         OBJECT1   =  STRIP(PC) || '.' || STRIP(PN)
+DBRM PL         OBJECT2   =  ''
+DBRM PL         AUSWAHLOK = 'Y'
+
+DBRM PG         OBJECT1   =  STRIP(PN)
+DBRM PG         OBJECT2   =  ''
+DBRM PG         AUSWAHLOK = 'Y'
+
+DBRM D          OBJECT1   =  STRIP(NM)
+DBRM D          OBJECT2   =  ''
+DBRM D          DB2_LIST_OBJ = SYSIBMS".SYSDBRM"
+DBRM D          AUSWAHLOK = 'Y'
+
+ST   EXPLAIN    STATEMENT = SUBWORD(LZEILE, 3)
+ST   EXPLAIN    CALL AUFRUF_ZOS81915
+ST   EXPLAIN    AUSWAHLOK = 'N'
+

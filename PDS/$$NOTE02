@@ -1,0 +1,58 @@
+Subject:  Re: FILE1015
+From:     "Ulrich_Braeuer@t-online.de" <Ulrich_Braeuer@t-online.de>
+Date:     6/20/2021, 6:44 AM
+To:       Peter Vels <peter.vels@gmail.com>,
+          Sam Golob <sbgolob@cbttape.org>
+
+Hi Together,
+
+I have started the translation (panals, messages, ..)
+
+See the attached file
+
+In this file are also included the DB2 z/OS tools for DB2 V8 and V9
+
+Regards,
+Uli
+
+Am 14.06.2021 um 08:07 schrieb Peter Vels:
+> Hi Sam,
+> Grueses Dich Uli!
+>
+> Here are some translations for the Rexx's in Uli's FILE1015.
+  There might be more - no promises!
+>
+> c 'Fehler beim' 'Error on' all
+> c 'AUSGABE=' 'OUTPUT=' all
+> c 'FEHLER BEI ' 'ERROR IN' all
+> c 'gab folgende Fehlerbedingung zur ck' 'returned the following' all
+> c 'Falscher Parameter' 'Invalid Parameter' all
+> c 'Programm wird unterbrochen' 'Program interrupted' all
+> c 'Aufruf Dynamsql.rex' 'Calling Dynamsql.rex' all
+> c 'Optionen :' 'Options   :' all
+> c 'DatenbankAlias' 'Database Alias' all
+> c 'Name der Datenbank' 'Name of Database' all
+> c 'Name des Objectes' 'Object Name' all
+> c 'Alle Objecte fuer DB' 'All DB Objects' all
+> c 'Alle Objecte fuer TS' 'All TS Objects' all
+> c 'fuer' 'for' all
+> c 'Y/N      DDL WIRD auf 72' 'Y/N 72-column DDL' all
+> c 'Diese Anzeige' 'This Help'
+> c Nachricht Message all
+>
+> Also for member  #SSIDINF:
+>
+> * Allgemeine Stuerungsdatei
+> * Bitte fuer jedes Subsystem das benutzt wir eintraege machen
+> * Wird benutzt fuer JOB's dsnutilb, dsntesp2, ......
+>
+> becomes:
+>
+> * General configuration file
+> * Please make entries for each subsystem in use
+> * Used for jobs, DSNUTILB, DSNTEP2 etc
+>
+> Regards/MfG
+> Peter Vels
+> (Darmstadt 1992-1997)
+

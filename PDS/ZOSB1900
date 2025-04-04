@@ -1,0 +1,465 @@
+/* REXX */
+/*******************************************************************/
+/*                                                                 */
+/* ProgramNAME      : ZOSB1900  (fuer LUW V11 Nr 900)              */
+/* AUTHER           : ULRICH BRAEUER                               */
+/* FUNKTION         : AG : Parameter zurueckgeben.                 */
+/*                  :      Z.B LISTDSN  oa                         */
+/*                                                                 */
+/*                                                                 */
+/*******************************************************************/
+
+ENV        = "TSO"
+X          = MSG('OFF')
+USER       = USERID()
+SYSCATS    = "SYSCAT"
+SYSIBMS    = "SYSIBM"
+SYSIBMA    = "SYSIBMADM"
+SYSPROCA   = "SYSPROC"
+ADDRESS ISPEXEC 'VGET (SYSIBMS) PROFILE'
+ADDRESS ISPEXEC 'VGET (SYSCATS) PROFILE'
+ADDRESS ISPEXEC 'VGET (SYSIBMA) PROFILE'
+ADDRESS ISPEXEC 'VGET (SYSPROCA) PROFILE'
+
+ADDRESS ISPEXEC 'VGET (UDBTRACE) PROFILE'
+IF UDBTRACE = 'ON' THEN TRACE R
+ELSE                    TRACE
+
+RWert      = ''
+
+PRG        = arg(1)
+Auswahl    = arg(2)
+OBJ        = arg(3)
+LNR        = arg(4)
+
+PRG        = strip(Translate(PRG))
+Auswahl    = strip(Translate(Auswahl))
+OBJ        = strip(Translate(OBJ))
+
+Select
+  When PRG = 'ZOSB1210' Then do
+       Call ZOSB1210      /* Parameter fuer ZOSB1210 */
+   end
+  When PRG = 'ZOSB1' Then do
+       Call ZOSB1         /* Allgemeine Parameter    */
+   end
+  Otherwise Return ''
+ End  /* END SELECT */
+
+Exit   RWert
+Return RWert
+
+
+
+/* Parameter fuer ZOSB1210    */
+ZOSB1210:
+
+
+fkaw.0    = 102
+fkaw.1    = "SG  Storagegroupe    "
+fkaw.2    = "TS  Tablespace        "
+fkaw.3    = "TB  Table             "
+fkaw.4    = "VW  View              "
+fkaw.5    = "IX  Index/Primary Key "
+fkaw.6    = "FK  Foreing Key       "
+fkaw.7    = "TG  Trigger           "
+fkaw.8    = "AL  Alias             "
+fkaw.9    = "PG  Packages          "
+fkaw.10   = "DT  Data Types        "
+fkaw.11   = "TBA Table Aut.       "
+fkaw.12   = "DB  Databases        "
+fkaw.13   = "SE  Sequence         "
+fkaw.14   = "PK  Primary Keys     "
+fkaw.15   = "RT  ROUTINES         "
+fkaw.16   = "ST  STATEMENT        "
+fkaw.17   = "CO  COLUMNS          "
+FKAW.18   = "D   DISPLAY DETAIL   "
+FKAW.19   = "SY  SYNONYME         "
+FKAW.20   = "VO  VOLUMES          "
+FKAW.21   = "SR  StRings          "
+FKAW.22   = "CK  Checks           "
+FKAW.23   = "KC  Key Columns      "
+FKAW.24   = "IP  Indexpart        "
+FKAW.25   = "TP  Tablepart        "
+FKAW.26   = "PL  Plans            "
+FKAW.27   = "LO  Locations        "
+FKAW.28   = "IC  Image-Copys      "
+FKAW.29   = "RO  Roles            "
+FKAW.30   = "IPN IP-Names         "
+FKAW.31   = "UN  "SYSIBMS".USERNAMES "
+FKAW.32   = "MQT Materialized Query Table"
+FKAW.33   = "LU  LUNAMES          "
+FKAW.34   = "DBRM DBRM            "
+FKAW.35   = "BP   Bufferpool   "
+FKAW.36   = "SSIDI Host Info SSID     "
+FKAW.37   = "DSINFO Datasharing Memberlist "
+FKAW.38   = "PERM Row Permision / Mask  "
+FKAW.39   = "RA   Recource Auth SG/DB/TS/ ..."
+FKAW.40   = "DBA  DB Auth          "
+FKAW.41   = "RTA  Routine Auth.    "
+FKAW.42   = "SEA  Sequence Auth.   "
+FKAW.43   = "PGA  Package Auth.    "
+FKAW.44   = "PLA  Plan Austh.      "
+FKAW.45   = "UA   User Auth.       "
+FKAW.46   = "COA  Colums Auth.     "
+FKAW.47   = "BASE Base Tables      "
+FKAW.48   = "AUX  Auxiliary Tables "
+FKAW.49   = "XML  XML Tables       "
+FKAW.50   = "KT   Key Targets      "
+FKAW.51   = "PDDL Pending DDL      "
+FKAW.52   = "PTB  Pending Tables   "
+FKAW.53   = "PTS  Pending Tablespace "
+FKAW.54   = "LGRX SYSIBM.SYSLGRNX Recover Info "
+FKAW.55   = "PT   Parent Table     "
+FKAW.56   = "CT   Child  Table     "
+FKAW.57   = "SCA  Schema Auth      "
+FKAW.58   = "SC   Schema           "
+FKAW.59   = "TSBASE Base Tablespace  "
+FKAW.60   = "TSAUX  Auxiliary Tablespace "
+FKAW.61   = "TSXML  XML Tablespace   "
+FKAW.62   = "TCO    Trusted Context  "
+FKAW.63   = "TCOAUTH Trusted Context Authentication "
+FKAW.64   = "TCOATTR Trusted Context Attribute "
+FKAW.65   = "ZPARM   DSNTIJUZ Attribute "
+FKAW.66   = "THD     Thread Info        "
+FKAW.67   = "GRP     Group Info         "
+FKAW.68   = "IS      Index Space        "
+FKAW.69   = "IXC     Index Cleanup      "
+FKAW.70   = "VAR     Variable           "
+FKAW.71   = "PSQL    Performance SQL    "
+FKAW.72   = "DSN1LOGP DSN1 Logprint     "
+FKAW.73   = "DSN1PRNT DSN1PRNT          "
+FKAW.74   = "LOCK    Lock Table         "
+FKAW.75   = "PRGA    Prog Auth Table    "
+FKAW.76   = "XMLS    XML Strings        "
+FKAW.77   = "DSN1SDMP DSN1SDMP Utility  "
+FKAW.78   = "REPAIR   REPAIR  <SubWord> <ALL>  Subword z.b Levelid "
+FKAW.79   = "LIC      LAST IMAGE COPY   "
+FKAW.80   = "LFIC     LASTE FULL IC     "
+FKAW.81   = "STF      SYSSTATFEEDBACK   "
+FKAW.82   = "STP      STATS Profile     "
+FKAW.83   = "CM       COMMENT ON        "
+FKAW.84   = "XO       XSROBJECTS        "
+FKAW.85   = "XOC      XSROBJECTCOMPONENTS "
+FKAW.86   = "XOH      XSROBJECTHIERARCHIES "
+FKAW.87   = "SPACE    SPACE FUER TABLESPACE / INDEX "
+FKAW.88   = "LAB      LABEL ON TABLE, VIEW, ALIAS,..."
+FKAW.89   = "UT       SYSUTIL           "
+FKAW.90   = "DDF      DISPLAY DDF       "
+FKAW.91   = "UTIL     DISPLAY UTILTY (ADMIN_COMMAND_DB2)"
+FKAW.92   = "DEP      SYSDEPENDENCIES  "
+FKAW.93   = "SSIDINFO Informationen Uber das Subsystem (GetVariable) "
+FKAW.94   = "REPCAT   REPAIR CATALOG (NACH DSN1COPY)  "
+FKAW.95   = "STATS    TABLE/LOBSTATS  ANZEIGEN        "
+FKAW.96   = "VARA     GLOBAL VARIABLE AUTH        "
+FKAW.97   = "DROPIP   DROP Thread mit NETSTAT DROP "
+FKAW.98   = "RFS      RestFul Services             "
+FKAW.99   = "CALL     Call A Procedure             "
+FKAW.100  = "ATL      Admin Task List              "
+FKAW.101  = "TBH      SYSTABLE_HIST                "
+FKAW.102  = "DCLGEN   DCLGEN auf Tabellen          "
+
+fkaw.1.1  = "VO DB TS TB IX RA D DDL SPACE STOSPACE"
+fkaw.1.2  = "A HDDL DDLE DROP GRANT ALTER DEP "
+fkaw.2.1  = "SG DB TB TP IC D IX KC DDL RTS BP RA LGRX PDDL STF RT "
+fkaw.2.2  = "A HDDL DDLE RUNSTATS REORG REBUILD COPY REPORT UNLOAD "
+fkaw.2.2  = fkaw.2.2 || " QUIESCE RECOVER MODRECOVER MODHIST MODIFY "
+fkaw.2.2  = fkaw.2.2 || "DIS START STOP MERGECOPY COPYTOCOPY CHECK "
+fkaw.2.2  = fkaw.2.2 || "ALTER DROP GRANT REPAIR "
+fkaw.2.2  = fkaw.2.2 || "BASE AUX XML TSBASE TSAUX TSXML LIC LFIC "
+fkaw.2.2  = fkaw.2.2 || "SPACE DSN1COPY UT DEP REPCAT STATS "
+fkaw.3.1  = "DB TS TP VW IX CO TG SY AL PG TBA FK TC KC D RTS CK DDL "
+fkaw.3.1  = fkaw.3.1 || "IP IC SE PT CT "
+fkaw.3.2  = "A HDDL DDLE DIS RT UNLOAD PDDL"
+fkaw.3.2  = fkaw.3.2 || " DSNTEP2 DSNTEP4 DSNTIAD DSNTIAUL "
+fkaw.3.2  = fkaw.3.2 || " REORG REBUILD COPY REPORT RUNSTATS "
+fkaw.3.2  = fkaw.3.2 || " QUIESCE RECOVER MODRECOVER MODHIST MODIFY "
+fkaw.3.2  = fkaw.3.2 || " MERGECOPY COPYTOCOPY CHECK START STOP REPAIR"
+fkaw.3.2  = fkaw.3.2 || " ALTER DROP TRUNCATE GRANT "
+fkaw.3.2  = fkaw.3.2 || " SELECT INSERT UPDATE DELETE COUNT ALTER "
+fkaw.3.2  = fkaw.3.2 || " BASE AUX XML TB SC PERM LGRX PK LOCK "
+fkaw.3.2  = fkaw.3.2 || " CM STF STP LIC LFIC  SPACE LAB DSN1COPY UT "
+fkaw.3.2  = fkaw.3.2 || " DEP BR STATS TBH DCLGEN "
+fkaw.4.1  = "TB VW CO TG AL PG TBA TC D DDL SC "
+fkaw.4.2  = "A HDDL DDLE DROP SELECT INSERT UPDATE DELETE COUNT GRANT "
+fkaw.4.2  = fkaw.4.2 || " ALTER SC CM LAB DEP "
+fkaw.5.1  = "DB TB TS KC IP KT D DDL RTS BP IC IXC SC STF SPACE UT"
+fkaw.5.2  = "HDDL DDLE RUNSTATS REORG REBUILD CHECK DROP "
+fkaw.5.2  = fkaw.5.2 || "DIS START STOP ALTER REPAIR CM COPY DEP "
+fkaw.5.2  = fkaw.5.2 || "PDDL "
+fkaw.6.1  = "TB RTB DDL DROP D SC "
+fkaw.6.2  = "HDDL DDLE DROP DEP "
+fkaw.7.1  = "TB VW RT PG D DDL SC "
+fkaw.7.2  = "ALTER HDDL DDLE DROP CM DEP "
+fkaw.8.1  = "TB VW TBA D SC DDL"
+fkaw.8.2  = "A HDDL DDLE DROP CM LAB DEP "
+fkaw.8.2  = fkaw.8.2 "SELECT COUNT "
+fkaw.9.1  = "TB VW TG RT ST PL PGA D SC DEP "
+fkaw.9.2  = "A BIND REBIND DROP GRANT CM "
+fkaw.10.1 = "D DDL SC "
+fkaw.10.2 = "HDDL DDLE DROP CM DEP "
+fkaw.11.1 = "D       "
+fkaw.11.2 = "GRANT "
+fkaw.12.1 = "SG TS TP TB IX D BP IBP STF RA DBA DDL SPACE SC "
+fkaw.12.2 = "A HDDL DDLE REORG COPY RUNSTATS UNLOAD REPORT REBUILD "
+fkaw.12.2 = fkaw.12.2 || "DIS START STOP DROP GRANT ALTER QUIESCE "
+fkaw.12.2 = fkaw.12.2 || "RECOVER "
+fkaw.13.1 = "TB CO D SEA DDL GRANT SE SC RT "
+fkaw.13.2 = "A HDDL DDLE DROP ALTER CM DEP "
+fkaw.14.1 = "TB IX KC D "
+fkaw.14.2 = "DDL HDDL DDLE DROP DEP "
+fkaw.15.1 = "D DDL PG TB TS SE TG RTA SC DIS START STOP "
+fkaw.15.2 = "A HDDL DDLE DROP GRANT ALTER CM DEP CALL "
+fkaw.16.1 = "DIS EXPLAIN"
+fkaw.16.2 = "DROP "
+fkaw.17.1 = "TB VW D ALTER STF CM LAB "
+fkaw.17.2 = "DROP "
+fkaw.18.1 = "D       "
+fkaw.18.2 = "DROP "
+fkaw.19.1 = "TB VW TBA D DDL SC "
+fkaw.19.2 = "A HDDL DDLE DROP DEP "
+fkaw.20.1 = "SG D       "
+fkaw.20.2 = ""
+fkaw.21.1 = "D       "
+fkaw.21.2 = ""
+fkaw.22.1 = "TB D DROP "
+fkaw.22.2 = "DDL HDDL DDLE "
+fkaw.23.1 = "TB IX CO D      "
+fkaw.23.2 = ""
+fkaw.24.1 = "IX LC RTS DIS SC D"
+fkaw.24.2 = ""
+fkaw.25.1 = "TS TB LC RTS DIS D"
+fkaw.25.2 = "DSN1PRNT REPAIR SPACE"
+fkaw.26.1 = "D PLA PG DBRM SC "
+fkaw.26.2 = "A REBIND GRANT CM "
+fkaw.27.1 = "IPN UN D   "
+fkaw.27.2 = ""
+fkaw.28.1 = "DB TS TB LC D "
+fkaw.28.2 = "RECOVER MERGECOPY COPYTOCOPY UNLOAD DSN1COPY ICINFO "
+fkaw.28.2 = fkaw.28.2 "DSN1PRNT "
+fkaw.29.1 = "D DDL        "
+fkaw.29.2 = "HDDL DDLE DROP CM "
+fkaw.30.1 = "LO UN D      "
+fkaw.30.2 = "    "
+fkaw.31.1 = "LO IPN D     "
+fkaw.31.2 = "    "
+fkaw.32.1 = "VW DB TS D DDL GRANT TBA SC "
+fkaw.32.2 = "HDDL DDLE DROP SELECT INSERT UPDATE DELETE COUNT A"
+fkaw.33.1 = "UN D "
+fkaw.33.2 = ""
+fkaw.34.1 = "PL PG D "
+fkaw.34.2 = ""
+fkaw.35.1 = "D RA TS TB IX DIS ALTER "
+fkaw.35.2 = "A GRANT "
+fkaw.36.1 = ""
+fkaw.36.2 = ""
+fkaw.37.1 = ""
+fkaw.37.2 = ""
+fkaw.38.1 = "D TB "
+fkaw.38.2 = "ALTER DDL HDDL CM "
+fkaw.39.1 = "D       "
+fkaw.39.2 = ""
+fkaw.40.1 = "D       "
+fkaw.40.2 = ""
+fkaw.41.1 = "D       "
+fkaw.41.2 = ""
+fkaw.42.1 = "D       "
+fkaw.42.2 = ""
+fkaw.43.1 = "D       "
+fkaw.43.2 = ""
+fkaw.44.1 = "D       "
+fkaw.44.2 = ""
+fkaw.45.1 = "D GRANT  "
+fkaw.45.2 = "        "
+fkaw.46.1 = "D       "
+fkaw.46.2 = ""
+fkaw.47.1 = "TB TS "
+fkaw.47.2 = ""
+fkaw.48.1 = "TB TS "
+fkaw.48.2 = ""
+fkaw.49.1 = "TB TS "
+fkaw.49.2 = "DSN1COPY "
+fkaw.50.1 = "D IX SC "
+fkaw.50.2 = ""
+fkaw.51.1 = "DB TS TP TB IX D DROP "
+fkaw.51.2 = ""
+fkaw.51.2 = fkaw.51.2 || " REORG REBUILD COPY RUNSTATS "
+fkaw.51.2 = fkaw.51.2 || " QUIESCE START STOP DIS "
+fkaw.52.1 = ""
+fkaw.52.2 = ""
+fkaw.53.1 = ""
+fkaw.53.2 = ""
+fkaw.54.1 = "D RECOVER "
+fkaw.54.2 = "DSN1LOGP "
+fkaw.55.1 = ""
+fkaw.55.2 = ""
+fkaw.56.1 = ""
+fkaw.56.2 = ""
+fkaw.57.1 = "D"
+fkaw.57.2 = "GRANT "
+fkaw.58.1 = "TB IX VW AL SY SE RT TG FK PERM GRANT A DT VAR STF SPACE "
+fkaw.58.1 = fkaw.58.1" TS"
+fkaw.58.2 = "HDDL DDLE SCA "
+fkaw.59.1 = "TS TB "
+fkaw.59.2 = "      "
+fkaw.60.1 = "TS TB "
+fkaw.60.2 = "DSN1COPY "
+fkaw.61.1 = "TS TB "
+fkaw.61.2 = "DSN1COPY "
+fkaw.62.1 = "D ATTR AUTH DROP "
+fkaw.62.2 = "DDL HDDL DDLE TCOAUTH TCOATTR CM "
+fkaw.63.1 = "D TCO "
+fkaw.63.2 = "         "
+fkaw.64.1 = "D TCO "
+fkaw.64.2 = "         "
+fkaw.65.1 = ""
+fkaw.65.2 = " "
+fkaw.66.1 = "D DIS CAN RECOVER RESET DROPIP "
+fkaw.66.2 = " "
+fkaw.67.1 = ""
+fkaw.67.2 = ""
+fkaw.68.1 = ""
+fkaw.68.2 = ""
+fkaw.69.1 = "D IX  "
+fkaw.69.2 = "      "
+fkaw.70.1 = "D DDL SC A GRANT "
+fkaw.70.2 = "HDDL DDLE DROP CM VARA "
+fkaw.71.1 = "      "
+fkaw.71.2 = ""
+fkaw.72.1 = "      "
+fkaw.72.2 = ""
+fkaw.73.1 = "      "
+fkaw.73.2 = ""
+fkaw.74.1 = "      "
+fkaw.74.2 = ""
+fkaw.75.1 = "D     "
+fkaw.75.2 = ""
+fkaw.76.1 = "D     "
+fkaw.76.2 = ""
+fkaw.77.1 = ""
+fkaw.77.2 = ""
+fkaw.78.1 = ""
+fkaw.78.2 = ""
+fkaw.79.1 = ""
+fkaw.79.2 = ""
+fkaw.80.1 = ""
+fkaw.80.2 = ""
+fkaw.81.1 = "D SC TB TS DB IX CO "
+fkaw.81.2 = "RUNSTATS "
+fkaw.82.1 = "D TB "
+fkaw.82.2 = ""
+fkaw.83.1 = ""
+fkaw.83.2 = ""
+fkaw.84.1 = "D XOC "
+fkaw.84.2 = ""
+fkaw.85.1 = "D XO XMLS DOC DOCU "
+fkaw.85.2 = ""
+fkaw.86.1 = ""
+fkaw.86.2 = ""
+fkaw.87.1 = ""
+fkaw.87.2 = ""
+fkaw.88.1 = ""
+fkaw.88.2 = ""
+fkaw.89.1 = "D DIS TERM DB TS IX TB "
+fkaw.89.2 = ""
+fkaw.90.1 = "D "
+fkaw.90.2 = ""
+fkaw.91.1 = "DIS TERM "
+fkaw.91.2 = ""
+fkaw.92.1 = "D TS TB RT IX TG MQT VW VAR SY AL CO DT SE "
+fkaw.92.1 = fkaw.92.1 "DTG DIX DCO DRT DMQT DVW DPERM "
+fkaw.92.2 = " "
+fkaw.93.1 = " "
+fkaw.93.2 = " "
+fkaw.94.1 = " "
+fkaw.94.2 = " "
+fkaw.95.1 = "TS TB "
+fkaw.95.2 = " "
+fkaw.96.1 = "D REVOKE "
+fkaw.96.2 = "R        "
+fkaw.97.1 = " "
+fkaw.97.2 = " "
+fkaw.98.1 = "D PG "
+fkaw.98.2 = " "
+fkaw.99.1 = " "
+fkaw.99.2 = " "
+fkaw.100.1 = " "
+fkaw.100.2 = " "
+fkaw.101.1 = "D TB TS DB"
+fkaw.101.2 = " "
+fkaw.102.1 = " "
+fkaw.102.2 = " "
+
+obj1 = ''
+obj2 = ''
+
+if words(Obj) = 2 Then do
+   obj1 = word(Obj, 2)
+   obj2 = word(Obj, 1)
+   obj  = obj2
+ end
+
+ Select
+      when Auswahl = "CHKFKAW" Then do  i = 1 to fkaw.0
+           If Word(fkaw.i, 1) /= Obj Then Iterate
+           RWERT = WORD(FKAW.I, 1) "-NW"
+           if length(obj1) > 0 Then do
+              if wordpos(obj1, fkaw.i.1, 1) = 0 ,
+               & wordpos(obj1, fkaw.i.2, 1) = 0 Then do
+                 Return
+               End
+              RWERT = obj1 "-NW"
+              obj   = obj1
+            end
+           Found = 'N'
+           do y = 1 to fkaw.0
+              If Word(fkaw.y, 1) /= Obj Then Iterate
+              RWERT = RWERT SUBWORD(FKAW.Y, 2)"-NW"
+              RWERT = RWERT STRIP(FKAW.Y.1)"-NW"
+              RWERT = RWERT STRIP(FKAW.Y.2)"-NW"
+              Found = 'Y'
+              leave
+            end
+           if Found = 'N' then  RWERT = RWERT "-NW-NW-NW"
+           Return
+       end
+      Otherwise NOP
+  end   /* End Select */
+
+Return
+
+/* Allgemeine Parameter  */
+ZOSB1:
+
+SMFID   = MVSVAR("SYSNAME")
+IF DATATYPE(LNR) = 'NUM' THEN DO
+   LNR = "NR" || RIGHT(LNR, 4, '0')
+ End
+
+DDLList = "SG DB TS TB VW IX PK AL SY TG FK NN SE RT RO "
+DDLList = DDLLIST || "MQT SC TCO PERM VAR DT CK         "
+select
+   when Auswahl = "DDL" Then do
+        if wordpos(obj, DDLList, 1) = 0 Then RWert = ''
+        Else RWert = 'OK'
+    end
+   when Auswahl = "HDDL" Then do
+        if wordpos(obj, DDLList, 1) = 0 Then RWert = ''
+        Else RWert = 'OK'
+    end
+   when Auswahl = "DDLE" Then do
+        if wordpos(obj, DDLList, 1) = 0 Then RWert = ''
+        Else RWert = 'OK'
+    end
+   when Auswahl = "DSNAME" & Obj = 'STMT' Then do
+        RWert = "'"USER"."LNR"."SMFID".UDBSTMT'"
+        RWert = "'" || USER".UDBSTMT."SMFID"."LNR  || "'"
+    end
+   when Auswahl = "DSNAME" & Obj = 'LISTE' Then do
+        RWert = "'"USER"."LNR"."SMFID."UDBLISTE'"
+        RWert = "'" || USER".UDBLISTE."SMFID"."LNR || "'"
+    end
+   Otherwise NOP
+ end
+
+Return

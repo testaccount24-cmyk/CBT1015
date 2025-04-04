@@ -1,0 +1,344 @@
+/* REXX */
+/*******************************************************************/
+/*                                                                 */
+/* PROGRAMMNAME     : RXSQLFOR                                     */
+/* AUSRUF           : AUS Program                                  */
+/* AUTHER           : ULRICH BRAEUER  01.03.2006                   */
+/* FUNKTION         : FORMAT SQL                                   */
+/* AUFRUF           : RXSQLFOR ARG1                                */
+/*                    ARG1 MUSS SEIN : SQLTEXT                     */
+/*                                                                 */
+/*******************************************************************/
+
+SQL_BOLB_TEXT = ARG(1)
+PARSE_ART     = ARG(2)
+
+SQL_BOLB_TEXT2 = ""
+START  = 30
+MAXLEN = 30
+ZLEN   = 0
+MaxZLen= 69
+
+xyz = 0
+
+SQL_BOLB_TEXT = ERSETZEN_STRING_MC(SQL_BOLB_TEXT, '25'x, '-NL' )
+SQL_BOLB_TEXT = ERSETZEN_STRING_MC(SQL_BOLB_TEXT, '05'x, '-NL' )
+SQL_BOLB_TEXT = ERSETZEN_STRING_MC(SQL_BOLB_TEXT, '0D'x, '-NL' )
+SQL_BOLB_TEXT = ERSETZEN_STRING_MC(SQL_BOLB_TEXT, '0d'x, '-NL' )
+SQL_BOLB_TEXT = ERSETZEN_STRING_MC(SQL_BOLB_TEXT, '0A'x, '-NL' )
+SQL_BOLB_TEXT = ERSETZEN_STRING_MC(SQL_BOLB_TEXT, '0a'x, '-NL' )
+/* SQL_BOLB_TEXT = SQL_BOLB_TEXT '-NR' */
+
+SQL_BOLB_TEXT2 = SQL_BOLB_TEXT
+call Split_BLOB2Zeile
+Call Check_Zeilen_Laenge
+/* M}ssen Schl}sselw¦rter gesucht werden ?? */
+
+If PARSE_ART = "XML"  Then Do
+   Split = "N"
+ End
+If Split = "N"  Then Do
+   Return SQL_BOLB_TEXT
+ End
+
+SQL_BOLB_TEXT2 = ""
+
+SPLIT_WORDS = ") ~"        || ,
+              "DO ~"       || ,
+              "THEN ~"     || ,
+              "ELSE ~"     || ,
+              "; ~"        || ,
+              "BEGIN  ~"   || ,
+              ""
+
+SQL_BOLB_TEXT  = Trennen_AFTER()
+call Split_BLOB2Zeile
+Call Check_Zeilen_Laenge
+/* M}ssen Schl}sselw¦rter gesucht werden ?? */
+If Split = "N"  Then Do
+   Return SQL_BOLB_TEXT
+ End
+
+SPLIT_WORDS = "CREATE ~"        || ,
+              "WHERE ~"         || ,
+              "AND ~"           || ,
+              "OR ~"            || ,
+              "CASE ~"          || ,
+              "WHEN ~"          || ,
+              "END IF ~"        || ,
+              "SELECT ~"        || ,
+              "INSERT ~"        || ,
+              "UPDATE ~"        || ,
+              "DELETE ~"        || ,
+              "WITH ~"          || ,
+              "INNER JOIN ~"    || ,
+              "LEFT OUTER JOIN ~"|| ,
+              "FULL OUTER JOIN ~"|| ,
+              "FROM ~"          || ,
+              "ON ~"            || ,
+              "SET ~"           || ,
+              "CALL ~"          || ,
+              " VALUES~"        || ,
+              "INTO ~"          || ,
+              "FETCH FIRST ~"   || ,
+              "WITH UR ~"       || ,
+              "ORDER BY ~" ||,
+              "CONCAT ~" ||,
+              "XMLSERIALIZE ~" ||,
+              "XMLELEMENT ~" ||,
+              "AFTER ~"         || ,
+              "BEFORE ~"        || ,
+              "UNION ~"        || ,
+              "BUSINESS_TIME~" || ,
+              "SYSTEM_TIME~"   || ,
+              "XMLELEMENT"   || ,
+              "XMLSERIALIZE" || ,
+              " IN ~"           || ,
+              "--~"             || ,
+              "||~"             || ,
+              "]]~"             || ,
+              ""
+
+SQL_BOLB_TEXT  = Trennen()
+
+call Split_BLOB2Zeile
+Call Check_Zeilen_Laenge
+/* M}ssen Schl}sselw¦rter gesucht werden ?? */
+If Split = "N"  Then Do
+   Return SQL_BOLB_TEXT
+ End
+
+SPLIT_WORDS = "END ~"           || ,
+              "BEGIN  ~"        || ,
+              "SIGNAL ~"        || ,
+              "FUNCTION ~"      || ,
+              "LANGUAGE ~"      || ,
+              "SPECIFIC ~"      || ,
+              "DETERMINISTIC ~" || ,
+              "XJOIN ~"          || ,
+              "LEFT ~"          || ,
+              "RIGHT ~"         || ,
+              "FULL ~"          || ,
+              "ACTION ~"        || ,
+              "RETURNS ~"       || ,
+              "RETURN ~"        || ,
+              "WHILE ~"         || ,
+              "PROCEDURE ~"     || ,
+              "DCLARE ~"        || ,
+              "/* ~"            || ,
+              "IF ~"            || ,
+              "ELSEIF ~"        || ,
+              "LEAVE ~"         || ,
+              "PUBLISH ~"       || ,
+              "FOR ~"           || ,
+              "DECLARE ~"       || ,
+              "REFERENCING ~"   || ,
+              "DATA INITIALLY ~"|| ,
+              "REFRESH DEFERRED ~"|| ,
+              "MAINTAINED BY SYSTEM ~" || ,
+              "QUERY OPTIMIZATION ~" || ,
+              "VERSION ~" || ,
+              "DETERMINISTIC~" ||,
+              "WLM ENVIRONMENT~" ||,
+              "WLM ENVIRONMENT~" ||,
+              "PACKAGE OWNER~" ||,
+              "DYNAMIC RESULT~" ||,
+              "DEBUG MODE ~" ||,
+              "QUALIFIER ~" ||,
+              "MODIFIES ~" ||,
+              "CALLED ~" ||,
+              "CCSID ~" ||,
+              "ASUTIME~" ||,
+              "NODEFER~" ||,
+              "CURRENT DATA~" ||,
+              "PARAMETER~" ||,
+              "INHERIT~" ||,
+              "RETURN~" ||,
+              "OPTHINT~" ||,
+              "DYNAMICRULES~" || ,
+              "SQL PATH~" || ,
+              "ISOLATION~" || ,
+              "RELEASE ~" || ,
+              "REOPT ~" || ,
+              "WITHOUT ~" || ,
+              "DISALLOW ~" || ,
+              "VALIDATE ~" || ,
+              "ROUNDING ~" || ,
+              "APPLICATION ENCODING~" ||,
+              "COMMIT ON~" ||,
+              " IN ~"           || ,
+              ""
+
+SQL_BOLB_TEXT  = Trennen()
+SQL_BOLB_TEXT2 = ""
+
+call Split_BLOB2Zeile
+Call Check_Zeilen_Laenge
+/* M}ssen Schl}sselw¦rter gesucht werden ?? */
+If Split = "N"  Then Do
+   Return SQL_BOLB_TEXT
+ End
+
+/* Noch mal auf Maximal Zeilenl{nge Pr}fen */
+Do zi = 1 to Zeile.0
+   If Length(Zeile.zi) > MaxZLen Then do
+      STRIPL = 'N'
+      Do mzl = MaxZLen to 1 by - 1
+         If Substr(Zeile.zi, mzl, 1) = " " Then do
+            Zstrip = Substr(Zeile.zi, 1, mzl) ,
+                  || '-NL' ,
+                  || Substr(Zeile.zi, mzl+ 1)
+            Zeile.zi = Zstrip
+            STRIPL = 'Y'
+          End
+        IF STRIPL = 'Y' Then Leave
+       End
+    End
+ End
+
+IF STRIPL = "Y" Then SQL_BOLB_TEXT  = Trennen_Komma()
+
+Return SQL_BOLB_TEXT
+
+Trennen:
+
+Trenner = "~"
+DO SQL_BLOB_IND = 1 TO Zeile.0
+   SW = SPLIT_WORDS
+   Zeile.SQL_BLOB_IND = Strip(Zeile.SQL_BLOB_IND, 'T')
+
+   If Length(Zeile.SQL_BLOB_IND) > MaxZLen ,
+    & PARSE_ART <> "XML"                   Then do
+      DO While Length(SW) > 0
+         Find = Pos(Trenner, sw, 1)
+         if find > 0 then Do
+            suchen = " " || Substr(sw, 1, find-1)
+            sw  = Substr(sw, find+1)
+          End
+         Else suchen = ""
+         If length(Strip(suchen)) < 1 then Iterate
+         ersetzen = "-NL"SUCHEN
+         Zeile.SQL_BLOB_IND = ERSETZEN_STRING_MC(Zeile.SQL_BLOB_IND, ,
+                                              suchen,                ,
+                                              ersetzen               ,
+                                             )
+       End
+    End
+
+   SQL_BOLB_TEXT2 = SQL_BOLB_TEXT2 Zeile.SQL_BLOB_IND '-NL'
+ END
+
+Return SQL_BOLB_TEXT2
+
+Trennen_AFTER:
+
+Trenner = "~"
+DO SQL_BLOB_IND = 1 TO Zeile.0
+   SW = SPLIT_WORDS
+   Zeile.SQL_BLOB_IND = Strip(Zeile.SQL_BLOB_IND, 'T')
+
+   If Length(Zeile.SQL_BLOB_IND) > MaxZLen ,
+    & PARSE_ART <> "XML"                   Then do
+      DO While Length(SW) > 0
+         Find = Pos(Trenner, sw, 1)
+         if find > 0 then Do
+            suchen = " " || Substr(sw, 1, find-1)
+            sw  = Substr(sw, find+1)
+          End
+         Else suchen = ""
+         If length(Strip(suchen)) < 1 then Iterate
+         ersetzen = SUCHEN"-NL"
+         Zeile.SQL_BLOB_IND = ERSETZEN_STRING_MC(Zeile.SQL_BLOB_IND, ,
+                                              suchen,                ,
+                                              ersetzen               ,
+                                             )
+       End
+    End
+
+   SQL_BOLB_TEXT2 = SQL_BOLB_TEXT2 Zeile.SQL_BLOB_IND '-NL'
+ END
+
+Return SQL_BOLB_TEXT2
+
+Trennen_Komma:
+
+Trenner = "~"
+DO SQL_BLOB_IND = 1 TO Zeile.0
+   SW = SPLIT_WORDS
+   Zeile.SQL_BLOB_IND = Strip(Zeile.SQL_BLOB_IND, 'T')
+
+
+   If Length(Zeile.SQL_BLOB_IND) > MaxZLen ,
+    & PARSE_ART <> "XML"                   Then do
+      Zeile.SQL_BLOB_IND = ERSETZEN_STRING_MC(Zeile.SQL_BLOB_IND, ,
+                                           "," ,                  ,
+                                           "-NL,"                 ,
+                                          )
+    End
+
+   SQL_BOLB_TEXT2 = SQL_BOLB_TEXT2 Zeile.SQL_BLOB_IND '-NL'
+ END
+
+Return SQL_BOLB_TEXT2
+
+
+Split_BLOB2Zeile:
+
+SQL_BOLB_TEXT2 = SQL_BOLB_TEXT
+Drop Zeile.
+Zeile.0 = 0
+Do While Length(SQL_BOLB_TEXT) > 0
+   Zeile.0 = Zeile.0 + 1
+   zi = zeile.0
+   parse value SQL_BOLB_TEXT with Zeile.zi '-NL' rest
+   SQL_BOLB_TEXT = rest
+ End
+
+SQL_BOLB_TEXT  = SQL_BOLB_TEXT2
+SQL_BOLB_TEXT2 = ""
+
+Return
+
+Check_Zeilen_Laenge:
+
+Split = "N"
+Do zi = 1 to Zeile.0
+   If Length(zeile.zi) > MaxZLen then Do
+      Split = "Y"
+      Leave
+    End
+ End
+
+Return
+
+ERSETZEN_STRING_MC:   /* MIxEd CaSe */
+    ARG STR_ALTU, VTXT, NTXT
+    str_alt = arg(1)
+    LAENGE = LENGTH(VTXT)
+    POSI = POS(VTXT, STR_ALTU)
+    DO WHILE POSI > 0
+       STR_ALTU = SUBSTR(STR_ALTU, 1, POSI - 1) ||,
+                  SUBSTR(STR_ALTU, POSI + LAENGE )
+       STR_ALT  = SUBSTR(STR_ALT , 1, POSI - 1) ||,
+                  SUBSTR(STR_ALT , POSI + LAENGE )
+
+       STR_ALT  = INSERT(NTXT, STR_ALT , POSI - 1)
+       STR_ALTU = INSERT(NTXT, STR_ALTU, POSI - 1)
+       POSI = POS(VTXT, STR_ALTU, POSI + length(NTXT) )
+    END
+/*  say str_alt  */
+RETURN STR_ALT
+
+ERSETZEN_STRING:  /* UPPER CASE */
+ARG STR_ALT, VTXT, NTXT
+    LAENGE = LENGTH(VTXT)
+    POSI = POS(VTXT, STR_ALT)
+    DO WHILE POSI > 0
+       STR_ALT = SUBSTR(STR_ALT, 1, POSI - 1) ||,
+                 SUBSTR(STR_ALT, POSI + LAENGE )
+
+       STR_ALT = INSERT(NTXT, STR_ALT, POSI - 1)
+       POSI = POS(VTXT, STR_ALT, POSI + length(NTXT) )
+    END
+/*  say str_alt  */
+RETURN STR_ALT

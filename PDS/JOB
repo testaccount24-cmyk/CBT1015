@@ -1,0 +1,88 @@
+/* REXX */
+/*******************************************************************/
+/*                                                                 */
+/* PROGRAMMNAME     : JOB                                          */
+/* AUSRUF           : AUS MEMBER ODER Program                      */
+/* AUTHER           : ULRICH BRAEUER  04.03.2000                   */
+/* FUNKTION         : Generiert eine JOB-Karte                     */
+/*                                                                 */
+/*******************************************************************/
+
+ENV = "TSO"
+X = MSG('OFF')
+ADDRESS ISREDIT "MACRO NOPROCESS (HNAME DUMMY)"
+ADDRESS ISREDIT "PROCESS DEST"
+"DELSTACK"
+
+USER = USERID()
+SMFID    = MVSVAR('SYSNAME')
+
+Select
+   when SMFID = 'C158' THEN Do        /* PROD */
+        CL = 'C'
+        CL = SMFID
+        MC = 'S'
+    End
+   when SMFID = 'D158' THEN Do        /* TEST */
+        CL = 'F'
+        CL = SMFID
+        MC = 'S'
+    End
+   when SMFID = 'F158' THEN Do
+        CL = 'L'
+        CL = SMFID
+        MC = 'S'
+    End
+   when SMFID = 'G158' THEN Do
+        CL = 'P'
+        CL = SMFID
+        MC = 'S'
+    End
+   when SMFID = 'B158' THEN Do
+        CL = 'A'
+        CL = SMFID
+        MC = 'S'
+    End
+   Otherwise Do
+        CL = 'A'
+        MC = 'S'
+    End
+ End
+CL = SPACE(CL, 0)
+
+select
+  WHEN  USER               = 'MGDB05'   THEN JOBTXT = 'UBRAEUER'
+  WHEN  USER               = 'BIMS64'   THEN JOBTXT = 'UBRAEUER'
+  WHEN  SUBSTR(USER, 1, 4) = 'MGSY'     THEN JOBTXT = 'SYSPROG'
+  WHEN  SUBSTR(USER, 1, 4) = 'SYSP'     THEN JOBTXT = 'SYSPROG'
+  OTHERWISE                                  JOBTXT = 'JOB TEXT'
+ end
+
+JQ = '1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+QU = Substr(JQ, RANDOM(1, 36), 1) || Substr(JQ, RANDOM(1, 36), 1)
+
+push  "//"USER || QU" JOB (40208,F16),'"JOBTXT"',MSGLEVEL=(1,1), "
+push  "//         MSGCLASS="MC",CLASS="CL",                  "
+push  "//*        TYPRUN=HOLD,                               "
+push  "//*        RESTART=STEPNAME, <== FOR RESTART ENTER STEP NAME"
+push  "//         TIME=NOLIMIT,                              "
+push  "//         REGION=0M,NOTIFY=&SYSUID                   "
+push  "//*                                                   "
+push  "/*JOBPARM L=999999                                    "
+push  "//* CLASS=F -> LPAR D158                              "
+push  "//* CLASS=L -> LPAR F158                              "
+push  "//* CLASS=C -> LPAR C158                              "
+push  "//* CLASS=P -> LPAR G158                              "
+
+/*
+ADDRESS ISREDIT "(DEST) = LINENUM .ZDEST"
+*/
+ADDRESS ISREDIT "(DEST) = LINENUM 0"
+ADDRESS ISREDIT "SCAN OFF"
+DO queued()
+   pull zeile
+   ADDRESS ISREDIT "LINE_AFTER "DEST" = (ZEILE)"
+ END
+ADDRESS ISREDIT "SCAN ON"
+RETURN
+

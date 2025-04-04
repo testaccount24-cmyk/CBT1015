@@ -1,0 +1,2591 @@
+/* --------------------------*  REXX  *----------------------------- */
+/*  PROGRAMMNAME     : DYNAMSQL DYNAMISCH SQL'S AUSF}HREN            */
+/*  AUFRUF           : BATCH                                         */
+/*  AUTHER           : ULRICH BRAEUER                                */
+/*  DATUM            : 09.04.1993                                    */
+/*  FUNKTION         : DYNAMSICHE SQL'S ausf}hren                    */
+/*                                                                   */
+/*  AENDERUNGEN      : 04.08.1998  AUF DSNREXX GEAENDERT             */
+/*                   : 08.11.1998  AUCH Fuer OOREXX                  */
+/*                   : 08.11.1998  AUSGABE  CSV, CSVH                */
+/*                   : 04.12.1998  AUSGABE  WORDWRAPDET, WORDWRAP    */
+/*                   : 04.01.1999  AUSGABE  HTML                     */
+/*                   : 14.03.1999  AUSGABE  INSERT                   */
+/*                   : 20.05.2001  STORED PROCEDURE AUSFUEHREN       */
+/*                   : 04.01.2016  AUSGABE  XML                      */
+/*                   : 08.09.2018  AUSGABE  JSON                     */
+/*                   : 04.02.2020  SQL EINGABE PARSEN GEAENDERT      */
+/*                                                                   */
+/*  KLEINES PROGRAMM UM DYNAMISCHE SQL'S AUSZUFUEHREN                */
+/*  DATEN WERDEN WORDWEISE GETRENNT (FUER REXX)                      */
+/*                                                                   */
+/*  Um das Programm auf Windows(OOREXX) laufen zu lassen             */
+/*  Muss die Variable "ENV = "WIN" gesetzt werden und | nach |       */
+/*  geaendert werden (OR)                                            */
+/*  FUER OLE OBJECTE (XLS)  muss aktiviert werden                    */
+/*  Auf Windows(OOREXX) kann leider keine StoredProcedure ausgefuehrt*/
+/*  werden, da "db2ar" leider nicht mehr gepflegt wird,              */
+/*  schade eigentlich                                                */
+/*  Anderung : 1) Bei Create Object wir das ende der Zeile mit       */
+/*                x'25' getrennt, damit beim DDL anzeigen            */
+/*                die Formatierung stimmt                            */
+/*  Anderung : 2) Autocommit                                         */
+/*                                                                   */
+/* --------------------------*  REXX  *----------------------------- */
+
+SIGNAL ON  HALT           /* TRAP THIS ONLY ON LUW */
+SIGNAL OFF SYNTAX         /* TURN OFF SYNTAX TRAP */
+SIGNAL OFF FAILURE
+SIGNAL OFF ERROR
+
+PARSE SOURCE SRC.1 SRC.2 SRC.3 SRC.4 SRC.5 SRC.6 SRC.7 SRC.8 SRC.9
+IF SRC.2 = "SUBROUTINE" Then SUBROUTINE    = 'Y'
+ Else                        SUBROUTINE    = 'N'
+ispf_env = SRC.8
+parse Upper version rexxType level date
+
+SYSCATS    = "SYSCAT"
+SYSIBMS    = "SYSIBM"
+SYSIBMA    = "SYSIBMADM"
+SYSPROCA   = "SYSPROC"
+DSNRECON   = "N"
+SYSUID     = ""
+SYSPWD     = ""
+Spufilen   = 72   /* Laenge Eingabe SPUFI COMPATIBILITAET  */
+
+WorkListType    = 1
+RESTARTWorklist = 0
+StatementNr     = 0
+
+ENV = "WIN"   /* REXX FUER WINDOWS, LINUX, ..... */
+ENV = "TSO"   /* REXX zOS                        */
+
+IF SRC.1 <> "TSO" & Substr(rexxType, 1, 11) = "REXX-OOREXX" Then Do
+   ENV = "WIN"
+ End
+
+RUN_ENV = "ONLINE"
+If Env = 'TSO' Then do
+   CALL CHK_DD_STMT
+
+   IF ISPF_ENV = "ISPF" THEN Do
+      SIGNAL ON SYNTAX      /* TURN ON SYNTAX TRAP */
+      X = MSG('OFF')
+    End
+
+  "DELSTACK"
+
+   If ispf_env = 'ISPF' THEN DO
+      ADDRESS ISPEXEC 'VGET (SYSIBMS)  PROFILE'
+      ADDRESS ISPEXEC 'VGET (SYSCATS)  PROFILE'
+      ADDRESS ISPEXEC 'VGET (SYSIBMA)  PROFILE'
+      ADDRESS ISPEXEC 'VGET (SYSPROCA) PROFILE'
+      ADDRESS ISPEXEC 'VGET (UDBTRACE) PROFILE'
+      ADDRESS ISPEXEC 'VGET (DSNRECON) PROFILE'
+      ADDRESS ISPEXEC 'VGET (SYSUID)   PROFILE'
+      ADDRESS ISPEXEC 'VGET (SYSPWD)   PROFILE'
+      ADDRESS ISPEXEC 'VGET (ACOMMIT)  PROFILE'
+      IF UDBTRACE = 'ON' THEN TRACE I
+      ELSE                    TRACE
+    End
+ End
+
+Select
+   WHEN ispf_env = 'ISPF' THEN Do
+        FOUND = POS("SYSTSIN", DDLISTE, 1)
+        IF FOUND > 0 THEN DO
+           RUN_ENV = "BATCH"
+         END
+        ADDRESS TSO
+     End
+   WHEN ispf_env = 'MVS' THEN Do
+        RUN_ENV = "BATCH"
+        ADDRESS MVS
+     End
+   OTHERWISE NOP
+ END
+
+USER        = USERID()
+USERID      = USER
+
+If SUBROUTINE  = 'N' Then
+   SAY "START DYNAMSQL " DATE() TIME()
+call Init
+SSID          = ""
+location      = ""
+AUTO_COMMIT   = 'YES'          /* Autocommit nach jedem Statement*/
+IGNORE_SQL_ERROR  = 'NO'       /* Ignore wehn a sqlerror is occured */
+ERROR_COUNTER     = 0          /* ANZAHL ERRORS                  */
+MAX_ERROR_COUNTER = 100        /* MAXIMALE ANZAHL VON ERRORS     */
+OUTPUT_FORMAT = 'FIXED'        /* AUSGABE IN FESTER LAENGE       */
+OUTPUT_FORMAT = 'FIXEDNOHEAD'  /* AUSGABE IN FESTER LAENGE No HEAD */
+OUTPUT_FORMAT = 'CSV'          /* AUSGABE COMMA SEPARATED        */
+OUTPUT_FORMAT = 'CSVH'         /* CSV mit Header                 */
+OUTPUT_FORMAT = 'XML'          /* AUSGABE XML                    */
+OUTPUT_FORMAT = 'HTML'         /* AUSGABE HTML                   */
+OUTPUT_FORMAT = 'WORDWRAPDET'  /* Zeilenumbruch MIt COL. Header  */
+OUTPUT_FORMAT = 'WORDWRAP'     /* Zeilenumbruch bei jeder Spalte */
+OUTPUT_FORMAT = 'INSERT'       /* Generate Insert Statement      */
+OUTPUT_FORMAT = 'JSON'         /* JSON                           */
+OUTPUT_FORMAT = 'VARIABLE'     /* AUSGABE WORT WEISE (FUER REXX) */
+SPUFI_FORMAT  = 'N'            /* EINGABE IN SPUFI FORMAT        */
+NULLWert      = ''             /* NULL Columns Anzeigen als      */
+SHOW_SQL_STMT = 'NO'           /* ANZEIGEN SQL STMT VOR LISTE    */
+If ENV = "WIN" Then Do
+   SHOW_SQL_STMT = 'YES'       /* ANZEIGEN SQL STMT VOR LISTE    */
+ End
+
+/*KEYWORDS FUER AUSWAHL PREP.. Values zur Zeit nur auf LUW */
+SELECT_KEY_WORDS = "SELECT WITH VALUES"
+
+If Env = 'TSO' Then do
+   CALL READ_PARM
+   DO I = 1 TO RXPARMS.0
+       PARM  = TRANSLATE(RXPARMS.I, '_', '-')
+       INTERPRET  PARM
+       If SUBROUTINE  = 'N' Then   SAY Strip(RXPARMS.I)
+     END
+ End
+DB2_SSID         = SSID
+
+END_SQL_TERM  = SPACE(SQLTERM SQLTERM, 0)
+
+If Env = 'TSO' Then do
+   If  SPUFI_FORMAT = "Y" Then Do
+       CALL READ_SYSIN_Spufi
+       Call Stmt_Aufbereiten_Spufi
+    End
+   Else Do
+       CALL READ_SYSIN
+       Call Stmt_Aufbereiten
+    End
+ End
+
+If ENV = "WIN" Then do
+   RUN_ENV = "BATCH"
+   call RxFuncAdd 'SysLoadFuncs', 'rexxutil', 'SysLoadFuncs'
+   call sysloadfuncs
+   parse version rexxType .
+   parse source platform .
+
+   if platform == 'AIX/6000' & rexxType == 'REXXSAA' then do
+      rcy = SysAddFuncPkg("db2rexx")
+    End
+   Else Do
+      if Rxfuncquery('SQLDBS') <> 0 then
+         rcy = rxfuncadd('SQLDBS', 'db2ar', 'SQLDBS')
+      if Rxfuncquery('SQLDB2') <> 0 then
+         rcy = rxfuncadd('SQLDB2','db2ar','SQLDB2')
+      if Rxfuncquery('SQLEXEC') <> 0 then
+         rcy = rxfuncadd('SQLEXEC','db2ar','SQLEXEC')
+    End
+
+   PARSE UPPER ARG Parms
+   PARSE ARG  Parmso
+   Call Get_Parms
+   DB_ENV = "SQL"
+   if Length(PASSWD)  = 0 & Length(USER) > 0 Then PASSWD = GetPwd()
+   Ok = Connect_Location(Location)
+   If length(IFile) > 0 Then Do
+      If  SPUFI_FORMAT = "Y" Then Do
+          CALL READ_SYSIN_Spufi
+          Call Stmt_Aufbereiten_Spufi
+       End
+      Else Do
+          CALL READ_SYSIN
+          Call Stmt_Aufbereiten
+       End
+      do i1 = 1 to STATEMENT.0
+         STATEMENT.i1 = Translate(STATEMENT.i1, '20'x, '40'x )
+       End
+    End
+    Else Do
+      STATEMENT.0 = 1
+      STATEMENT.1 = sql_stmt
+      STATEMENT.1.STMTNR = 0
+    End
+ End
+
+If ENV = "TSO" Then do
+   If SUBROUTINE = 'N' | DSNRECON = "Y" Then do
+      CALL LOAD_DSNREXX
+    End
+   Ok = Connect_Location(Location)
+ End
+
+
+DROP OU.
+OU.0      = 0
+Anzahl    = 0
+CURSORNR  = 1
+CNR       = CURSORNR
+SNR       = CURSORNR
+
+SQLSTMT = ""
+DO I = 1 TO STATEMENT.0
+   ROWS      = 0
+   CNR       = 1
+   SNR       = 1
+   sqlc = 0
+   SQLSTMT = STRIP(STATEMENT.I)
+   If SHOW_SQL_STMT = 'YES' Then Do
+      OK = NOU(SQLSTMT)
+    End
+
+   If WorkListType    = 2 ,
+    & RESTARTWorklist >  STATEMENT.I.STMTNR ,
+    & STATEMENT.I.STMTNR <> 0               Then Do
+      Iterate
+    End
+
+   IF SQLSTMT    = ""  THEN ITERATE
+   If SUBROUTINE = 'N' Then SAY SQLSTMT
+   LAST_COMMIT   = "N"
+
+   STMTTYPE  = Translate(WORD(SQLSTMT, 1))
+   STMTTYPE  = WORD(Translate(STMTTYPE, ' ', '(') , 1)
+   Select
+     When wordpos(STMTTYPE, SELECT_KEY_WORDS, 1) > 0 Then do
+          CALL EXECUTE_SELECT
+      END
+     When STMTTYPE  = "CALL" Then do
+          CALL Stored_Procedure
+      END
+     When STMTTYPE  = "DESCRIBE" Then Do
+          CALL describe_statement
+      END
+     When Substr(STMTTYPE, 1, 1) = "-" Then do
+          db2cmd = sqlstmt
+          CALL Execute_Command
+      END
+     When STMTTYPE  = "SET" ,
+        | STMTTYPE  = "DECLARE"  Then do
+          SQLTEXT  = sqlstmt
+          call EXECUTE_SQL_TEXT
+          If sqlcode =  0 Then  Do
+             OK = NOU("-- "sqlstmt )
+             If SUBROUTINE    = 'Y' Then do
+                OK = NOU("-- SQLCODE = "SQLCODE "SQLSTATE = "SQLSTATE)
+              End
+           End
+           Else Do
+             Call EXECUTE_IMMEDIATE
+            End
+       END
+     Otherwise do
+          CALL EXECUTE_IMMEDIATE
+          test = word(sqlstmt, 1)
+          test = Translate(TEST)
+          if test = "INSERT" ,
+           | test = "UPDATE" ,
+           | test = "DELETE" Then do
+             Rows = SQLERRD.3
+             OK = NOU("-- "test "affected "ROWS "Rows")
+           End
+      END
+    END
+
+   IF SQLCODE < 0 THEN Do
+      IF IGNORE_SQL_ERROR =  "YES" Then Do
+         SQLCODE = 0
+       End
+      ELSE Do
+         Call Update_Retart_Value
+         LEAVE
+       End
+    End
+
+   If AUTO_COMMIT = "YES" Then Do
+      SQLTEXT = " COMMIT"
+      Call EXECUTE_SQL_TEXT
+    End
+End
+
+Select
+  When LAST_COMMIT  = "N"   ,
+     & ENV = "TSO"          ,
+     & ISPF_ENV = "ISPF"    ,
+     & RUN_ENV = "ONLINE"   ,
+     & AUTO_COMMIT <> "YES"          THEN Do
+       Call Prompt_Commit_Rollback
+   End
+  When LAST_COMMIT  = "N"   ,
+     & ENV = "WIN"          ,
+     & AUTO_COMMIT  = "NO"           THEN Do
+       Call Prompt_Commit_Rollback_Win
+   End
+  When SQLCODE < 0 THEN Do
+       SQLTEXT = " ROLLBACK "
+       Call EXECUTE_SQL_TEXT
+   End
+  Otherwise Do
+       SQLTEXT = " COMMIT"
+       Call EXECUTE_SQL_TEXT
+   End
+
+ End
+
+If ENV = "TSO" Then do
+     "EXECIO * DISKW OUTDD  (STEM OU. "
+   If RC > 4 Then Do
+      say "Error on EXECIO " RC
+      Call SET_RC(12)
+      Return MaxRC
+    End
+    "EXECIO 0 DISKW OUTDD  (FINIS"
+ End
+Else Do oi = 1 to OU.0
+   Call Lineout out, OU.oi
+ End
+
+If SUBROUTINE  = 'N' Then Do
+   SAY "ROWS   READ        " ROWS
+   SAY "ROWS   WRITTEN     " Anzahl
+   SAY "END   DYNAMSQL " DATE() TIME()
+ End
+
+If ENV = "TSO" Then do
+   Ok = DisConnect_Location(Location)
+   If SUBROUTINE = 'N' | DSNRECON = "Y" Then do
+      CALL DISCONNECT_DSNREXX
+    End
+ End
+
+
+IF Anzahl = 0 Then Call SET_RC(4)
+ Else              Call SET_RC(0)
+
+Return MaxRC
+
+Stored_Procedure:
+
+    SQLSTMT = STRIP(SQLSTMT)
+    If SUBROUTINE    = 'Y' Then do
+       do SI = 1 to STMTOUT.I.STMT.0
+          OK = NOU("-- "STMTOUT.I.STMT.SI, 1)
+        End
+     End
+
+     parse value sqlstmt with proc "(" command
+     command = reverse(command)
+     command = Strip(command, 'L')
+     command = Strip(command, 'L', ')' )
+     command = reverse(command)
+
+     callstmt  = sqlstmt
+
+     parse value PROC WITH cl PROC_CREATOR '.' PROC_NAME
+     PROC_CREATOR  = Strip(Translate(PROC_CREATOR))
+     PROC_NAME     = Strip(Translate(PROC_NAME))
+
+     CNR     = 10
+     SNR     = 10
+     If DB_ENV = "SQL" Then Do  /* DB2 LUW */
+        SQLSTMT = "SELECT    DISTINCT                            ",
+                  "        P.ROUTINENAME                         ",
+                  "     ,  P.ROUTINESCHEMA                       ",
+                  "     ,  P.SPECIFICNAME                        ",
+                  "     ,  P.ROWTYPE                             ",
+                  "     ,  P.PARMNAME                            ",
+                  "     ,  P.LOCATOR                             ",
+                  "     ,  P.ORDINAL                             ",
+                  "     ,  P.TYPENAME                            ",
+                  "     ,  P.LENGTH                              ",
+                  "     ,  P.SCALE                               ",
+                  "     ,  P.ROUTINETYPE                         ",
+                  "     ,  R.RESULT_SETS                         ",
+                  "FROM "SYSIBMS".SYSROUTINEPARMS P              ",
+                  "INNER JOIN "SYSIBMS".SYSROUTINES R            ",
+                  "  ON  P.ROUTINESCHEMA = R.ROUTINESCHEMA       ",
+                  "  AND P.ROUTINENAME   = R.ROUTINENAME         ",
+                  "  AND P.SPECIFICNAME  = R.SPECIFICNAME        ",
+                  "WHERE P.ROUTINESCHEMA = '"PROC_CREATOR"'      ",
+                  "AND   P.ROUTINENAME   = '"PROC_NAME"'         ",
+                  "ORDER BY ORDINAL                              ",
+                  ""
+      End
+     Else Do                    /* DB2 zOS */
+        SQLSTMT = "SELECT    DISTINCT                            ",
+                  "        P.SCHEMA       AS ROUTINENAME         ",
+                  "     ,  P.NAME         AS ROUTINESCHEMA       ",
+                  "     ,  P.SPECIFICNAME AS SPECIFICNAME        ",
+                  "     ,  P.ROWTYPE      AS ROWTYPE             ",
+                  "     ,  P.PARMNAME     AS PARMNAME            ",
+                  "     ,  P.LOCATOR      AS LOCATOR             ",
+                  "     ,  P.ORDINAL      AS ORDINAL             ",
+                  "     ,  P.TYPENAME     AS TYPENAME            ",
+                  "     ,  P.LENGTH       AS LENGTH              ",
+                  "     ,  P.SCALE        AS SCALE               ",
+                  "     ,  P.ROUTINETYPE  AS ROUTINETYPE         ",
+                  "     ,  R.RESULT_SETS                         ",
+                  "FROM "SYSIBMS".SYSPARMS P                     ",
+                  "INNER JOIN "SYSIBMS".SYSROUTINES R            ",
+                  "  ON  P.SCHEMA       = R.SCHEMA               ",
+                  "  AND P.NAME         = R.NAME                 ",
+                  "  AND P.SPECIFICNAME = R.SPECIFICNAME         ",
+                  "WHERE P.SCHEMA        = '"PROC_CREATOR"'      ",
+                  "AND   P.NAME          = '"PROC_NAME"'         ",
+                  "ORDER BY ORDINAL                              ",
+                  ""
+      End
+     SQLSTMT = SPACE(SQLSTMT, 1)
+
+     Call Open_CURSOR
+     OUTSQLDA.SQLD = 0
+     cmd          = command
+     cmdi         = 0
+     cmdstring    = ""
+     komma        = ""
+     DO WHILE SQLCODE = 0
+        SQLTEXT = " FETCH C"CNR "INTO                            ",
+                  "          :ROUTINENAME                        ",
+                  "        , :ROUTINESCHEMA                      ",
+                  "        , :SPECIFICNAME                       ",
+                  "        , :ROWTYPE                            ",
+                  "        , :PARMNAME                           ",
+                  "        , :LOCATOR                            ",
+                  "        , :ORDINAL                            ",
+                  "        , :TYPENAME                           ",
+                  "        , :LENGTH                             ",
+                  "        , :SCALE                              ",
+                  "        , :ROUTINETYPE                        ",
+                  "        , :RESULT_SETS                        ",
+                  ""
+          Call EXECUTE_SQL_TEXT
+          select
+             When SQLCODE = 100 THEN LEAVE
+             When SQLCODE <   0 THEN Do
+                  CALL SQL_ERROR
+                  Call SET_RC(4)
+                  LEAVE
+              End
+             OTHERWISE NOP
+           End
+
+          cmdi         = cmdi + 1
+          Do sqlti = 1 to rexx_sqltype.0
+             If TYPENAME <>  WORD(rexx_sqltype.sqlti, 2) Then Iterate
+             sqltype = WORD(rexx_sqltype.sqlti, 1)
+             sqltype = sqltype + 1
+             LEAVE
+           End
+
+          If Words(rexx_sqltype.sqlti) > 2 Then Do
+             Length = Word(rexx_sqltype.sqlti, 3)
+           End
+
+          SPROCPARSER = Strip(SPROCPARSER)
+          I1    =   "parse value cmd with DATA '"SPROCPARSER"' cmd"
+          INTERPRET I1
+
+          Data = Strip(Data)
+          If Strip(Data) = "?" Then DATA = ""
+          If Strip(Data) = "''"  Then DATA = ""
+          Ind = 0
+          If Length(data) = 0 Then Do
+             Ind = -1
+             Select
+               When TYPENAME = "BIGINT"   THEN Do
+                    DATA = Right(DATA, LENGTH, '0')
+                End
+               When TYPENAME = "INTEGER"  THEN Do
+                    DATA = Right(DATA, LENGTH, '0')
+                End
+               When TYPENAME = "SMALLINT" THEN Do
+                    DATA = Right(DATA, LENGTH, '0')
+                End
+               When TYPENAME = "DECIMAL"  THEN Do
+                    DATA = Right(DATA, LENGTH, '0')
+                    DATA = "0.0"
+                End
+               Otherwise Do
+                    If length > 32000 Then Length = 32000
+                    DATA = "'" || Left(DATA, LENGTH, ' ') || "'"
+                End
+              End
+           End
+
+
+/*        INTERPRET "CM"cmdi "= DATA"                              */
+/*        cmdstring = cmdstring || komma ":" || "CM" || cmdi       */
+          PARMNAME  = Translate(PARMNAME, '_', '-')
+          INTERPRET PARMNAME "= DATA"
+          cmdstring = cmdstring || komma ":" || PARMNAME
+
+          Interpret PARMNAME || "_I" || CMDI "= "IND
+          cmdstring = cmdstring ":" || PARMNAME || "_I" || CMDI
+
+          komma     = ","
+
+          OUTSQLDA.SQLD          = OUTSQLDA.SQLD + 1
+          SQLDI                  = OUTSQLDA.SQLD
+          OUTSQLDA.SQLDI.SQLTYPE = sqltype
+          OUTSQLDA.SQLDI.SQLLEN  = LENGTH
+          OUTSQLDA.SQLDI.SQLIND  = 0
+          OUTSQLDA.SQLDI.SQLDATA = DATA
+      END
+
+     Call Close_CURSOR
+     Proc = Subword(Proc, 2)
+     If Length(Strip(cmdstring)) = 0 Then do
+        cmdstring = cmd
+        cmdstring = ":CM1"
+        CM1       = Strip(cmd)
+        cm1 = strip(cm1)
+      End
+
+     SQLTEXT = " Call " Proc "(" || cmdstring ||")"
+     Call EXECUTE_SQL_TEXT
+
+     If SQLCODE = 0   ,
+      | SQLCODE = 466 Then do
+        Ausgabe = cmdstring
+        Do while length(Ausgabe) > 0
+           Parse value Ausgabe With parm "," Ausgabe
+           ausi = 0
+           If Words(Parm) > 1 Then Parm = Word(Parm, 1)
+           If Words(Parm) > 1 Then IND  = Word(Parm, 2)
+           Parm = Translate(Parm, ' ', ':')
+           Interpret "Ausx = "Parm
+           Interpret "Ausi = "ind
+/*
+           If ausi < 0 Then Ausx = ""
+*/
+           OK = NOU(parm "=" Ausx, 1)
+         End
+           OK = NOU("RESULT  =" RESULT , 1)
+      End
+
+     If sqlcode = 466 Then do
+        Call Lesen_SProc_Data
+      End
+
+
+    If SUBROUTINE    = 'Y' Then do
+       OK = NOU("-- SQLCODE = "SQLCODE, 1)
+       If Sqlcode < 0 Then do
+          OK = NOU(OU.oui "SQLSTATE = "SQLSTATE, 0)
+          OK = NOU("-- SQLERRMC = "SQLERRMC, 1)
+        End
+     End
+     Else Do
+       CALL SQL_ERROR
+       Call SET_RC(4)
+     End
+
+return
+
+EXECUTE_IMMEDIATE:
+    SQLSTMT = STRIP(SQLSTMT)
+
+    TEST_COMMIT = Strip(Translate(Word(SQLSTMT, 1)))
+    TEST_COMMIT = TRANSLATE(TEST_COMMIT, ' ', ';')
+
+    IF TEST_COMMIT = "COMMIT" ,
+     | TEST_COMMIT = "ROLLBACK" Then Do
+       LAST_COMMIT = "Y"
+     End
+
+    If SUBROUTINE    = 'Y' Then do
+       do SI = 1 to STMTOUT.I.STMT.0
+          OK = NOU("-- "STMTOUT.I.STMT.SI, 1)
+        End
+     End
+    SELECT
+       WHEN WORD(SQLSTMT, 1) = 'CONNECT' THEN DO
+            SQLTEXT = " "SQLSTMT
+            Call EXECUTE_SQL_TEXT
+            sqlc = sqlcode
+        END
+       OTHERWISE DO
+          SQLTEXT = " EXECUTE IMMEDIATE :SQLSTMT"
+          Call EXECUTE_SQL_TEXT
+          IF RC <> 0 || SQLCODE < 0   THEN DO
+             SQLTEXT = " "SQLSTMT
+             Call EXECUTE_SQL_TEXT
+             sqlc = sqlcode
+           END
+          IF SQLCODE <  0 THEN DO
+             SAY "'"SQLSTMT"'"
+             CALL SQL_ERROR
+             Call SET_RC(4)
+             sqlc = sqlcode
+             SQLTEXT = " ROLLBACK"
+             Call EXECUTE_SQL_TEXT
+             sqlcode  = sqlc
+           END
+        END
+     END
+    If SUBROUTINE    = 'Y' Then do
+       OK = NOU("-- SQLCODE = "SQLC, 1)
+     End
+
+
+RETURN MaxRC
+
+EXECUTE_SELECT:
+
+    HVFound =  0
+    HOstVar = ""
+/*  HVFound =  POS(':' , SQLSTMT) */
+/*
+    If HVFound > 0 Then do
+       Call Host_Vars_Lesen
+     End
+*/
+
+    POSFROM = POS('FROM ', Translate(SQLSTMT), 1)
+    IF POSFROM > 0 Then do
+       sqltxt = Substr(SQLSTMT, POSFROM)
+       FROM_TABLE = WORD(sqltxt, 2)
+     END
+     ELSE FROM_TABLE = "<TBCREATOR>.<TBNAME>"
+    If SUBROUTINE    = 'Y' Then do
+       do SI = 1 to STMTOUT.I.STMT.0
+          OK = NOU("-- "STMTOUT.I.STMT.SI, 1)
+        End
+     End
+
+    SQLTEXT = " CLOSE C"CNR
+    Call EXECUTE_SQL_TEXT
+    SQLTEXT = " DECLARE               C"CNR" CURSOR FOR S"SNR
+    Call EXECUTE_SQL_TEXT
+    IF SQLCODE <  0 THEN DO
+       sqlc = sqlcode
+       SAY "DECLARE      ERROR " SQLCODE SQLERRMC
+       CALL SQL_ERROR
+       Call SET_RC(8)
+       Return MaxRC
+     END
+    If Env = 'TSO' Then do
+       PREP_ATTR =   "CONCENTRATE STATEMENTS WITH LITERALS  "
+       SQLTEXT = " PREPARE S"SNR "INTO :OUTSQLDA " ,
+                 " ATTRIBUTES :PREP_ATTR " ,
+                 " FROM :SQLSTMT" ,
+                 ""
+     End
+     Else Do
+       SQLTEXT = " PREPARE S"SNR "INTO :OUTSQLDA " ,
+                 " FROM :SQLSTMT" ,
+                 ""
+     End
+    Call EXECUTE_SQL_TEXT
+    IF SQLCODE <  0 THEN DO
+       sqlc = sqlcode
+       SAY "PREPARE      ERROR " SQLCODE SQLERRMC
+       CALL SQL_ERROR
+       Call SET_RC(8)
+       Return MaxRC
+     END
+    SQLTEXT = " DESCRIBE S"SNR" INTO :OUTSQLDA "
+    Call EXECUTE_SQL_TEXT
+    IF SQLCODE <  0 THEN DO
+       sqlc = sqlcode
+       SAY "DESCRIBE     ERROR " SQLCODE SQLERRMC
+       CALL SQL_ERROR
+       Call SET_RC(8)
+       Return MaxRC
+     END
+
+
+    If Length(HostVar) > 0 Then do
+       SQLTEXT = " OPEN C"CNR "USING " HOstVar
+       HOstVar = ":" || HOstVar
+       Call EXECUTE_SQL_TEXT
+     End
+     Else do
+       SQLTEXT = " OPEN C"CNR
+       Call EXECUTE_SQL_TEXT
+      End
+    IF SQLCODE <  0 THEN DO
+       sqlc = sqlcode
+       SAY "OPEN         ERROR " SQLCODE SQLERRMC
+       CALL SQL_ERROR
+       Call SET_RC(8)
+       Return MaxRC
+     END
+    If SUBROUTINE    = 'N' Then Do
+       SAY "THE FOLLOWING COLUMNS ARE DISPLAYED: "
+       SAY "------------------------------------ "
+       DO CI = 1 TO OUTSQLDA.SQLD
+          SAY    SPACE(OUTSQLDA.CI.SQLNAME, 0)
+        END
+     End
+
+    call Fetch_Dynamic_data
+
+ Return
+
+Host_Vars_Lesen:
+
+   KOMMA =  ""
+   Zeile =  SQLSTMT
+   SAY      SQLSTMT
+   Do While  Length(Zeile) > 0
+       HVFound =  POS(':' , Zeile )
+       If HVFound < 1 Then Leave
+       Zeilea  = Substr(Zeile, 1, HVFound - 1)
+       Zeile   = Substr(Zeile, HVFound)
+       HOstVar = HOstVar Komma Word(Zeile, 1)
+       ZeileE  = "?" Subword(Zeile, 2)
+       Zeile   = ZeileA ZeileE
+       Komma = ","
+    End
+    SQLSTMT = Zeile
+say HOstVar
+say SQLSTMT
+
+Return
+
+Lesen_SProc_Data:
+  FROM_TABLE = "<TBCREATOR>.<TBNAME>"
+  SQLTEXT = "DESCRIBE PROCEDURE :PROC INTO :OUTSQLDA"
+  Call EXECUTE_SQL_TEXT
+  if sqlcode <> 0 Then do
+     say SQLCODE  sqltext
+     If sqlcode < 0 Then return 8
+   End
+
+  /* Problem war SQLCODE=-423 SQLSTATE=0F001 */
+  If OUTSQLDA.SQLD < RESULT_SETS Then RESULT_SETS = OUTSQLDA.SQLD
+
+  /* Allocatte RESULT SET                                         */
+  Loc_GES = ":RS_Loc1"
+  if RESULT_SETS > 1 Then do
+     Loc_GES = ""
+     Komma = ''
+     do loci = 1 to RESULT_SETS
+        Loc_GES = Loc_Ges || Komma || ":" || "RS_Loc" || Loci" "
+        Komma = ','
+      End
+   End
+  Else Do
+   End
+
+  SQLTEXT = "ASSOCIATE LOCATORS ("Loc_Ges") WITH PROCEDURE "Proc
+  Call EXECUTE_SQL_TEXT
+  if sqlcode <> 0 Then do
+     say SQLCODE  sqltext
+     If sqlcode < 0 Then Do
+        call SQL_ERROR
+        return 8
+      End
+   End
+
+  CNR    = "100"
+  Do RESI = 1 to RESULT_SETS  /* Anz Resut_Sets (Anz Tables) */
+     Loc     = ":" || "RS_Loc" || RESI
+     CNR     = CNR + 1
+     cursor  = "C"CNR
+     SQLTEXT = "ALLOCATE C"CNR" CURSOR FOR RESULT SET "Loc
+     Call EXECUTE_SQL_TEXT
+     if sqlcode <> 0 Then do
+        say SQLCODE  sqltext
+        If sqlcode < 0 Then Do
+           call SQL_ERROR
+           return 8
+         End
+      End
+
+  /* Describe the Cursor                                          */
+     SQLTEXT = "DESCRIBE CURSOR :CURSOR INTO :OUTSQLDA"
+     Call EXECUTE_SQL_TEXT
+     If sqlcode <> 0 Then do
+        say SQLCODE  sqltext
+        If sqlcode < 0 Then Do
+           call SQL_ERROR
+           return 8
+         End
+      End
+
+  /* Fetch Data                                                   */
+     call Fetch_Dynamic_data
+   End /* END DO */
+
+Return 0
+
+
+Fetch_Dynamic_data:
+
+GetLen = 'N'
+
+If OUTPUT_FORMAT = 'XLS' & ENV = "WIN" Then Do
+/* EXCEL
+   excelObject = .OLEObjectßnew("Excel.Application")
+   Worksheet = excelObjectßWorkbooksßAddßWorksheetsÄ1Ü
+*/
+   ExcelCol="ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+   Zeile = 1
+ end
+
+call Fetch_Dynamic_data_Header
+
+DO UNTIL SQLCODE = 100
+   SQLTEXT = " FETCH C"CNR" USING DESCRIPTOR :OUTSQLDA"
+   Call EXECUTE_SQL_TEXT
+   select
+      When SQLCODE = 100 THEN LEAVE
+      When SQLCODE = 100 THEN LEAVE
+      when IGNORE_SQL_ERROR = 'YES' ,
+         & SQLCODE <   0            ,
+         & SQLCODE <> -1024         ,   /* NOT CONNETED */
+         & ERROR_COUNTER < MAX_ERROR_COUNTER Then Do
+           ERROR_COUNTER = ERROR_COUNTER + 1
+           SAY "FETCH ERROR " SQLCODE SQLERRMC
+           SQLCODE = 0
+       end
+      When SQLCODE <   0 THEN Do
+           sqlc = sqlcode
+           SAY "FETCH        ERROR " SQLCODE SQLERRMC
+           CALL SQL_ERROR
+           Call SET_RC(8)
+           LEAVE
+       End
+      When SQLCODE >  0  THEN DO
+           sqlc = sqlcode
+           Call SET_RC(2)
+       END
+      OTHERWISE NOP
+    End
+
+  If OUTPUT_FORMAT = 'INSERT' Then do ihi = 1 to inshead.0
+     OK = NOU(inshead.ihi, 1)
+   End
+
+   ROWS   = ROWS + 1
+   OK = NOU("", 1)
+
+   If GetLen = 'Y' Then call Fixed_length
+   GetLen    = 'N'
+   komma     = " "
+   DO CI = 1 TO OUTSQLDA.SQLD
+      select
+        when OUTSQLDA.CI.SQLIND < 0 Then OUTSQLDA.CI.SQLDATA = NULLWert
+        When ENV = "WIN" ,
+           & POS(OUTSQLDA.CI.SQLTYPE, "492 493") > 0 Then do
+             OUTSQLDA.CI.SQLDATA = BIGINT_FUER_OOREXX_AUFBEREITEN( ,
+                                   OUTSQLDA.CI.SQLDATA)
+          End
+        When ENV = "WIN" ,
+           & POS(OUTSQLDA.CI.SQLTYPE, "996 997") > 0 Then do
+             OUTSQLDA.CI.SQLDATA = DECFLOAT_FUER_OOREXX_AUFBEREITEN( ,
+                                          OUTSQLDA.CI.SQLDATA)
+          End
+        Otherwise NOP
+      End
+
+      Select
+        when OUTPUT_FORMAT = 'FIXED'          Then
+             Call OUTPUT_FORMAT_FIXED
+        when OUTPUT_FORMAT = 'CSV'            Then
+             Call OUTPUT_FORMAT_CSV
+        WHEN OUTPUT_FORMAT = 'WORDWRAPDET'    Then
+             Call OUTPUT_FORMAT_WORDWRAPDET
+        WHEN OUTPUT_FORMAT = 'WORDWRAP'       Then
+             Call OUTPUT_FORMAT_WORDWRAP
+        when OUTPUT_FORMAT = 'CSVH'           Then
+             Call OUTPUT_FORMAT_CSV
+        when OUTPUT_FORMAT = 'VARIABLE'       Then
+              Call OUTPUT_FORMAT_VARIABLE
+        when OUTPUT_FORMAT = 'FIXEDNOHEAD'    Then
+             Call OUTPUT_FORMAT_FIXEDNOHEAD
+        WHEN OUTPUT_FORMAT = 'XML'            Then
+             Call OUTPUT_FORMAT_XML
+        WHEN OUTPUT_FORMAT = 'JSON'           Then
+             Call OUTPUT_FORMAT_JSON
+        WHEN OUTPUT_FORMAT = 'HTML'           Then
+             Call OUTPUT_FORMAT_HTML
+        when OUTPUT_FORMAT = 'INSERT'         Then
+             Call OUTPUT_FORMAT_INSERT
+        when OUTPUT_FORMAT = 'XLS' & ENV = "WIN" Then
+             Call OUTPUT_FORMAT_XLS
+        otherwise do
+             OK = NOU(OU.OUI || STRIP(OUTSQLDA.CI.SQLDATA) || " ", 0)
+         END
+       END
+    END
+
+    Select
+      When ENV = "TSO" Then do
+           "EXECIO "ou.0" DISKW OUTDD  (STEM OU. "
+            If RC > 4 Then Do
+               say "Error on EXECIO " RC
+               Call SET_RC(12)
+               Return MaxRC
+             End
+       End
+      When OUTPUT_FORMAT = 'XLS' & ENV = "WIN" Then NOP
+      Otherwise Do  oi = 1 to OU.0
+           Call Lineout out, OU.oi
+       End
+      End
+
+    Anzahl = Anzahl + 1
+    Drop ou.
+    ou.0 = 0
+ END /*   DO UNTIL SQLCODE = 100 */
+
+Select
+  When OUTPUT_FORMAT = 'XLS' & ENV = "WIN" Then Do
+       If out = "" Then Out = "temp.xls"
+/* EXCEL
+       WorksheetßSaveAs( out )
+       excelObjectßQuit
+*/
+   End
+  when OUTPUT_FORMAT = 'XML' then do
+       OK = NOU('</resultset>', 1)
+   end
+  when OUTPUT_FORMAT = 'HTML' then do
+       OK = NOU('</TABLE>', 1)
+       OK = NOU('</p> </body> </html> ', 1)
+   end
+  when OUTPUT_FORMAT = 'JSON' then do
+       OK = NOU('    Ü ', 1)
+       OK = NOU('  ü ', 1)
+       OK = NOU(' ü ', 1)
+   end
+  when SUBROUTINE    = 'Y' Then do
+       OK = NOU("-- SQLCODE = "SQLCODE, 1)
+   End
+  Otherwise NOP
+ End
+
+SQLTEXT = "CLOSE C"CNR
+Call EXECUTE_SQL_TEXT
+
+RETURN
+
+
+
+OUTPUT_FORMAT_INSERT:
+if Wordpos(OUTSQLDA.CI.SQLTYPE, FNumeric, 1) > 0 Then
+                                    COLDEL = ""
+ ELSE                               COLDEL = "'"
+
+/*
+ If OUTSQLDA.CI.SQLNAME = 'DASD_USAGE' Then OUTSQLDA.CI.SQLDATA = ''
+ If OUTSQLDA.CI.SQLNAME = 'HARBA'      Then OUTSQLDA.CI.SQLDATA = ''
+ If OUTSQLDA.CI.SQLNAME = 'HURBA'      Then OUTSQLDA.CI.SQLDATA = ''
+*/
+
+
+If OUTSQLDA.CI.SQLIND < 0 Then Do
+   OK = NOU(komma "NULL" )
+ End
+Else Do
+   OK = NOU(komma COLDEL || STRIP(OUTSQLDA.CI.SQLDATA) || COLDEL, 1)
+ End
+
+komma = ","
+
+If CI = OUTSQLDA.SQLD then do   /* Letztes Column */
+   OK = NOU("  ) ;   ", 1)
+END
+
+Return
+
+OUTPUT_FORMAT_FIXED:
+ If  OUTSQLDA.CI.SQLTYPE > 480 Then do
+     OK = NOU(OU.OUI || ,
+              right(OUTSQLDA.CI.SQLDATA, MaxColLen.ci) || ,
+              " " , 0)
+ end
+else do
+     OK = NOU(OU.OUI || ,
+              left(OUTSQLDA.CI.SQLDATA, MaxColLen.ci) || ,
+              " ", 0)
+ end
+Return
+
+OUTPUT_FORMAT_CSV:
+If  OUTSQLDA.CI.SQLTYPE > 480 Then do /* NUMERIC */
+      OK = NOU(OU.OUI || ,
+               STRIP(OUTSQLDA.CI.SQLDATA) || ,
+               COLDEL, 0)
+   End
+  Else Do                               /* APHANUMERIC */
+      OK = NOU(OU.OUI || ,
+               CHARDEL || ,
+               STRIP(OUTSQLDA.CI.SQLDATA) || ,
+               CHARDEL || COLDEL, 0)
+   End
+ Return
+
+OUTPUT_FORMAT_XLS:
+
+ z1 = CI // Length(ExcelCol)
+ z2 = CI % Length(ExcelCol)
+ if z1 = 0 Then Do
+    Z1 = Length(ExcelCol)
+    z2 = z2 - 1
+  End
+
+ If CI > Length(ExcelCol) Then do
+    ColName = Substr(ExcelCol, z2, 1) || Substr(ExcelCol, z1, 1)
+  End
+ Else Do
+    ColName = Substr(ExcelCol, z1, 1)
+  End
+
+/* EXCEL
+ cell       = WorksheetßRange(ColName || Rows + 1)
+ cellßvalue = STRIP(OUTSQLDA.CI.SQLDATA)
+*/
+
+ Return
+
+OUTPUT_FORMAT_WORDWRAP:
+OK = NOU(OU.OUI || STRIP(OUTSQLDA.CI.SQLDATA,'T')|| " ",0)
+If CI < OUTSQLDA.SQLD then do
+   OK = NOU("", 1)
+ END
+return
+
+OUTPUT_FORMAT_WORDWRAPDET:
+If CI = 1             then do
+   OK = NOU("---------- NEXT ROW ----------", 0)
+   OK = NOU("", 1)
+END
+OK = NOU(OU.OUI                               ||     ,
+        left(OUTSQLDA.CI.SQLNAME, MaxHeadLen, ' ') || "=" ,
+        STRIP(OUTSQLDA.CI.SQLDATA,'T')         ||     ,
+        "", 0)
+If CI < OUTSQLDA.SQLD then do
+   OK = NOU("", 1)
+END
+return
+
+OUTPUT_FORMAT_VARIABLE:
+ OK = NOU(OU.OUI || STRIP(OUTSQLDA.CI.SQLDATA) || " ", 0)
+Return
+
+OUTPUT_FORMAT_FIXEDNOHEAD:
+If  OUTSQLDA.CI.SQLTYPE > 480 Then do
+    OK = NOU(OU.OUI || ,
+             right(OUTSQLDA.CI.SQLDATA, MaxColLen.ci), 0 )
+ end
+else do
+    OK = NOU(OU.OUI || ,
+             left(OUTSQLDA.CI.SQLDATA, MaxColLen.ci), 0)
+ end
+  OU.OUI = Translate(OU.OUI, '40'x, '00'x )
+return
+
+OUTPUT_FORMAT_XML:
+If CI = 1             then do   /* COLUMN 1  */
+   OK = NOU("  <ROW>", 0)
+   OK = NOU("", 1)
+ END
+OK = NOU(OU.OUI || '     '                       || ,
+         '<'Strip(OUTSQLDA.CI.SQLNAME, 'T')'>'   || ,
+         STRIP(OUTSQLDA.CI.SQLDATA,'T')          || ,
+         '</'Strip(OUTSQLDA.CI.SQLNAME, 'T')'>'  || ,
+         "" , 0)
+If CI < OUTSQLDA.SQLD then do
+   OK = NOU("", 1)
+END
+If CI = OUTSQLDA.SQLD then do   /* Letztes Column */
+   OK = NOU("  </ROW>", 1)
+END
+Return
+
+
+OUTPUT_FORMAT_HTML:
+If CI = 1             then do   /* COLUMN 1  */
+   OK = NOU("  <TR>", 0)
+   OK = NOU("", 1)
+ END
+OK = NOU(OU.OUI || '     '                       || ,
+         '<td valign="top" "> <p>'     || ,
+         STRIP(OUTSQLDA.CI.SQLDATA,'T')          || ,
+         '</p> </TD>'                            || ,
+         "", 0)
+If CI < OUTSQLDA.SQLD then do
+   OK = NOU("", 1)
+END
+If CI = OUTSQLDA.SQLD then do   /* Letztes Column */
+   OK = NOU("  </TR>", 1)
+END
+return
+
+
+Fetch_Dynamic_data_Header:
+
+Select
+  When OUTPUT_FORMAT = 'WORDWRAPDET' Then Do
+       GetLen = 'Y'
+   End
+  When OUTPUT_FORMAT = 'FIXED' then DO
+       GetLen = 'Y'
+       OK = NOU("", 1)
+       call Fixed_length
+       DO CI = 1 TO OUTSQLDA.SQLD
+          OK = NOU(OU.OUI || ,
+                   left(OUTSQLDA.CI.SQLNAME, MaxColLen.ci, ' ') || ,
+                   " ", 0)
+        End
+       OK = NOU("", 1)
+       DO CI = 1 TO OUTSQLDA.SQLD
+          OK = NOU(OU.OUI || left('-', MaxColLen.ci, '-') || " ", 0)
+        End
+       GetLen = 'Y'
+   End
+  When OUTPUT_FORMAT = 'CSVH' then DO
+       OK = NOU("", 1)
+       DO CI = 1 TO OUTSQLDA.SQLD
+             OK = NOU(OU.OUI || ,
+                      CHARDEL || ,
+                      STRIP(OUTSQLDA.CI.SQLNAME) || ,
+                      CHARDEL || COLDEL, 0)
+        End
+   End
+  When OUTPUT_FORMAT = 'FIXEDNOHEAD' then DO
+       call Fixed_length_NO_HEADDER
+   End
+  when OUTPUT_FORMAT = 'XML' then do
+       OK = NOU('<?xml version="1.0"?>', 1 )
+       OK = NOU('<resultset xmlns:xsi=' || ,
+                '"http://www.w3.org/2001/XMLSchema-instance">' , 1)
+   End
+  when OUTPUT_FORMAT = 'JSON' then do
+       OK = NOU('ä  "table" : ä    "columns" : ' , 1)
+       OK = NOU('   Ä', 1)
+
+       KOMMA = "  "
+       Do CI    = 1 TO OUTSQLDA.SQLD
+          OK = NOU(KOMMA 'ä"name" : "' || ,
+                    SPACE(OUTSQLDA.CI.SQLNAME,0)'"ü' ,1)
+          KOMMA = " ,"
+        End
+       OK = NOU('   Ü, "rows" : Ä   ' , 1)
+   End
+  when OUTPUT_FORMAT = 'HTML' then do
+       OK = NOU('<|doctype html public "-//w3c//dtd html 4.0' ,
+                                        'transitional//en">' , 1)
+       OK = NOU('<html><head><title>TABELLEN Uebersicht</TITLE>' ,
+                '</head>', 1)
+       OK = NOU('<body> <p> <table border="1" width="98%">', 1)
+       OK = NOU('<TR>', 1)
+       DO CI = 1 TO OUTSQLDA.SQLD
+          OK = NOU('     <td valign="top" > <p>'|| ,
+                   STRIP(OUTSQLDA.CI.SQLNAME,'T')          || ,
+                   '</p> </TD>'                            || ,
+                   "", 1)
+        End
+       OK = NOU('</TR>', 1)
+   End
+  when OUTPUT_FORMAT = 'INSERT' Then do
+       Drop inshead.
+       inshead.0 = 1
+       inshead.1 = " INSERT INTO "FROM_TABLE " ( "
+       komma = " "
+       DO CI = 1 TO OUTSQLDA.SQLD
+          inshead.0 = inshead.0 + 1
+          ihi = inshead.0
+          inshead.ihi = "      " Komma Strip(OUTSQLDA.CI.SQLNAME, 'T')
+          komma = ","
+        End
+       ihi = ihi + 1
+       inshead.ihi = "     ) VALUES ( "
+       inshead.0      = ihi
+   End
+  when OUTPUT_FORMAT = 'XLS' Then do
+       Do CI    = 1 TO OUTSQLDA.SQLD
+          z1 = CI // Length(ExcelCol)
+          z2 = CI % Length(ExcelCol)
+          if z1 = 0 Then Do
+             Z1 = Length(ExcelCol)
+             z2 = z2 - 1
+           End
+
+          If CI > Length(ExcelCol) Then do
+             ColName = Substr(ExcelCol,z2,1) || Substr(ExcelCol, z1,1)
+           End
+          Else Do
+             ColName = Substr(ExcelCol, z1, 1)
+           End
+
+/* EXCEL
+          cell = WorksheetßRange(ColName || 1)
+          cellßvalue = STRIP(OUTSQLDA.CI.SQLNAME)
+*/
+        End
+  End
+  Otherwise NOP
+ End
+
+Return 0
+
+OUTPUT_FORMAT_JSON:
+
+KOMMA = ","
+If CI = 1             then do   /* COLUMN 1  */
+   IF ROWS = 1 THEN KOMMA = " "
+   OK = NOU(KOMMA ' ä  "rowNumber" : 'ROWS', ', 1)
+   OK = NOU('      "values" : Ä ', 1)
+   KOMMA = " "
+ End
+
+If OUTSQLDA.CI.SQLIND < 0 Then OUTSQLDA.CI.SQLDATA = "<null>"
+OK = NOU(KOMMA 'ä "value" : "' || ,
+               STRIP(OUTSQLDA.CI.SQLDATA,'T') || '" ü ', 1)
+
+
+If CI = OUTSQLDA.SQLD then do
+   OK = NOU(' Ü  ü', 1)
+END
+
+Return
+
+/*------------------------------------------------------------------*/
+Fixed_length:
+  Drop MaxColLen.
+  MaxHeadLen = 0
+  MaxColLen.0 = 0
+    DO CI = 1 TO OUTSQLDA.SQLD
+       MaxColLen.ci = 0
+       Do TI = 1 to rexx_sqltype.0
+          If pos(OUTSQLDA.CI.SQLTYPE, LOBVAL) > 0 then do
+
+             OUTSQLDA.CI.SQLLEN = OUTSQLDA.ci.SQLLONGL
+             OUTSQLDA.CI.SQLLEN = 1024
+           End
+          If OUTSQLDA.CI.SQLTYPE = word(rexx_sqltype.TI, 1) ,
+           | OUTSQLDA.CI.SQLTYPE = word(rexx_sqltype.TI, 1) + 1 Then do
+             If Datatype(Word(rexx_sqltype.TI, 3)) = 'NUM' Then Do
+                MaxColLen.ci = Word(rexx_sqltype.TI, 3)
+              end
+              Else do
+                MaxColLen.ci = OUTSQLDA.CI.SQLLEN
+                If OUTSQLDA.CI.SQLTYPE = 484 ,   /* DECIMAL , */
+                 | OUTSQLDA.CI.SQLTYPE = 485 then Do
+                 /*
+                   Say  OUTSQLDA.ci.SQLLEN
+                   Say  OUTSQLDA.ci.SQLLEN.SQLPRECISION
+                   Say  OUTSQLDA.ci.SQLLEN.SQLSCALE
+                   Say  OUTSQLDA.ci.SQLLEN.SQLDATALEN
+                 */
+                   if ENV = "WIN" Then Do
+                      MaxColLen.ci = OUTSQLDA.ci.SQLLEN.PRECISION + 1
+                    End
+                    Else Do
+                      MaxColLen.ci = OUTSQLDA.ci.SQLLEN.SQLPRECISION + 1
+                    End
+                 End
+               End
+           end
+       End
+       If Length(OUTSQLDA.CI.SQLNAME) > MaxColLen.ci Then Do
+         MaxColLen.ci = Length(OUTSQLDA.CI.SQLNAME)
+        End
+       If Strip(Length(OUTSQLDA.CI.SQLNAME)) > MaxHeadLen Then do
+          MaxHeadLen = Strip(Length(OUTSQLDA.CI.SQLNAME))
+        End
+     END
+  Return
+/*------------------------------------------------------------------*/
+Fixed_length_NO_HEADDER:
+  Drop MaxColLen.
+  MaxHeadLen = 0
+  MaxColLen.0 = 0
+    DO CI = 1 TO OUTSQLDA.SQLD
+       MaxColLen.ci = 0
+       Do TI = 1 to rexx_sqltype.0
+          If pos(OUTSQLDA.CI.SQLTYPE, LOBVAL) > 0 then do
+             OUTSQLDA.CI.SQLLEN = OUTSQLDA.ci.SQLLONGL
+             OUTSQLDA.CI.SQLLEN = 1024
+           End
+          If OUTSQLDA.CI.SQLTYPE = word(rexx_sqltype.TI, 1) ,
+           | OUTSQLDA.CI.SQLTYPE = word(rexx_sqltype.TI, 1) + 1 Then do
+             If Datatype(Word(rexx_sqltype.TI, 3)) = 'NUM' Then Do
+                MaxColLen.ci = Word(rexx_sqltype.TI, 3)
+              end
+              Else do
+                MaxColLen.ci = OUTSQLDA.CI.SQLLEN
+                If OUTSQLDA.CI.SQLTYPE = 484 ,   /* DECIMAL , */
+                 | OUTSQLDA.CI.SQLTYPE = 485 then Do
+                   if ENV = "WIN" Then Do
+                      MaxColLen.ci = OUTSQLDA.ci.SQLLEN.PRECISION + 1
+                    End
+                    Else Do
+                      MaxColLen.ci = OUTSQLDA.ci.SQLLEN.SQLPRECISION + 1
+                    End
+                 End
+               End
+           end
+       End
+     END
+  Return
+
+NOU:
+if Datatype(arg(2)) = 'NUM' THEN OU.0   = OU.0 + ARG(2)
+Else                             OU.0   = OU.0 + 1
+OUI    = OU.0
+OU.OUI = ARG(1)
+Return  0
+
+
+BIGINT_FUER_OOREXX_AUFBEREITEN:
+/* REXX auf WIN/Linunx braucht die db2ar.dll die nicht mehr       */
+/* gepflegt wird, BIGINT wird als Sting Char(8) angezeigt und ist */
+/* nicht verwendbar. Darum muss das aufbereiten manuell laufen    */
+/*  1 = 0100000000000000 muss umgedreht werden 0000000000000001   */
+/* -4 = FCFFFFFFFFFFFFFF wird FFFFFFFFFFFFFFFC                    */
+
+NUMERIC  DIGITS 20
+
+/* Hexwert     = c2x(Reverse(Arg(1))) */
+/* Return x2d(Hexwert, 16)            */
+
+Return x2d(c2x(Reverse(Arg(1))), 16)
+
+DECFLOAT_FUER_OOREXX_AUFBEREITEN:
+return OUTSQLDA.CI.SQLDATA             /* muss noch angepasst werden */
+
+DECFLOAT_FUER_OOREXX_AUFBEREITEN_NEU:
+NUMERIC  DIGITS 100
+BIN = x2b(c2x(reverse(OUTSQLDA.CI.SQLDATA)))
+say "HEX="c2x(OUTSQLDA.CI.SQLDATA)   c2x(reverse(OUTSQLDA.CI.SQLDATA))
+say x2b(c2x(OUTSQLDA.CI.SQLDATA))
+Select
+ When Length(OUTSQLDA.CI.SQLDATA) =  1 Then  Offset = 7
+ When Length(OUTSQLDA.CI.SQLDATA) =  2 Then  Offset = 31
+ When Length(OUTSQLDA.CI.SQLDATA) =  4 Then  Offset = 127
+ When Length(OUTSQLDA.CI.SQLDATA) =  8 Then  Offset = 1023
+ When Length(OUTSQLDA.CI.SQLDATA) = 16 Then  Offset = 16383
+ Otherwise                                   offset = 16383
+End
+
+BIT_0 = Substr(BIN, 1, 1)
+If Bit_0 = 0 then do
+   sign = '+'
+  vz   = +1
+ End
+ Else Do
+   sign = '-'
+   VZ   = -1
+ End
+BIN = Substr(BIN, 2)
+CombField = Substr(BIN, 1,  5)
+BIN = Substr(BIN, 6)
+exponent  = Substr(BIN,1,12 )
+BIN = Substr(BIN,  13)
+say CombField exponent bin
+save_CombField = CombField
+save_exponent = exponent
+Select
+   When Substr(CombField, 1, 4) = "1110"  Then
+        exponent  = '1000' || exponent
+   When Substr(CombField, 1, 4) = "1101"  Then
+        exponent  = '0100' || exponent
+   When Substr(CombField, 1, 4) = "1100"  Then
+        exponent  = '0000' || exponent
+   When Substr(CombField, 1, 2) =   "00"  Then
+        exponent  = '0000' || exponent
+   When Substr(CombField, 1, 2) =   "01"  Then
+        exponent  = '0100' || exponent
+   When Substr(CombField, 1, 2) =   "10"  Then
+        exponent  = '1000' || exponent
+   Otherwise exponent  = '0000' || exponent
+ End
+Gesamt = 0
+Wert   = 1
+do expi = 1 to Length(exponent)
+   If Substr(exponent, expi, 1) > 0 Then    Gesamt = Gesamt +  wert
+   Wert = wert * 2
+ End
+say "Exponent="gesamt  exponent
+say 1 'VZ='sign
+Say 2 'CombField='save_CombField
+say 3 'exponent=' save_exponent "/" exponent
+say 4 'Berechnung-Offset = 'c2d(x2c(b2x(exponent))) " - " ,
+       offset " - 2081 = " ,
+    c2d(x2c(b2x(exponent))) - offset - 2081
+
+exponent  = c2d(x2c(b2x(exponent)))
+exponent  = exponent - offset
+exponent  = exponent - 2080
+exponent = 2080 - c2d(x2c(b2x(save_exponent)))
+
+say b2x(BIN)
+BIn = c2d(x2c(b2x(BIN)))
+
+/*
+Say "Wert0 = "  BIN
+say "wert1 = " ( c2d(x2c(b2x(save_exponent))) - offset )
+Say "Wert2 = " VZ * 2 ** exponent * BIN
+*/
+
+Wert = (VZ * (2 ** exponent) * BIN)
+
+Return Wert
+
+Init:
+rexx_sqltype.0   = 30
+REXX_SQLTYPE.1   = "472 LONGVARGRAPHIC        "
+REXX_SQLTYPE.2   = "384 DATE               10 "
+REXX_SQLTYPE.3   = "388 TIME                8 "
+REXX_SQLTYPE.4   = "392 TIMESTAMP          26 "
+REXX_SQLTYPE.5   = "396 DATALINK              "
+REXX_SQLTYPE.6   = "404 BLOB                  "
+REXX_SQLTYPE.7   = "408 CLOB                  "
+REXX_SQLTYPE.8   = "412 DBCLOB                "
+REXX_SQLTYPE.9   = "448 VARCHAR               "
+REXX_SQLTYPE.10  = "452 CHAR                  "
+REXX_SQLTYPE.11  = "456 LONGVARCHAR           "
+REXX_SQLTYPE.12  = "464 VARGRAPHIC            "
+REXX_SQLTYPE.13  = "468 GRAPHIC               "
+REXX_SQLTYPE.14  = "480 FLOAT                 "
+REXX_SQLTYPE.15  = "484 DECIMAL               "
+REXX_SQLTYPE.16  = "492 BIGINT             19 "
+REXX_SQLTYPE.17  = "496 INTEGER            10 "
+REXX_SQLTYPE.18  = "500 SMALLINT            5 "
+REXX_SQLTYPE.19  = "904 ROWID                 "
+REXX_SQLTYPE.20  = "908 VARBINARY             "
+REXX_SQLTYPE.21  = "912 BINARY                "
+REXX_SQLTYPE.22  = "916 BLOB_FILE             "
+REXX_SQLTYPE.23  = "920 CLOB_FILE             "
+REXX_SQLTYPE.24  = "924 DBCLOB_FILE           "
+REXX_SQLTYPE.25  = "960 BLOB_LOCATOR          "
+REXX_SQLTYPE.26  = "964 CLOB_LOCATOR          "
+REXX_SQLTYPE.27  = "968 DBCLOB_LOCATOR        "
+REXX_SQLTYPE.28  = "988 XML                   "
+REXX_SQLTYPE.29  = "996 DECFLOAT              "
+REXX_SQLTYPE.30  = "2448 TIMESTAMP WITH TIMEZONE "
+
+LOBVAL        = "404 405 408 409 412 413 988 989"
+FNumeric      = "480 481 484 485 492 493 496 497 500 501 "
+                                          colval = "' '"
+maxrc         = 0
+COLDEL        = ';'
+CHARDEL       = '"'
+SQLTERM       = ';'
+SPROCPARSER   = ','
+END_SQL_TERM  = SPACE(SQLTERM SQLTERM, 0)
+SQL_BIGINT    = "492 493"
+
+return
+/*------------------------------------------------------------------*/
+
+Load_DSNREXX:
+ "SUBCOM DSNREXX"
+IF RC THEN   S_RC = RXSUBCOM('ADD','DSNREXX','DSNREXX')
+
+ADDRESS DSNREXX "CONNECT "DB2_SSID
+IF SQLCODE <  0 THEN SAY "CONNECT     SQLCODE="SQLCODE "<"DB2_SSID">"
+
+Return
+
+
+DISCONNECT_DSNREXX:
+    ADDRESS DSNREXX "DISCONNECT"
+    S_RC = RXSUBCOM('DELETE','DSNREXX','DSNREXX')
+RETURN
+
+Connect_Location:
+
+ If Length(Strip(Location)) = 0 Then Return 0
+
+ If ENV = "WIN" Then do
+    If Length(Strip(USER)) < 1 Then Do
+       SQLTEXT = " CONNECT TO" LOCATION
+     End
+    Else Do
+       SQLTEXT = " CONNECT TO" LOCATION "USER "USER" USING "PASSWD
+     End
+  End
+ Else Do
+   If Length(SYSUID) > 0 & Length(SYSPWD) > 0 Then do
+       SQLTEXT = "CONNECT TO "ARG(1) ,
+                 "USER :SYSUID USING :SYSPWD "
+    End
+   ELSE Do
+       SQLTEXT = "CONNECT TO "ARG(1)
+    End
+  End
+ Call EXECUTE_SQL_TEXT
+ IF SQLCODE <  0 THEN DO
+    sqlc = sqlcode
+    MSGTXT = 'Error in CONNECT TO ' || LOCATION ||,
+             ' SQLCODE: ' || SQLCODE
+    If ENV = "WIN" Then do
+       MSGTXT = " CONNECT TO" LOCATION "USER "USER" USING ********"
+     End
+    say MSGTXT
+  END
+
+ parse value sqlerrp with DB_ENV 4 DB_Vers 6 DB_Rel 8 DB_Mod
+Return SQLCODE
+
+DisConnect_Location:
+
+ If Length(Strip(Location)) = 0 Then Return 0
+ SQLTEXT =  "RELEASE " ARG(1)
+ Call EXECUTE_SQL_TEXT
+ SQLTEXT =  "COMMIT  "
+ Call EXECUTE_SQL_TEXT
+
+ SQLTEXT = " CONNECT RESET "
+ Call EXECUTE_SQL_TEXT
+ sqlc = sqlcode
+ IF SQLCODE <  0 THEN DO
+    sqlc = sqlcode
+    MSGTXT = 'Error in DISCONNECT ' || LOCATION ||,
+             ' SQLCODE: ' || SQLCODE
+    SAY MSGTXT
+  END
+Return SQLCODE
+
+OPEN_CURSOR:
+    IF DATATYPE(CNR) <> 'NUM' THEN CNR = 1
+    SNR = CNR
+    SQLTEXT = "CLOSE C"CNR
+    Call EXECUTE_SQL_TEXT
+    SQLTEXT = "DECLARE C"CNR" CURSOR FOR S"SNR
+    Call EXECUTE_SQL_TEXT
+    IF SQLCODE <> 0 THEN DO
+       sqlc = sqlcode
+       SAY "ERROR ON DECLARE, RC="RC ,
+           "SQLCODE="SQLCODE         ,
+           "SQLERRMC="SQLERRMC       ,
+           ""
+    END
+    SQLTEXT = "PREPARE S"SNR" FROM :SQLSTMT"
+    If Env = 'TSO' Then do
+       PREP_ATTR =   "CONCENTRATE STATEMENTS WITH LITERALS  "
+       SQLTEXT = " PREPARE S"SNR ,
+                 " ATTRIBUTES :PREP_ATTR " ,
+                 " FROM :SQLSTMT" ,
+                 ""
+     End
+     Else Do
+       SQLTEXT = " PREPARE S"SNR ,
+                 " FROM :SQLSTMT" ,
+                 ""
+     End
+    Call EXECUTE_SQL_TEXT
+    IF SQLCODE <> 0 THEN DO
+       sqlc = sqlcode
+       SAY "ERROR ON PREPARE S"SNR"RC="RC ,
+           "SQLCODE="SQLCODE         ,
+           "SQLERRMC="SQLERRMC       ,
+           ""
+    END
+
+   SQLTEXT = " DESCRIBE S"SNR" INTO :OUTSQLDA"
+   Call EXECUTE_SQL_TEXT
+
+    SQLTEXT = "OPEN C"CNR
+    Call EXECUTE_SQL_TEXT
+    IF SQLCODE <  0 THEN DO
+       sqlc = sqlcode
+       SAY "ERROR ON OPEN C"CNR" , RC="RC ,
+           "SQLCODE="SQLCODE         ,
+           "SQLERRMC="SQLERRMC       ,
+           ""
+    END
+
+RETURN
+
+CLOSE_CURSOR:
+    IF DATATYPE(CNR) <> 'NUM' THEN CNR = 1
+    SQLTEXT = "CLOSE C"CNR
+    Call EXECUTE_SQL_TEXT
+RETURN
+
+SQL_ERROR:
+
+If ENV = "WIN" Then do
+   call SQLDBS 'GET MESSAGE INTO :errmsg LINEWIDTH 80'
+   say
+   say '**** SQL returned the following : '
+   say '     STEP        = ' STEP
+   say '     SQLCODE     = ' sqlca.Sqlcode
+   say '     Nachricht   = ' SqlMsg
+   say '     ErrorMSG    = ' errmsg
+   say
+   Return
+ End
+
+SQLC = D2X(SQLCODE,8)
+SQLC = X2C(SQLC)
+
+
+SQL_ERRD = ""
+SQL_WARN = ""
+If DB_ENV = "DSN" Then do
+   Do errI = 1 To 6
+      SQL_ERRD = SQL_ERRD || D2C(SQLERRD.errI,4)
+   End
+   Do errI = 0 To 10
+      SQL_WARN = SQL_WARN || LEFT(SQLWARN.errI,1)
+   End
+ End
+
+MSG_LEN = 80
+SQLCA = 'SQLCA   '
+SQLCA = SQLCA || X2C(00000088)
+SQLCA = SQLCA || SQLC
+SQLCA = SQLCA || D2C(70,2)
+SQLCA = SQLCA || 'DSN     '
+SQLCA = SQLCA || LEFT(SQLERRMC,70)
+SQLCA = SQLCA || LEFT(SQLERRP,8)
+SQLCA = SQLCA || SQL_ERRD
+SQLCA = SQLCA || SQL_WARN
+SQLCA = SQLCA || LEFT(SQLSTATE,5)
+TIAR_MSG = D2C(MSG_LEN * 12,2) || COPIES(' ',MSG_LEN * 12)
+TEXT_LEN = D2C(MSG_LEN,4)
+ADDRESS ATTCHPGM 'DSNTIAR SQLCA TIAR_MSG TEXT_LEN'
+
+If RC < 5 Then,
+   Do
+   If RC = 4 Then Say "DSNTIAR RC=4 Message Area Truncated"
+   S_POS = 3              /* Bypass the length bytes in Message Area */
+   OK = NOU("--")
+   Do errI = 1 to 12         /* Loop through all lines of message */
+      MSG_TEXT = Substr(tiar_msg,S_POS,MSG_LEN) /* Pick out text */
+      MSG_TEXT = Strip(MSG_TEXT,T," ")      /* Remove trailing blanks */
+      If MSG_TEXT > " " Then Do             /* Echo msg to terminal */
+         Say MSG_TEXT /* Echo msg to terminal */
+         OK = NOU("--" MSG_TEXT)
+       End
+      Else Iterate /* Some msg lines are blank, skip */
+      S_POS = S_POS + MSG_LEN /* Skip to next "line" of MSG data */
+   End errI
+   say "SQLCODE="SQLCODE "SQLSTATE="SQLSTATE
+   say " "
+End
+Else Do
+   Say "Call to DSNTIAR - Failed. RC=" RC
+   Say 'SQLCODE ='SQLCODE; Say 'SQLERRM ='SQLERRMC
+   Say 'SQLERRP ='SQLERRP; Say 'SQLSTATE='SQLSTATE
+   XX = "SQLERRD ="
+   Do erri = 1 to 6 ; XX = XX||SQLERRD.errI||',';End;Say XX
+   XX = "SQLWARN ="
+   Do errI = 0 to 10; XX = XX||SQLWARN.errI||',';End;Say XX
+   say " "
+End
+
+RETURN
+/*------------------------------------------------------------------*/
+EXECUTE_SQL_TEXT:
+
+ Select
+    When ENV = 'TSO' Then Do
+         ADDRESS DSNREXX "EXECSQL "SQLTEXT
+         Select
+           When rc =  -2168 Then do
+                SQLCODE    = -99999
+                SQLERRMC   = "Returncode war " RC
+            End
+           Otherwise nop
+          End
+     End
+    When ENV = 'WIN' Then Do
+         CALL SQLEXEC SQLTEXT
+         SQLCODE    = SQLCA.SQLCODE
+         SQLERRMC   = SqlMsg
+     End
+    Otherwise NOP
+  End
+Return
+
+DESCRIBE_STATEMENT:
+
+ SQLSTMT = SUBWORD(SQLSTMT, 2)   /* DESCRIBE RAUS    */
+ If Env = 'TSO' Then do
+    PREP_ATTR =   "CONCENTRATE STATEMENTS WITH LITERALS  "
+    SQLTEXT = " PREPARE S"SNR "INTO :OUTSQLDA " ,
+              " ATTRIBUTES :PREP_ATTR " ,
+              " FROM :SQLSTMT" ,
+              ""
+  End
+  Else Do
+    SQLTEXT = " PREPARE S"SNR "INTO :OUTSQLDA " ,
+              " FROM :SQLSTMT" ,
+              ""
+  End
+ Call EXECUTE_SQL_TEXT
+ IF SQLCODE <  0 THEN DO
+    sqlc = sqlcode
+    SAY "PREPARE      ERROR " SQLCODE SQLERRMC
+    CALL SQL_ERROR
+    Call SET_RC(8)
+    Return MaxRC
+  END
+
+ SQLTEXT = " DESCRIBE S"SNR" INTO :OUTSQLDA"
+ Call EXECUTE_SQL_TEXT
+ IF SQLCODE <  0 THEN DO
+    sqlc = sqlcode
+    SAY "DESCRIBE     ERROR " SQLCODE SQLERRMC
+    CALL SQL_ERROR
+    Call SET_RC(8)
+    Return MaxRC
+  END
+
+ DO CI = 1 TO OUTSQLDA.SQLD
+
+    Do ti = 1 to rexx_sqltype.0
+    If OUTSQLDA.CI.SQLTYPE = word(rexx_sqltype.TI, 1) ,
+     | OUTSQLDA.CI.SQLTYPE = word(rexx_sqltype.TI, 1) + 1 Then do
+       if OUTSQLDA.CI.SQLTYPE = word(rexx_sqltype.TI, 1) Then Do
+          NULLKZ = "NOT NULL"
+        End
+       ELSE Do
+          NULLKZ = ""
+        End
+
+       dtype = Word(rexx_sqltype.TI, 2)
+
+       If OUTSQLDA.CI.SQLTYPE = 484 ,   /* DECIMAL , */
+        | OUTSQLDA.CI.SQLTYPE = 485 then Do
+          if ENV = "WIN" Then Do
+             MaxColLen.ci = OUTSQLDA.ci.SQLLEN.PRECISION + 1
+           End
+           Else Do
+             MaxColLen.ci = OUTSQLDA.ci.SQLLEN.SQLPRECISION + 1
+           End
+        End
+        Leave
+     End
+
+    END
+
+    select
+      When dtype = "TIMESTAMP"   ,
+         | dtype = "DATE"        ,
+         | dtype = "TIME"        ,
+         | dtype = "SMALLINT"    ,
+         | dtype = "INTEGER "    ,
+         | dtype = "BIGINT  "    ,
+         | dtype = ""         THEN DO
+           LAENGE = ""
+         End
+      When dtype = "CLOB"        ,
+         | dtype = "BLOB"        ,
+         | dtype = "XML"      Then DO
+           LAENGE = "(" || OUTSQLDA.ci.SQLLONGL || ")"
+        End
+      When dtype = "DECIMAL" Then Do
+           if ENV = "WIN" Then Do
+              LAENGE = "(" || OUTSQLDA.ci.SQLLEN.PRECISION || ,
+                       " , "                               || ,
+                             OUTSQLDA.ci.SQLLEN.SCALE      || ,
+                       ")"
+             End
+            Else Do
+              LAENGE = "(" || OUTSQLDA.ci.SQLLEN.SQLPRECISION || ,
+                              " , "                           || ,
+                              OUTSQLDA.ci.SQLLEN.SQLSCALE     || ,
+                       ")"
+             End
+       End
+      Otherwise  Do
+           LAENGE = "(" || OUTSQLDA.CI.SQLLEN || ")"
+         End
+     End
+
+    OK = NOU( ,
+           Substr(OUTSQLDA.CI.SQLNAME, 1, 45) ,
+           DTYPE  LAENGE NULLKZ ,
+           , 1)
+ END
+
+Return
+
+Execute_Command:
+   IF ISPF_ENV = "ISPF" THEN X = MSG('ON')
+   MAKEBUF
+   BUFNO = RC
+   say DB2CMD
+   QUEUE DB2CMD
+   QUEUE "  END"
+   X = OUTTRAP("DSNCMD.","*","NOCONCAT")
+   "DSN SYSTEM("DB2_SSID")"
+   Do dsni = 1 to dsncmd.0
+      Say dsncmd.dsni
+    End
+   X = OUTTRAP("OFF")
+
+Return
+
+/*------------------------------------------------------------------*/
+
+READ_PARM:
+
+  "EXECIO * DISKR RXPARM  (STEM RXPARMS. FINIS"
+
+RETURN 0
+
+READ_SYSIN:
+
+  DROP IN1.
+  IN1.0 = 0
+  IF ENV = "TSO" THEN DO
+     "EXECIO * DISKR SYSIN (STEM IN1. FINIS"
+   End
+  Else do while lines(IFILE) > 0
+      in1.0 = in1.0 + 1
+      in1i  = in1.0
+      in1.in1i = Linein(IFILE)
+   End
+
+  DROP IN.
+  IN.0 = 0
+  DO INI = 1 TO IN1.0
+     IN1.INI = STRIP(IN1.INI, 'T')
+     TEST = Translate(STRIP(IN1.INI) )
+
+     Search_Komment = 'Y'
+     Select
+       When SUBSTR(TEST, 1,  9)  = "--SQLTERM"     Then do
+            Search_Komment = 'N'
+        END
+       When SUBSTR(TEST, 1, 13)  = "--SPROCPARSER" Then do
+            Search_Komment = 'N'
+        END
+       When SUBSTR(TEST, 1,  6)  = "--#SET"        Then do
+            Search_Komment = 'N'
+        END
+       When Word(TEST, 1)        = "--WORKLIST"    Then do
+            If Word(TEST, 2)  = "RESTART" Then Do
+               searchi = ini /* Restart Zeile Merken */
+             End
+            Search_Komment = 'N'
+        END
+       When Word(TEST, 1)        = "--STMT"        Then do
+            Search_Komment = 'N'
+        END
+       When SUBSTR(TEST, 1,  2)  = "--"            Then do
+            Iterate
+        END
+       OTHERWISE NOP
+      End
+
+     NureinTeil = 0
+     if NureinTeil = 0 & Search_Komment = 'Y' Then Do
+        NurEinTeil = pos('--', IN1.INI, 1)
+      End
+
+/*   --FEHLER FEHLER FEHLER  */
+     if NureinTeil > 0 & Search_Komment = 'Y' Then Do
+        Quote_Start  = 'N'
+        NureinTeil   = 0
+        Do Nti = 1 To Length(IN1.INI)
+           If Substr(IN1.INI, Nti, 1) = "'" Then Do
+              Select
+                When Quote_Start = 'N'    THEN Quote_Start = 'Y'
+                When Quote_Start = 'Y'    THEN Quote_Start = 'N'
+                Otherwise NOP
+               End
+            End
+
+           If Substr(IN1.INI, Nti, 2) = "--" ,
+            & Quote_Start = 'N'                  Then Do
+              NureinTeil = Nti
+              Leave
+            END
+
+         End
+      End
+
+     IF NurEinTeil > 0 Then do
+        if NurEinTeil > 1 Then NurEinTeil = NurEinTeil -1
+        IN1.INI = Substr(IN1.INI, 1, NurEinTeil)
+      end
+     If Strip(TEST) = "" Then Iterate
+     IN.0 = IN.0 + 1
+     INX  = IN.0
+     IN.INX = IN1.INI
+   END
+return
+
+Stmt_Aufbereiten:
+/* EINZELNE STATEMENTS AUFBEREITEN    */
+  DROP STATEMENT.
+  STATEMENT.0  = 0
+  STATEMENT.0  = 1
+  STATEMENT.1  = ""
+  DROP STMTOUT.
+  STMTOUT.0 = 1
+  STMTOUT.1.STMT.0 = 0
+  Trenner = '25'x
+  Trenner = ' '
+  DO I = 1 TO IN.0
+     If Substr(Strip(IN.i), 1, 2) = "--" Then do
+        Select
+          When Substr(Strip(IN.i), 1, 10)  = "--SQLTERM="    Then do
+               parse value IN.i with w1 "=" SQLTERM .
+               SQLTERM = STRIP(SQLTERM)
+               ITERATE
+           End
+
+          When Substr(Strip(IN.i), 1, 14)  = "--SPROCPARSER=" Then do
+               parse value IN.i with w1 "=" SPROCPARSER .
+               SPROCPARSER = STRIP(SPROCPARSER)
+               ITERATE
+           End
+
+          When Word(IN.i, 1)  = "--#SET" Then Do
+               If Word(IN.i, 2)  = "TERMINATOR" Then Do
+                  parse value IN.i with w1 w2 SQLTERM .
+                  SQLTERM = STRIP(SQLTERM)
+                End
+               ITERATE
+            End
+
+          When Word(IN.i, 1)  = "--WORKLIST" Then Do
+               If Word(IN.i, 2)  = "TYPE" Then Do
+                  If Datatype(Word(IN.i, 3)) = "NUM" ,
+                   & ( Word(IN.i, 3)  = 1 |  ,
+                       Word(IN.i, 3)  = 2 ) Then do
+                       WorkListType  = Word(IN.i, 3)
+                   End
+                End
+
+               If Word(IN.i, 2)  = "RESTART" Then Do
+                  If Datatype(Word(IN.i, 3)) = "NUM" Then Do
+                     RESTARTWorklist = Word(IN.i, 3)
+                   End
+                End
+               ITERATE
+            End
+          When Word(IN.i, 1)  = "--STMT"  Then Do
+               If Datatype(Word(IN.i, 2)) = "NUM" Then Do
+                  StatementNr     = Word(IN.i, 2)
+                End
+               ITERATE
+            End
+
+
+          When Substr(Strip(IN.i), 1, 2)  = "--"              Then do
+               ITERATE
+           End
+
+          otherwise NOP
+         End
+      End
+     SI = STATEMENT.0
+
+     Trenner = ' '
+     select
+       when  Word(TRANSLATE(STATEMENT.SI), 1) = "CREATE"  Then Do
+             Trenner = ' ' || '25'x
+        End
+       when  Word(TRANSLATE(STATEMENT.SI), 1) = "COMMENT" Then Do
+             Trenner = ''
+        End
+       Otherwise   Trenner = ' '
+      End
+
+     If Datatype(StatementNr) <> "NUM" Then StatementNr = SI
+
+     STATEMENT.SI = STRIP(STATEMENT.SI,'T')||Trenner||STRIP(IN.i, 'T')
+     STATEMENT.SI.STMTNR = StatementNr
+     STMTOUT.SI.STMT.0 = STMTOUT.SI.STMT.0 + 1
+     STMTI = STMTOUT.SI.STMT.0
+     STMTOUT.SI.STMTNR = StatementNr
+     STMTOUT.SI.STMT.STMTI = STRIP(IN.i, 'T')
+     TEST = REVERSE(SPACE(IN.I, 0))
+     select
+       When substr(test, 1, 2) = END_SQL_TERM then do
+            STATEMENT.0  = STATEMENT.0 - 1
+            STMTOUT.0    = STATEMENT.0
+            LEAVE
+        END
+       When substr(test, 1, 1) = SQLTERM | I = In.0 Then do
+            test = reverse(strip(STATEMENT.si, 'T'))
+            if substr(test, 1, 1) = SQLTERM Then do
+               STATEMENT.si = reverse(substr(test, 2))
+             End
+            STATEMENT.si = Strip(STATEMENT.si, 'T')
+            STATEMENT.0  = STATEMENT.0 + 1
+            STMTOUT.0    = STATEMENT.0
+            SI           = STATEMENT.0
+            STATEMENT.SI = ""
+            STMTOUT.Si.STMT.0 = 0
+        END
+       OTHERWISE NOP
+      END
+   END
+
+RETURN 0
+
+READ_SYSIN_Spufi:
+
+  DROP IN1.
+  IN1.0 = 0
+  IF ENV = "TSO" THEN DO
+     "EXECIO * DISKR SYSIN (STEM IN1. FINIS"
+   End
+  Else do while lines(IFILE) > 0
+      in1.0 = in1.0 + 1
+      in1i  = in1.0
+      in1.in1i = Linein(IFILE)
+   End
+
+  DROP IN.
+  IN.0 = 0
+  DO INI = 1 TO IN1.0
+     IN1.INI = SUBSTR(IN1.INI, 1, SpufiLen)
+     TEST = Translate(STRIP(IN1.INI) )
+
+
+     Search_Komment = 'Y'
+     Select
+       When SUBSTR(TEST, 1,  9)  = "--SQLTERM"     Then do
+            Search_Komment = 'N'
+        END
+       When SUBSTR(TEST, 1, 13)  = "--SPROCPARSER" Then do
+            Search_Komment = 'N'
+        END
+       When SUBSTR(TEST, 1,  6)  = "--#SET"        Then do
+            Search_Komment = 'N'
+        END
+       When Word(TEST, 1)        = "--WORKLIST"    Then do
+            If Word(TEST, 2)  = "RESTART" Then Do
+               searchi = ini /* Restart Zeile Merken */
+             End
+            Search_Komment = 'N'
+        END
+       When Word(TEST, 1)        = "--STMT"        Then do
+            Search_Komment = 'N'
+        END
+       When SUBSTR(TEST, 1,  2)  = "--"            Then do
+            Iterate
+        END
+       OTHERWISE NOP
+      End
+
+     NureinTeil = 0
+     if NureinTeil = 0 & Search_Komment = 'Y' Then Do
+        NurEinTeil = pos('--', IN1.INI, 1)
+      End
+
+     if NureinTeil > 0 & Search_Komment = 'Y' Then Do
+        Quote_Start  = 'N'
+        NureinTeil   = 0
+        Do Nti = 1 To Length(IN1.INI)
+           If Substr(IN1.INI, Nti, 1) = "'" Then Do
+              Select
+                When Quote_Start = 'N'    THEN Quote_Start = 'Y'
+                When Quote_Start = 'Y'    THEN Quote_Start = 'N'
+                Otherwise NOP
+               End
+            End
+
+           If Substr(IN1.INI, Nti, 2) = "--" ,
+            & Quote_Start = 'N'  Then Do
+              NureinTeil = Nti
+              Leave
+            END
+
+         End
+      End
+
+
+
+
+     IF NurEinTeil > 0 Then do
+        if NurEinTeil > 1 Then NurEinTeil = NurEinTeil -1
+        IN1.INI = Substr(IN1.INI, 1, NurEinTeil) || " "
+      end
+
+     If Strip(TEST) = "" Then Iterate
+     IN.0 = IN.0 + 1
+     INX  = IN.0
+     IN.INX = IN1.INI
+   END
+return
+
+Stmt_Aufbereiten_SPUFI:
+/* EINZELNE STATEMENTS AUFBEREITEN    */
+  DROP STATEMENT.
+  STATEMENT.0  = 0
+  STATEMENT.0  = 1
+  STATEMENT.1  = ""
+  DROP STMTOUT.
+  STMTOUT.0 = 1
+  STMTOUT.1.STMT.0 = 0
+  Trenner = '25'x
+  Trenner = ' '
+  DO I = 1 TO IN.0
+     If Substr(Strip(IN.i), 1, 2) = "--" Then do
+        Select
+          When Substr(Strip(IN.i), 1, 10)  = "--SQLTERM="    Then do
+               parse value IN.i with w1 "=" SQLTERM .
+               SQLTERM = STRIP(SQLTERM)
+               ITERATE
+           End
+
+          When Substr(Strip(IN.i), 1, 14)  = "--SPROCPARSER=" Then do
+               parse value IN.i with w1 "=" SPROCPARSER .
+               SPROCPARSER = STRIP(SPROCPARSER)
+               ITERATE
+           End
+
+          When Word(IN.i, 1)  = "--#SET" ,
+             & Word(IN.i, 2)  = "TERMINATOR" Then Do
+               parse value IN.i with w1 w2 SQLTERM .
+               SQLTERM = STRIP(SQLTERM)
+               ITERATE
+            End
+          When Word(IN.i, 1)  = "--WORKLIST" Then Do
+               If Word(IN.i, 2)  = "TYPE" Then Do
+                  If Datatype(Word(IN.i, 3)) = "NUM" ,
+                   & ( Word(IN.i, 3)  = 1 |  ,
+                       Word(IN.i, 3)  = 2 ) Then do
+                       WorkListType  = Word(IN.i, 3)
+                   End
+                End
+               If Word(IN.i, 2)  = "RESTART" Then Do
+                  If Datatype(Word(IN.i, 3)) = "NUM" Then Do
+                     RESTARTWorklist = Word(IN.i, 3)
+                   End
+                End
+               ITERATE
+            End
+
+          When Substr(Strip(IN.i), 1, 2)  = "--"              Then do
+               ITERATE
+           End
+
+
+          otherwise NOP
+         End
+      End
+     SI = STATEMENT.0
+
+     Trenner = ''
+
+     STATEMENT.SI = STATEMENT.SI || Trenner || IN.i
+     STMTOUT.SI.STMT.0 = STMTOUT.SI.STMT.0 + 1
+     STMTI = STMTOUT.SI.STMT.0
+     STMTOUT.SI.STMT.STMTI = IN.i
+     TEST = REVERSE(SPACE(IN.I, 0))
+     select
+       When substr(test, 1, 2) = END_SQL_TERM then do
+            STATEMENT.0  = STATEMENT.0 - 1
+            STMTOUT.0    = STATEMENT.0
+            LEAVE
+        END
+       When substr(test, 1, 1) = SQLTERM | I = In.0 Then do
+            test = reverse(strip(STATEMENT.si, 'T'))
+            if substr(test, 1, 1) = SQLTERM Then do
+               STATEMENT.si = reverse(substr(test, 2))
+             End
+            STATEMENT.si = STATEMENT.si
+            STATEMENT.0  = STATEMENT.0 + 1
+            STMTOUT.0    = STATEMENT.0
+            SI           = STATEMENT.0
+            STATEMENT.SI = ""
+            STMTOUT.Si.STMT.0 = 0
+        END
+       OTHERWISE NOP
+      END
+   END
+
+RETURN 0
+
+SET_RC:
+   IF ARG(1) > MAXRC THEN Do
+      MAXRC = ARG(1)
+      IF ispf_env = 'ISPF' THEN DO
+         ZISPFRC = ARG(1)
+         ADDRESS ISPEXEC "VPUT (ZISPFRC) SHARED"
+       END
+    END
+Return MaxRC
+
+/* Parms f r Windows einlesen */
+Get_Parms:
+  If Length(Parms) = 0 Then do
+     Call Help_Win
+     Exit
+   End
+
+  DB            = ""
+  PASSWD        = ""
+  USER          = ""
+  STMT          = ""
+  OUT           = ""
+  IFILE         = ""
+  NULLWert      = ""
+  AUTO_COMMIT   = "YES"
+  ACOMMIT       = "YES"
+
+  ValidParms.0  = 12
+  ValidParms.1  = "-STMT "
+  ValidParms.2  = "-DB "
+  ValidParms.3  = "-OUTPUT_FORMAT "
+  ValidParms.4  = "-ACOMMIT "
+  ValidParms.5  = "-U "
+  ValidParms.6  = "-P "
+  ValidParms.7  = "-F "
+  ValidParms.8  = "-OUT "
+  ValidParms.9  = "-HELP"
+  ValidParms.10 = "-IGNORE_SQL_ERROR "
+  ValidParms.11 = "-NULLVALUE "
+  ValidParms.12 = "-SHOW_SQL_STMT "
+
+  /* Init Values */
+  Do I = 1 To ValidParms.0
+     ParmName = Substr(ValidParms.i, 2)
+     Interpret ParmName "= ''"
+   End
+
+   /* Check Values */
+Do I = 1 To ValidParms.0
+  If Pos(ValidParms.i, Parms, 1) < 1 Then Iterate
+
+  ParmName = Substr(ValidParms.i, 2)
+  Interpret ParmName "= '"ParmName"'"
+  If ParmName = "U " Then Do
+     USER    = Get_Parms_Value(ParmName)
+   End
+  If ParmName = "STMT " Then Do
+     SQL_STMT = Get_Parms_Value(ParmName)
+   End
+  If ParmName = "NULLVALUE " Then Do
+     NULLWert = Get_Parms_Value(ParmName)
+     NULLWert = STRIP(NULLWert, 'B', '"')
+   End
+  If ParmName = "P " Then Do
+     PASSWD   = Get_Parms_Value(ParmName)
+   End
+  If ParmName = "F " Then Do
+     IFILE    = Get_Parms_Value(ParmName)
+   End
+  If ParmName = "OUT " Then Do
+     OUT      = Get_Parms_Value(ParmName)
+   End
+  If ParmName = "ACOMMIT" Then do
+     Auto_Commit = Get_Parms_Value(ParmName)
+     Auto_commit = Translate(Auto_commit)
+     Select
+        When Auto_commit = "NO"  Then Auto_Commit = "NO"
+        When Auto_commit = "YES" Then Auto_Commit = "YES"
+        Otherwise                     Auto_Commit = "YES"
+       End
+   End
+  If ParmName = "IGNORE_SQL_ERROR " Then do
+     IGNORE_SQL_ERROR    = Get_Parms_Value(ParmName)
+     If IGNORE_SQL_ERROR <> "YES" Then IGNORE_SQL_ERROR = "NO"
+     ELSE                              IGNORE_SQL_ERROR     = "YES"
+   End
+  If ParmName = "DB " Then Do
+     DB       = Get_Parms_Value(ParmName)
+     Location = db
+     SSID     = db
+   End
+  If ParmName = "OUTPUT_FORMAT " Then do
+     OUTPUT_FORMAT = Get_Parms_Value(ParmName)
+     OUTPUT_FORMAT = Translate(OUTPUT_FORMAT)
+   End
+  If ParmName = "SHOW_SQL_STMT" Then do
+     SHOW_SQL_STMT = Get_Parms_Value(ParmName)
+     SHOW_SQL_STMT = Translate(SHOW_SQL_STMT)
+     Select
+        When SHOW_SQL_STMT = "NO"  Then SHOW_SQL_STMT = "NO"
+        When SHOW_SQL_STMT = "YES" Then SHOW_SQL_STMT = "YES"
+        Otherwise                       SHOW_SQL_STMT = "YES"
+       End
+   End
+ End
+
+   /* Check Values wrong parameter */
+
+  Do I = 1 To Words(Parms)
+     found = "N"
+     Do y = 1 To ValidParms.0
+     If Word(Parms, i) = ValidParms.y Then Do
+     Found = "Y"
+     Leave
+   End
+   End
+   If Found = "N" Then Do
+      Say "Invalid Parameter " Word(Parms, i) ,
+          "enter valid value "
+
+   Say "------  Program interrupted  --------------"
+   Call Help_Win
+   Exit
+    End
+   End
+
+Return
+
+Get_Parms_Value:
+    SRCParm   = ""
+    SRCVAL    = "-" || ARG(1)
+ SRCVALL   = Length(SRCVAL)
+
+ FPOS      = Pos(SRCVAL, Parms, 1)
+ nxt       = FPos + 1
+ NxtPos    = Pos(" -", Parms, nxt)
+ If NxtPos < 1 Then Do
+    NxtPos = Length(Parms) + 1
+  End
+ ParmLen   = NxtPos - (fpos + SRCVALL)
+ DelStart  = FPos + SRCVALL
+
+ SRCParm   = SUBSTR(ParmsO, DelStart, ParmLen)
+ SRCParm   = Strip(SRCParm)
+
+ Parms     = Delstr(Parms, DelStart, ParmLen)
+ Parmso    = Delstr(Parmso, DelStart, ParmLen)
+Return SRCPARM
+
+Help_Win:
+   Say "Calling Dynamsql.rex -DB <Datenbank> -..... "
+   Say ""
+   Say "Option   :  -DB   <Database Alias>   Name of Database     "
+   Say "            -U                       Userid               "
+   Say "            -P                       Password             "
+   Say "            -OUT                     Output  Dataset      "
+   Say "            -F                       input   Dataset      "
+   Say "            -STMT                    Select Statement     "
+   Say "            -OUTPUT_FORMAT           FIXED" ,
+                                            ", FIXEDNOHEAD",
+                                            ", WORDWRAPDET",
+                                            ", WORDWRAP",
+                                            ", VARIABLE",
+                                            ", INSERT" ,
+                                            ", HTML" ,
+                                            ", JSON" ,
+                                            ", XML",
+                                            ", CSV",
+                                            ", CSVH",
+                                            ""
+   Say "            -ACOMMIT                 AUTO_COMMIT YES/NO   "
+   Say "            -IGNORE_SQL_ERROR        YES/NO               "
+   Say "            -SPUFI_FORMAT            enter Y/N for SPUFI ",
+       "Format " Spufilen || " BYTE"
+   Say "            -HELP                    This Help            "
+   Say "            -NULLVALUE               output for NULL VALUES  "
+   Say "            -SHOW_SQL_STMT           YES/NO " || ,
+                                            "Show SQL before List "
+   Say ""
+
+ Return
+
+Getpwd:
+
+pwd = ""
+count = 0
+parse value SysCurPos() with row col
+do forever /* while key1Ö=d2c(13)*/
+   If count = 0 Then do
+     ok = SysCurPos(row,col)
+     Say "enter password : "
+     col = col + 16
+     ok = SysCurPos(row,col)
+ End
+ Else  ok = SysCurPos(row,col)
+
+   key1=SysGetKey("NoEcho")
+   count = count + 1
+   Select
+     When key1=d2c(13) then Do   /* Enter key */
+          leave
+      End
+     When key1=d2c(27) then Do   /* Escape */
+          pwd  = ""
+          key1 = ""
+          leave
+      End
+     When  (key1=d2c(8)) then Do /* Backspace */
+           Select
+             When length(pwd) = 1 then do
+                  pwd = ""
+              End
+             When length(pwd) > 1 then do
+                  pwdL = length(pwd) - 1
+                  pwd  = substr(pwd, 1, pwdL)
+              End
+             Otherwise NOP
+            End
+       End
+      Otherwise do
+            pwd = pwd || key1
+        End
+     End
+  key1 = ""
+ end
+ok = SysCurPos(row,0)
+return pwd
+
+Update_Retart_Value:
+
+If WorkListType    = 2 ,
+ & Datatype(RESTARTWorklist) = "NUM" Then Do
+   NOP
+ End
+ Else Do
+   Return
+ End
+
+Select
+  When  ENV = "TSO" Then Do
+       "EXECIO 1 DISKRU SYSIN "searchi
+       PARSE PULL Zeile
+       ZEILE = STRIP(ZEILE)
+       Zeile = Word(Zeile, 1) Word(Zeile, 2) STATEMENT.I.STMTNR
+       QUEUE ZEILE
+       "EXECIO 1 DISKW SYSIN (FINIS"
+   End
+  When  ENV = "WIN" & Length(IFILE) > 0 Then Do
+        Zeile_Out  = "--WORKLIST RESTART" STATEMENT.I.STMTNR
+        Call Lineout IFILE, Zeile_out, searchi
+   End
+
+  Otherwise NOP
+ End
+return
+
+Prompt_Commit_Rollback:
+DO FOREVER
+   COMROL = "COMMIT"
+   ADDRESS ISPEXEC "DISPLAY PANEL(PACORO)"
+   If RC > 8 Then do
+      say "ZEDSMSG="ZEDSMSG
+      say "ZERRLM="ZERRLM
+      say "ZERRMSG="ZERRMSG
+      say "ZERRSM="ZERRSM
+      say "RC="rc
+      return ""
+    End
+
+    /* PF Tasten Pruefen  */
+    Select
+       When SUBSTR(COMMAND,1,3) = "CAN"  THEN DO
+            SQLTEXT = " ROLLBACK "
+            Call EXECUTE_SQL_TEXT
+            LEAVE
+        End
+       When PF                  = 'PF03' THEN Do
+            SQLTEXT = " COMMIT "
+            Call EXECUTE_SQL_TEXT
+            LEAVE
+        End
+       When COMROL = "COMMIT"    Then Do
+            SQLTEXT = " COMMIT"
+            Call EXECUTE_SQL_TEXT
+            LEAVE
+        End
+       When SUBSTR(COMROL, 1, 1) = "C"    Then Do
+            SQLTEXT = " COMMIT"
+            Call EXECUTE_SQL_TEXT
+            LEAVE
+        End
+       When COMROL = "ROLLBACK"  Then Do
+            SQLTEXT = " ROLLBACK "
+            Call EXECUTE_SQL_TEXT
+            LEAVE
+        End
+       When SUBSTR(COMROL, 1, 1) = "R"    Then Do
+            SQLTEXT = " ROLLBACK "
+            Call EXECUTE_SQL_TEXT
+            LEAVE
+        End
+       Otherwise Do
+            NOP
+        End
+    End
+  End
+
+Return
+
+Prompt_Commit_Rollback_WIN:
+Do Forever
+   Say "Enter COMMIT Or ROLLBACK  "
+   pull COMROL
+   COMROL = Translate(COMROL)
+
+   /* PF Tasten Pruefen  */
+   Select
+      When COMROL = "COMMIT"    Then Do
+           SQLTEXT = " COMMIT"
+           Call EXECUTE_SQL_TEXT
+     SAY Strip(SQLTEXT) " Executed "
+           LEAVE
+       End
+      When SUBSTR(COMROL, 1, 1) = "C"    Then Do
+           SQLTEXT = " COMMIT"
+           Call EXECUTE_SQL_TEXT
+     SAY Strip(SQLTEXT) " Executed "
+           LEAVE
+       End
+      When COMROL = "ROLLBACK"  Then Do
+           SQLTEXT = " ROLLBACK "
+           Call EXECUTE_SQL_TEXT
+     SAY Strip(SQLTEXT) " Executed "
+           LEAVE
+       End
+      When SUBSTR(COMROL, 1, 1) = "R"    Then Do
+           SQLTEXT = " ROLLBACK "
+           Call EXECUTE_SQL_TEXT
+     SAY Strip(SQLTEXT) " Executed "
+           LEAVE
+       End
+      Otherwise Do
+           Iterate
+       End
+    END
+ End
+Return
+
+CHK_DD_STMT:
+
+  DDLISTE = ''
+  Tcb = Storage(21C,4)                  /* get TCB address*/
+  Tiot  = Storage(D2X(C2D(Tcb)+12),4)   /* add 12 for TIOT address */
+  dd    = D2X(C2D(Tiot)+28)             /* point to 1st DD */
+  ddlen = Storage(D2X(C2D(Tiot)+24),1)  /* dd length? */
+  Tiot  = D2X(C2D(Tiot)+24)             /* point to 1st TIOT ddname */
+  Jfcb  = Storage(D2X(X2D(Tiot)+12),3)  /* get JFCB address */
+
+      /* go through all ddnames */
+  Do while C2D(ddlen) <> 0
+      /* do one ddname */
+    If Storage(dd,1) <> '00'X Then Do
+       If Storage(dd,8) <> '' Then do
+          DDLISTE = DDLISTE STORAGE(DD,8)
+       end
+    End
+    Tiot  = D2X(X2D(Tiot)+C2D(ddlen))    /* point to next TIOT entry */
+    ddlen = Storage(Tiot,1)              /* get length of tiot entry */
+    dd    = D2X(X2D(Tiot)+4)             /* point to ddname in TIOT  */
+    Jfcb  = Storage(D2X(X2D(Tiot)+12),3) /* get next JFCB address    */
+  End
+
+return DDLISTE
+
+error: failure: syntax: novalue: halt:
+say SRC.3":"
+cstr = CONDITION('Condition')         /* Name of trapped condition*/
+istr = CONDITION('Instruction')       /* CALL or SIGNAL           */
+dstr = CONDITION('Description')       /* Description or null      */
+sstr = CONDITION('Status')            /* ON, OFF, or DELAY        */
+Say  'Condition  :'cstr
+say  'Instruction:'istr
+say  'Description:'dstr
+say  'Status     :'sstr
+
+If condition = 'HALT' Then do
+   Say SRC.3 "manually abort " condition condition('C')
+ End
+ Else Do
+   Say SRC.3 condition
+   condition = condition('C')
+   source = strip(sourceline(sigl),"B")
+   say copies('*',79)
+   say left('* 'condition' CONDITION ON LINE 'sigl' OF REXX 'rexx,78)'*'
+   say left('* 'source,78)'*'
+   say left('* RETURN CODE 'rc,78)'*'
+   say left('* 'errortext(rc),78)'*'
+   say copies('*',79)
+ End
+exit 100

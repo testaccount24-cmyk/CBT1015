@@ -1,0 +1,473 @@
+/* REXX */
+/*******************************************************************/
+/*                                                                 */
+/* ProgramNAME      : LUWB5910  (fuer UDB V11 Nr 910)              */
+/* AUSRUF           : Procedure  x=LUWB5910(ssid,loc,ausw,obj)     */
+/* AUTHER           : ULRICH BRAEUER                               */
+/* FUNKTION         : AG : Build Select Statement for TB/VW        */
+/*                                                                 */
+/*                                                                 */
+/*******************************************************************/
+
+ENV        = "TSO"
+X          = MSG('OFF')
+USER       = USERID()
+SYSCATS    = "SYSCAT"
+SYSIBMS    = "SYSIBM"
+SYSIBMA    = "SYSIBMADM"
+SYSPROCA   = "SYSPROC"
+MAXBLOBS   = "2M"
+CURSQLID   = ""
+RECLEN     = 4096
+TRACKS     = 60
+DSNRECON   = "N"
+SYSUID  = ""
+SYSPWD  = ""
+
+ADDRESS ISPEXEC 'VGET (UDBTRACE) PROFILE'
+IF UDBTRACE = 'ON' THEN TRACE R
+ELSE                    TRACE
+
+Fnumeric   = "BIGINT INTEGER SMALLINT DECIMAL DECFLOAT FLOAT"
+stmt       = ''
+ddltext    = ""
+
+ssid       = arg(1)
+location   = arg(2)
+auswahl    = arg(3)
+object     = arg(4)
+EDIT       = arg(5)
+LNR        = arg(6)
+TABNR      = arg(7)
+object1    = ""
+tablespace = ""
+DB2_SSID   = SSID
+
+TRACKS  = 60
+MAXRows = 0
+ADDRESS ISPEXEC 'VGET (SYSIBMS) PROFILE'
+ADDRESS ISPEXEC 'VGET (SYSCATS) PROFILE'
+ADDRESS ISPEXEC 'VGET (SYSIBMA) PROFILE'
+ADDRESS ISPEXEC 'VGET (SYSPROCA) PROFILE'
+ADDRESS ISPEXEC 'VGET (CURSQLID) PROFILE'
+ADDRESS ISPEXEC 'VGET ('STRIP(SSID)'SQID) PROFILE'
+ADDRESS ISPEXEC 'VGET (MAXBLOBS) PROFILE'
+ADDRESS ISPEXEC 'VGET (RECLEN) PROFILE'
+ADDRESS ISPEXEC 'VGET (TRACKS) PROFILE'
+ADDRESS ISPEXEC 'VGET (DSNRECON) PROFILE'
+ADDRESS ISPEXEC 'VGET (CURRULE) PROFILE'
+ADDRESS ISPEXEC 'VGET (CURSCHEM) PROFILE'
+ADDRESS ISPEXEC 'VGET (SYSUID)   PROFILE'
+ADDRESS ISPEXEC 'VGET (SYSPWD)   PROFILE'
+ADDRESS ISPEXEC 'VGET (MAXROWS)  PROFILE'
+IF MAXROWS = 0 THEN MAXROWS = 1000
+
+SSID_CURRENT_SQLID = value(STRIP(SSID)"SQID")
+If length(SSID_CURRENT_SQLID) > 0 then do
+   CURSQLID = SSID_CURRENT_SQLID
+ End
+IF CURSQLID   = "NONE" THEN CURSQLID = ""
+IF CURSQLID   = ""     THEN CURSQLID = ""
+fromlist = ''
+wherel   = 'WHERE'
+komma    = ''
+anzcols  = 0
+drop sl.
+drop vl.
+vl.0 = 0
+sl.0 = 0
+
+parse value object with DB2_CREATOR1 '.' DB2_NAME1
+
+If object =  "" Then Do
+   ok = nextsl("--SQLTERM=;")
+   ok = nextsl("--SPROCPARSER=,")
+   ok = nextsl(" ")
+   If Length(CURSQLID) > 0 Then Do
+      ok = nextsl("SET CURRENT SQLID = '"CURSQLID"'  ;")
+    End
+   if Length(CURSCHEM) > 0 & CURSCHEM <> USER  Then Do
+         ok = nextsl("SET CURRENT SCHEMA = '"CURSCHEM"';")
+    End
+   ok = nextsl(" ")
+
+   if EDIT = "YES" THEN Call Edit_Stmt  /* Anzeige Erwuenscht */
+   Return Stmt
+ End
+
+
+select
+    when auswahl = "COUNT" Then do
+         OK = NEXTSL("SELECT COUNT(*)            ")
+         OK = NEXTSL('FROM "'DB2_CREATOR1 || '".' || DB2_NAME1)
+         OK = NEXTSL("FOR FETCH ONLY")
+         OK = NEXTSL("WITH UR")
+     End
+     when auswahl = "TRUNCATE" Then do
+          call Build_Truncate
+      End
+    Otherwise  CALL LESEN_DATEN
+ End
+
+OK = NEXTSL(" ; ")
+if EDIT = "YES" THEN Call Edit_Stmt  /* Anzeige Erwuenscht */
+
+Return Stmt
+
+
+Lesen_daten:
+
+ALPHA = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+
+stmt     = translate(auswahl)
+
+SELTAB         = "SELTB"tabnr
+
+WHERELIST = ""
+CALL MAKE_WHERELIST "TBCREATOR", DB2_CREATOR1
+CALL MAKE_WHERELIST "TBNAME", DB2_NAME1
+
+ADDRESS ISPEXEC  'TBCLOSE 'SELTAB
+SQLSTMT    = "SELECT MAX(LENGTH(NAME)) AS MAXLEN         " ,
+             "FROM  "SYSIBMS".SYSCOLUMNS     " ,
+             WHERELIST ,
+             " AND NAME NOT LIKE 'DB2_GENERATED_%_FOR_%' " ,
+             ""
+AUSWKZ = "SQLEX"
+object = sqlstmt
+call lesen_daten_AC3
+
+ADDRESS ISPEXEC  'TBOPEN  'SELTAB
+ADDRESS ISPEXEC  'TBTOP   'SELTAB
+ADDRESS ISPEXEC  'TBSKIP  'SELTAB
+
+MAXLEN = col1
+
+ADDRESS ISPEXEC  'TBCLOSE 'SELTAB
+
+IF DATATYPE(MAXLEN) <> "NUM" THEN MAXLEN = 35
+ELSE        MAXLEN = MAXLEN + 2
+
+If MAXLEN < 20 THEN MAXLEN = 20
+
+SQLSTMT    = "SELECT TBCREATOR, TBNAME, COLNO, NAME, " ,
+             "       COLTYPE, LENGTH, SCALE, NULLS   " ,
+             "FROM  "SYSIBMS".SYSCOLUMNS     " ,
+             WHERELIST ,
+             " AND NAME NOT LIKE 'DB2_GENERATED_%_FOR_%' " ,
+             "ORDER BY TBCREATOR, TBNAME, COLNO" ,
+             ""
+
+AUSWKZ = "SQLEX"
+object = sqlstmt
+call lesen_daten_AC3
+ADDRESS ISPEXEC  'TBOPEN  'SELTAB
+ADDRESS ISPEXEC  'TBTOP   'SELTAB
+ADDRESS ISPEXEC  'TBSKIP  'SELTAB
+do while rc = 0
+   TBCREATOR  =  col1
+   TBNAME     =  col2
+   COLNO      =  col3
+   NAME       =  col4
+   COLTYPE    =  col5
+   LENGTH     =  col6
+   SCALE      =  col7
+   NULLS      =  col8
+
+   anzcols  = anzcols + 1
+
+   If Pos(SUBSTR(NAME, 1, 1), ALPHA, 1) < 1 Then do
+      NAME = '"' || NAME || '"'
+    END
+
+   select
+     when auswahl = "SELECT" Then do
+          call Build_select
+      End
+     when auswahl = "UPDATE" Then do
+          call Build_Update
+      End
+     when auswahl = "DELETE" Then do
+          call Build_delete
+      End
+     when auswahl = "INSERT" Then do
+          call Build_insert
+      End
+      Otherwise Nop
+     end
+
+   komma = ", "
+   ADDRESS ISPEXEC  'TBSKIP  'SELTAB
+ END
+
+ADDRESS ISPEXEC  'TBCLOSE 'SELTAB
+
+if Auswahl  = "INSERT" Then do
+   ok = NextSl("       )")
+   ok = NextVal("       )")
+
+   do ins = 1 to vl.0
+      ok = NextSl(vl.ins)
+    end
+ end
+
+stmt     = stmt fromlist
+ok       = Nextsl(FromList)
+
+If Auswahl = "SELECT" Then do
+   OK = NEXTSL("--WHERE ")
+   OK = NEXTSL("--GROUP BY ")
+   OK = NEXTSL("--HAVING   ")
+   OK = NEXTSL("--ORDER BY ")
+   OK = NEXTSL("FETCH FIRST "MAXROWS" ROWS ONLY")
+   OK = NEXTSL("FOR FETCH ONLY WITH UR ")
+
+ End
+
+return
+
+
+BUILD_SELECT:
+  If  SL.0 = 0 Then Do
+      Komma = " "
+      SEL   = "SELECT "
+   End
+  Else Do
+      Komma = ","
+      SEL   = "       "
+  End
+
+  IF LENGTH(FROMLIST)  = 0 THEN
+     FROMLIST = 'FROM "'Strip(TBCREATOR) || '".' || Strip(TBName)
+  COLNAME = NAME
+  STMT  = STMT || KOMMA NAME
+  NEXTTAB = ''
+  Select
+    When COLTYPE = 'BLOB' Then DO
+         COLNAME = "CAST(" || COLNAME" AS BLOB("MAXBLOBS")) AS "COLNAME
+         NEXTTAB = SEL KOMMA COLNAME
+     End
+    When COLTYPE = 'CLOB' Then DO
+         COLNAME = "CAST(" || COLNAME" AS CLOB("MAXBLOBS")) AS "COLNAME
+         NEXTTAB = SEL KOMMA COLNAME
+     End
+    When COLTYPE = 'XML' Then DO
+         COLNAME = "XMLSERIALIZE("|| colname " AS CLOB("MAXBLOBS")) " ,
+                   " AS "COLNAME
+         NEXTTAB = SEL KOMMA COLNAME
+     End
+    When COLTYPE = 'VARG' Then DO
+         COLNAME = "UNICODE_STR(" || COLNAME || ", UTF8) AS "COLNAME
+         NEXTTAB = SEL KOMMA COLNAME
+     End
+    Otherwise do
+         NEXTTAB = SEL KOMMA ,
+                       LEFT(COLNAME, MAXLEN) ,
+                       ' -- ' ,
+                       COLTYPE  LENGTH
+     End
+   End
+  OK = NEXTSL(NEXTTAB)
+ RETURN
+
+BUILD_UPDATE:
+  FROMLIST = ""
+  COLNAME = NAME
+  IF STMT = 'UPDATE' THEN
+     STMT = STMT '"'Strip(TBCREATOR) || '".' || Strip(TBName) " SET "
+  STMT  = STMT || KOMMA COLNAME  "="
+  NEXTTAB = ''
+  IF SL.0 = 0 THEN DO
+     NEXTTAB = AUSWAHL '"'Strip(TBCREATOR)||'".'||Strip(TBName)" SET "
+     OK = NEXTSL(NEXTTAB)
+   END
+  if Wordpos(coltype, FNumeric, 1) > 0 Then colval = " "
+  else                                      colval = "' '"
+  NEXTTAB = "   " KOMMA ,
+                  LEFT(COLNAME, MAXLEN) ,
+                  LEFT(" = " colval, 10) ,
+                  ' -- ' Space(COLTYPE "(" LENGTH ")" ,0)
+  OK = NEXTSL(NEXTTAB)
+ RETURN
+
+BUILD_DELETE:
+  FROMLIST = ""
+  COLNAME = NAME
+  IF STMT = 'DELETE' THEN
+     STMT = STMT WORD(LZEILE, 1)
+
+  NEXTTAB = ''
+  IF SL.0 = 0 THEN DO
+     NEXTTAB = AUSWAHL 'FROM "'Strip(TBCREATOR)||'".'||Strip(TBName)
+     OK = NEXTSL(NEXTTAB)
+   END
+  NEXTTAB = "   " WHEREL,
+                  LEFT(COLNAME, MAXLEN) ,
+                  ' =           ' ,
+                  ' --  ' space(COLTYPE "(" LENGTH")", 0)
+  OK = NEXTSL(NEXTTAB)
+  WHEREL  = "AND  "
+ RETURN
+
+Build_Truncate:
+  NEXTTAB = 'TRUNCATE TABLE ' ,
+            '"'STRIP(DB2_CREATOR1) || '".' || DB2_NAME1
+  OK = NEXTSL(NEXTTAB)
+  NEXTTAB = "         DROP STORAGE                   "
+  OK = NEXTSL(NEXTTAB)
+  NEXTTAB = "--       REUSE STORAGE                  "
+  OK = NEXTSL(NEXTTAB)
+  NEXTTAB = "         IGNORE DELETE TRIGGERS         "
+  OK = NEXTSL(NEXTTAB)
+  NEXTTAB = "--       RESTRICT WHEN DELETE TRIGGERS  "
+  OK = NEXTSL(NEXTTAB)
+  NEXTTAB = "--       CONTINUE IDENTITY              "
+  OK = NEXTSL(NEXTTAB)
+  NEXTTAB = "         IMMEDIATE                      "
+  OK = NEXTSL(NEXTTAB)
+
+ RETURN
+
+BUILD_INSERT:
+  FROMLIST = ""
+  COLNAME = NAME
+  IF STMT = 'INSERT' THEN
+     STMT = STMT 'INTO "'Strip(TBCREATOR) || '".' || Strip(TBName) "("
+
+  NEXTTAB = ''
+  IF SL.0 = 0 THEN DO
+     NEXTTAB = AUSWAHL 'INTO "'Strip(TBCREATOR)||'".'||Strip(TBName),
+               "("
+     OK = NEXTSL(NEXTTAB)
+     NEXTVAL = "VALUES " "("
+     OK = NEXTVAL(NEXTVAL)
+   END
+  NEXTTAB = "   " || Komma Left(colname, MAXLEN)
+  ftype = Word(Lzeile, 4)
+  if Wordpos(COLTYPE, FNumeric, 1) > 0 Then colval = " "
+  else                                    colval = "' '"
+
+  NEXTVAL = "   " || KOMMA LEFT(COLVAL, 40) ,
+                  ' -- ' ,
+                  COLTYPE  ,
+                  LENGTH
+  OK = NEXTSL(NEXTTAB)
+  OK = NEXTVAl(NEXTVAL)
+  WHEREL  = "AND  "
+ RETURN
+
+NextSl: Procedure Expose sl.
+ sl.0   = sl.0 + 1
+ sli    = sl.0
+ sl.sli = Arg(1)
+return 0
+
+Nextval: Procedure Expose vl.
+ vl.0   = vl.0 + 1
+ vli    = vl.0
+ vl.vli = Arg(1)
+return 0
+
+Edit_Stmt:
+
+DSNAME = LUWB5900("LUWB5","DSNAME", "STMT", LNR)
+LRECL   = RECLEN
+
+IF LISTDSI(DSNAME) = 0 THEN do
+    ADDRESS "TSO" "ALLOC F(SELDD) DA("DSNAME") SHR"
+ end
+else do
+    ADDRESS "TSO" "ALLOC F(SELDD) DA("DSNAME") NEW CATALOG ,
+          SPACE("TRACKS","TRACKS") TRACKS REUSE,
+          LRECL("RECLEN") UNIT(SYSDA)"
+ end
+
+If RC /= 0 Then do
+   say "Error on Alloc "DSNAME" RC="RC
+ End
+
+
+ADDRESS "TSO" "EXECIO * DISKW SELDD ( STEM SL. FINIS"
+If RC /= 0 Then do
+   say "Error on Alloc "DSNAME" RC="RC
+ End
+
+ADDRESS "TSO" "FREE FI(SELDD)"
+
+ok   = LUWB5911(SSID,     ,
+                LOCATION,  ,
+                EINGABE,   ,
+                OBJECT1,   ,
+                DSNAME,    ,
+                LNR   )
+
+return
+
+
+
+MAKE_WHERELIST: PROCEDURE EXPOSE WHERELIST
+
+COLUMNNAME = ARG(1)
+ARGUMENT   = ARG(2)
+ARGUMENT   = TRANSLATE(ARGUMENT, '%', '*')
+IF LENGTH(STRIP(ARGUMENT)) = 0 ,
+ & LENGTH(STRIP(COLUMNNAME)) = 0 THEN RETURN
+
+IF TRANSLATE(WORD(WHERELIST, 1) ) = "WHERE" THEN ANDKZ = "AND"
+ ELSE ANDKZ = "WHERE"
+
+IF LENGTH(STRIP(COLUMNNAME)) = 0 ,
+ & LENGTH(STRIP(ARGUMENT)) > 0 THEN DO
+   WHERELIST = WHERELIST ANDKZ ARGUMENT
+   RETURN
+ END
+
+IF LENGTH(STRIP(ARGUMENT)) = 0 THEN RETURN
+
+
+IF POS('%', ARGUMENT) > 0 ,
+ | POS('_', ARGUMENT) > 0 THEN DO
+   WHERELIST = WHERELIST ANDKZ COLUMNNAME "LIKE '"ARGUMENT"'"
+   RETURN
+ END
+
+WHERELIST = WHERELIST ANDKZ COLUMNNAME "= '"ARGUMENT"'"
+
+RETURN
+
+Lesen_daten_AC3:
+
+If Datatype(TABNR) <> "NUM" Then TABNR = 1
+LOC  = LOCATION
+FK   = AUSWKZ
+OB   = object
+OB2  = Object2
+OB3  = Object3
+OB4  = Object4
+OB5  = Object5
+TS   = Tablespace
+DB   = DATABASE
+SG   = STGROUP
+LOBJ = ListObject
+
+DDLTEXT = ""
+DDLTEXT = DDLTEXT LUWB5AC3(SSID,   ,           /* SSID    */
+                           EDIT_SQL,,          /* Edit SQL */
+                           LOC,    ,           /* LOCATION */
+                           LNR,    ,           /* TABLENR */
+                           TABNR,  ,           /* TABLENR */
+                           FK,     ,           /* FUKTION */
+                           OB,     ,           /* OBJECT  */
+                           OB2,    ,           /* TABLE   */
+                           OB3,    ,           /* TABLE   */
+                           OB4,    ,           /* TABLE   */
+                           OB5,    ,           /* TABLE   */
+                           TS,     ,           /* TABLESPACE */
+                           DB,     ,           /* DATABASE   */
+                           SG,     ,           /* STORAGEGROUP */
+                           LOBJ,   ,           /* List Object*/
+                          )
+
+DDLTEXT = STRIP(DDLTEXT)
+
+return

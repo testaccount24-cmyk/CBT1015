@@ -1,0 +1,1471 @@
+TS SG           OBJECT1    = SGN
+TS SG           AUSWAHLOK = 'Y'
+
+TS TB           TABLESPACE = NM
+TS TB           OBJECT1    = ""
+TS TB           OBJECT2    = ""
+TS TB           AUSWAHLOK = 'Y'
+
+TS IX           TABLESPACE = TSID
+TS IX           OBJECT1    = ""
+TS IX           OBJECT2    = ""
+TS IX           AUSWAHLOK = 'Y'
+
+TS BP           OBJECT1    = ""
+TS BP           OBJECT2    = BPID
+TS BP           AUSWAHLOK = 'Y'
+
+TS D            OBJECT1 = STRIP(OW) || '.' || STRIP(NM)
+TS D            DB2_LIST_OBJ  = SYSCATS".TABLESPACES"
+TS D            AUSWAHLOK = 'Y'
+
+TS TSPI         OBJECT1    = NM
+TS TSPI         OBJECT2    = ""
+TS TSPI         AUSWAHLOK = 'Y'
+
+TS TBSP         EINGABE = 'D'
+TS TBSP         OBJECT1 =  STRIP(NM)
+TS TBSP         OBJECT2    = ""
+TS TBSP         DB2_LIST_OBJ  = SYSIBMA".SNAPTBSP"
+TS TBSP         AUSWAHLOK = 'Y'
+
+TS MTSP         EINGABE = 'D'
+TS MTSP         OBJECT1 =  STRIP(NM)
+TS MTSP         OBJECT2    = ""
+TS MTSP         DB2_LIST_OBJ  = SYSIBMA".MON_TBSP_UTILIZATION"
+TS MTSP         AUSWAHLOK = 'Y'
+
+TS HIST         OBJECT1    = ""
+TS HIST         OBJECT2    = ""
+TS HIST         TABLESPACE = STRIP(NM)
+TS HIST         AUSWAHLOK = 'Y'
+
+TS TSPU         EINGABE = 'D'
+TS TSPU         OBJECT1 =  STRIP(NM)
+TS TSPU         OBJECT2    = ""
+TS TSPU         DB2_LIST_OBJ  = SYSIBMA".TBSP_UTILIZATION"
+TS TSPU         AUSWAHLOK = 'Y'
+
+TS CUTIL        OBJECT1 =  STRIP(NM)
+TS CUTIL        OBJECT2    = ""
+TS CUTIL        AUSWAHLOK = 'Y'
+
+TS PART         EINGABE = 'D'
+TS PART         OBJECT1 =  STRIP(NM)
+TS PART         OBJECT2    = ""
+TS PART         DB2_LIST_OBJ  = SYSIBMA".SNAPTBSP_PART"
+TS PART         AUSWAHLOK = 'Y'
+
+TS PRIV         OBJECT1    = STRIP(NM)
+TS PRIV         OBJECT2    = ""
+TS PRIV         AUSWAHLOK = 'Y'
+
+TS DDL          OBJECT1 = STRIP(NM) || '.' || STRIP(OW)
+TS DDL          OBJECT2 = ""
+TS DDL          CALL AUFRUF_LUWA1920
+TS DDL          AUSWAHLOK = 'N'
+
+TS HDDL         OBJECT1 = STRIP(NM) || '.' || STRIP(OW)
+TS HDDL         OBJECT2 = ""
+TS HDDL         CALL AUFRUF_LUWA1920
+TS HDDL         AUSWAHLOK = 'N'
+
+TS DROP         OBJECT1 = STRIP(NM)
+TS DROP         OBJECT2 = ""
+TS DROP         CALL AUFRUF_LUWA1915
+TS DROP         AUSWAHLOK = 'N'
+
+TS ALTER        OBJECT1    = STRIP(NM) || '.' || STRIP(OW)
+TS ALTER        CURNR      = CRP
+TS ALTER        CALL AUFRUF_LUWA1925
+TS ALTER        AUSWAHLOK = 'N'
+
+DP TB           OBJECT1 = STRIP(TC) || '.' || STRIP(TN)
+DP TB           OBJECT2 = ""
+DP TB           AUSWAHLOK = 'Y'
+
+DP D            OBJECT1 = STRIP(TC) || '.' || STRIP(TN)
+DP D            OBJECT2 = STRIP(DP)
+DP D            DB2_LIST_OBJ  = SYSCATS".DATAPARTITIONS"
+DP D            AUSWAHLOK = 'Y'
+
+CUTIL TS        OBJECT1 = STRIP(TN)
+CUTIL TS        OBJECT2 = STRIP(TI)
+CUTIL TS        AUSWAHLOK = 'Y'
+
+CUTIL D         OBJECT1 = STRIP(TN)
+CUTIL D         OBJECT2 = STRIP(TI)
+CUTIL D         OBJECT3 = STRIP(CI)
+CUTIL D         DB2_LIST_OBJ  = SYSIBMA".CONTAINER_UTILIZATION"
+CUTIL D         AUSWAHLOK = 'Y'
+
+TSPI TS         OBJECT1 = STRIP(NM)
+TSPI TS         OBJECT2 = ""
+TSPI TS         AUSWAHLOK = 'Y'
+
+TSPI D          OBJECT1 = STRIP(NM)
+TSPI D          DB2_LIST_OBJ  = "TABLE (MON_GET_TABLESPACE('',-2)) AS T"
+TSPI D          AUSWAHLOK = 'Y'
+
+SG TS           OBJECT1 = ""
+SG TS           OBJECT2 = ""
+SG TS           OBJECT3 = ""
+SG TS           OBJECT4 = STRIP(SN)
+SG TS           AUSWAHLOK = 'Y'
+
+SG SGPATH       OBJECT1 = STRIP(SN)
+SG SGPATH       OBJECT2 = ""
+SG SGPATH       OBJECT3 = ""
+SG SGPATH       OBJECT4 = ""
+SG SGPATH       AUSWAHLOK = 'Y'
+
+SG D            OBJECT1 = STRIP(SN)
+SG D            OBJECT2 = SI
+SG D            OBJECT3 = ""
+SG D            DB2_LIST_OBJ  = SYSCATS".STOGROUPS"
+SG D            AUSWAHLOK = 'Y'
+
+SG DROP         OBJECT1 = STRIP(SN)
+SG DROP         OBJECT2 = ""
+SG DROP         CALL AUFRUF_LUWA1915
+SG DROP         AUSWAHLOK = 'N'
+
+SG DDL          OBJECT1    = SN
+SG DDL          OBJECT2 = ""
+SG DDL          CALL AUFRUF_LUWA1920
+SG DDL          AUSWAHLOK = 'N'
+
+SG HDDL         OBJECT1    = SN
+SG HDDL         OBJECT2 = ""
+SG HDDL         CALL AUFRUF_LUWA1920
+SG HDDL         AUSWAHLOK = 'N'
+
+SGPATH D        OBJECT1 =  STRIP(SN)
+SGPATH D        OBJECT2 = ""
+SGPATH D        OBJECT3 = DPSI
+SGPATH D        DB2_LIST_OBJ  = "ADMIN_GET_STORAGE_PATHS"
+SGPATH D        AUSWAHLOK = 'Y'
+
+TB TS           OBJECT1 = STRIP(TS)
+TB TS           OBJECT2 = ""
+TB TS           AUSWAHLOK = 'Y'
+
+TB TBS          OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+TB TBS          OBJECT2 = ""
+TB TBS          AUSWAHLOK = 'Y'
+
+TB HIST         OBJECT1    = ""
+TB HIST         OBJECT2    = ""
+TB HIST         TABLESPACE = STRIP(TS)
+TB HIST         AUSWAHLOK = 'Y'
+
+TB CO           OBJECT1 = ""
+TB CO           OBJECT2 = STRIP(CR) || '.' || STRIP(NM)
+TB CO           AUSWAHLOK = 'Y'
+
+TB FK           OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+TB FK           OBJECT2 = ""
+TB FK           AUSWAHLOK = 'Y'
+
+TB TA           OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+TB TA           OBJECT2 = ""
+TB TA           AUSWAHLOK = 'Y'
+
+TB KC           OBJECT1 = ""
+TB KC           OBJECT2 = STRIP(CR) || '.' || STRIP(NM)
+TB KC           AUSWAHLOK = 'Y'
+
+TB IX           OBJECT1 = ""
+TB IX           OBJECT2 = STRIP(CR) || '.' || STRIP(NM)
+TB IX           AUSWAHLOK = 'Y'
+
+TB D            OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+TB D            OBJECT2 = ""
+TB D            DB2_LIST_OBJ  = SYSCATS".TABLES"
+TB D            AUSWAHLOK = 'Y'
+
+TB ATI          EINGABE = 'D'
+TB ATI          OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+TB ATI          OBJECT2 = ""
+TB ATI          DB2_LIST_OBJ  = SYSIBMA".ADMINTABINFO"
+TB ATI          AUSWAHLOK = 'Y'
+
+TB TC           OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+TB TC           OBJECT2 = ""
+TB TC           CALL AUFRUF_CCOMPTAB
+TB TC           AUSWAHLOK = 'N'
+
+TB DP           OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+TB DP           OBJECT2 = ""
+TB DP           AUSWAHLOK = 'Y'
+
+TB STAB         EINGABE = 'D'
+TB STAB         OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+TB STAB         OBJECT2 = ""
+TB STAB         DB2_LIST_OBJ  = SYSIBMA".SNAPTAB"
+TB STAB         AUSWAHLOK = 'Y'
+
+TB SRO          EINGABE = 'D'
+TB SRO          OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+TB SRO          OBJECT2 = ""
+TB SRO          DB2_LIST_OBJ  = SYSIBMA".SNAPTAB_REORG"
+TB SRO          AUSWAHLOK = 'Y'
+
+TB RS           EINGABE = "RUNSTATS"
+TB RS           OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+TB RS           OBJECT2 = ""
+TB RS           DO_ALL  = ""
+TB RS           CALL AUFRUF_LUWA1915
+TB RS           AUSWAHLOK = 'N'
+
+TB RUNSTATS     OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+TB RUNSTATS     OBJECT2 = ""
+TB RUNSTATS     DO_ALL  = ""
+TB RUNSTATS     CALL AUFRUF_LUWA1915
+TB RUNSTATS     AUSWAHLOK = 'N'
+
+TB SETINT       EINGABE = "INTEGRITY"
+TB SETINT       OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+TB SETINT       OBJECT2 = ""
+TB SETINT       DO_ALL  = ""
+TB SETINT       CALL AUFRUF_LUWA1915
+TB SETINT       AUSWAHLOK = 'N'
+
+TB INTEGRITY    OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+TB INTEGRITY    OBJECT2 = ""
+TB INTEGRITY    DO_ALL  = ""
+TB INTEGRITY    CALL AUFRUF_LUWA1915
+TB INTEGRITY    AUSWAHLOK = 'N'
+
+TB PRIV         OBJECT1    = STRIP(CR) || "." || STRIP(NM)
+TB PRIV         OBJECT2    = ""
+TB PRIV         AUSWAHLOK = 'Y'
+
+TB VW           OBJECT1 = ""
+TB VW           OBJECT2 = STRIP(CR) || '.' || STRIP(NM)
+TB VW           AUSWAHLOK = 'Y'
+
+TB TG           OBJECT1 = ""
+TB TG           OBJECT2 = STRIP(CR) || '.' || STRIP(NM)
+TB TG           AUSWAHLOK = 'Y'
+
+TB PERM         OBJECT1 = ""
+TB PERM         OBJECT2 = STRIP(CR) || '.' || STRIP(NM)
+TB PERM         AUSWAHLOK = 'Y'
+
+TB SELECT       OBJECT1    = CR || "." || NM
+TB SELECT       CALL AUFRUF_LUWA1910
+TB SELECT       AUSWAHLOK = 'N'
+
+TB INSERT       OBJECT1    = CR || "." || NM
+TB INSERT       CALL AUFRUF_LUWA1910
+TB INSERT       AUSWAHLOK = 'N'
+
+TB UPDATE       OBJECT1    = CR || "." || NM
+TB UPDATE       CALL AUFRUF_LUWA1910
+TB UPDATE       AUSWAHLOK = 'N'
+
+TB DELETE       OBJECT1    = CR || "." || NM
+TB DELETE       CALL AUFRUF_LUWA1910
+TB DELETE       AUSWAHLOK = 'N'
+
+TB COUNT        OBJECT1    = CR || "." || NM
+TB COUNT        CALL AUFRUF_LUWA1910
+TB COUNT        AUSWAHLOK = 'N'
+
+TB DROP         OBJECT1    = STRIP(CR) || "." || STRIP(NM)
+TB DROP         OBJECT2 = ""
+TB DROP         CALL AUFRUF_LUWA1915
+TB DROP         AUSWAHLOK = 'N'
+
+TB DDL          OBJECT1    = CR || "." || NM
+TB DDL          OBJECT2 = ""
+TB DDL          CALL AUFRUF_LUWA1920
+TB DDL          AUSWAHLOK = 'N'
+
+TB HDDL         OBJECT1    = CR || "." || NM
+TB HDDL         OBJECT2 = ""
+TB HDDL         CALL AUFRUF_LUWA1920
+TB HDDL         AUSWAHLOK = 'N'
+
+TB ALTER        OBJECT1    = STRIP(CR) || '.' || STRIP(NM)
+TB ALTER        CURNR      = CRP
+TB ALTER        CALL AUFRUF_LUWA1925
+TB ALTER        AUSWAHLOK = 'N'
+
+DA D            OBJECT1 = STRIP(GR)
+DA D            OBJECT2 = STRIP(GE)
+DA D            DB2_LIST_OBJ  = SYSCATS".DBAUTH"
+DA D            AUSWAHLOK = 'Y'
+
+TA LG           OBJECT1 = STRIP(GE)
+TA LG           AUSWAHLOK = 'Y'
+TA LG           OBJECT2 = ""
+
+TA D            OBJECT1 = STRIP(CR) || '.' || STRIP(CN)
+TA D            OBJECT2 = STRIP(GT) || '.' || STRIP(GE)
+TA D            DB2_LIST_OBJ  = SYSCATS".TABAUTH"
+TA D            AUSWAHLOK = 'Y'
+
+TA DROP         OBJECT1    = GR || "." || GE
+TA DROP         OBJECT2    = CR || "." || NM
+TA DROP         OBJECT3 = STRIP(SEL) || STRIP(INS) || , ;
+TA DROP                   STRIP(UPD) || STRIP(DEL) || , ;
+TA DROP                   STRIP(CON) || STRIP(ALT) || , ;
+TA DROP                   STRIP(IND) || STRIP(REF)      ;
+TA DROP         CALL AUFRUF_LUWA1915
+TA DROP         AUSWAHLOK = 'N'
+
+VW IX           OBJECT1 = STRIP(TC) || '.' || STRIP(TN)
+VW IX           AUSWAHLOK = 'Y'
+
+VW CO           OBJECT1 = ""
+VW CO           OBJECT2 = STRIP(CR) || '.' || STRIP(NM)
+VW CO           AUSWAHLOK = 'Y'
+
+VW TA           OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+VW TA           AUSWAHLOK = 'Y'
+
+VW TC           OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+VW TC           OBJECT2 = ""
+VW TC           CALL AUFRUF_CCOMPTAB
+VW TC           AUSWAHLOK = 'N'
+
+VW PRIV         OBJECT1    = STRIP(CR) || "." || STRIP(NM)
+VW PRIV         OBJECT2    = ""
+VW PRIV         AUSWAHLOK = 'Y'
+
+VW D            OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+VW D            OBJECT2 = ""
+VW D            DB2_LIST_OBJ  = SYSCATS".VIEWS"
+VW D            AUSWAHLOK = 'Y'
+
+VW SELECT       OBJECT1    = CR || "." || NM
+VW SELECT       CALL AUFRUF_LUWA1910
+VW SELECT       AUSWAHLOK = 'N'
+
+VW INSERT       OBJECT1    = CR || "." || NM
+VW INSERT       CALL AUFRUF_LUWA1910
+VW INSERT       AUSWAHLOK = 'N'
+
+VW UPDATE       OBJECT1    = CR || "." || NM
+VW UPDATE       CALL AUFRUF_LUWA1910
+VW UPDATE       AUSWAHLOK = 'N'
+
+VW DELETE       OBJECT1    = CR || "." || NM
+VW DELETE       CALL AUFRUF_LUWA1910
+VW DELETE       AUSWAHLOK = 'N'
+
+VW COUNT        OBJECT1    = CR || "." || NM
+VW COUNT        CALL AUFRUF_LUWA1910
+VW COUNT        AUSWAHLOK = 'N'
+
+VW DROP         OBJECT1    = CR || "." || NM
+VW DROP         OBJECT2 = ""
+VW DROP         CALL AUFRUF_LUWA1915
+VW DROP         AUSWAHLOK = 'N'
+
+VW DDL          OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+VW DDL          OBJECT2 = ""
+VW DDL          CALL AUFRUF_LUWA1920
+VW DDL          AUSWAHLOK = 'N'
+
+VW HDDL         OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+VW HDDL         OBJECT2 = ""
+VW HDDL         CALL AUFRUF_LUWA1920
+VW HDDL         AUSWAHLOK = 'N'
+
+MQT TB          OBJECT1 = STRIP(TC) || '.' || STRIP(TN)
+MQT TB          AUSWAHLOK = 'Y'
+
+MQT TA          OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+MQT TA          AUSWAHLOK = 'Y'
+
+MQT CO          OBJECT1 = ""
+MQT CO          OBJECT2 = STRIP(CR) || '.' || STRIP(NM)
+MQT CO          AUSWAHLOK = 'Y'
+
+MQT D           OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+MQT D           OBJECT2 = ""
+MQT D           DB2_LIST_OBJ  = SYSCATS".VIEWS"
+MQT D           AUSWAHLOK = 'Y'
+
+MQT DROP        OBJECT1    = CR || "." || NM
+MQT DROP        OBJECT2 = ""
+MQT DROP        CALL AUFRUF_LUWA1915
+MQT DROP        AUSWAHLOK = 'N'
+
+MQT SELECT      OBJECT1    = CR || "." || NM
+MQT SELECT      CALL AUFRUF_LUWA1910
+MQT SELECT      AUSWAHLOK = 'N'
+
+MQT INSERT      OBJECT1    = CR || "." || NM
+MQT INSERT      CALL AUFRUF_LUWA1910
+MQT INSERT      AUSWAHLOK = 'N'
+
+MQT UPDATE      OBJECT1    = CR || "." || NM
+MQT UPDATE      CALL AUFRUF_LUWA1910
+MQT UPDATE      AUSWAHLOK = 'N'
+
+MQT DELETE      OBJECT1    = CR || "." || NM
+MQT DELETE      CALL AUFRUF_LUWA1910
+MQT DELETE      AUSWAHLOK = 'N'
+
+MQT COUNT       OBJECT1    = CR || "." || NM
+MQT COUNT       CALL AUFRUF_LUWA1910
+MQT COUNT       AUSWAHLOK = 'N'
+
+MQT DDL         OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+MQT DDL         OBJECT2 = ""
+MQT DDL         CALL AUFRUF_LUWA1920
+MQT DDL         AUSWAHLOK = 'N'
+
+MQT HDDL        OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+MQT HDDL        OBJECT2 = ""
+MQT HDDL        CALL AUFRUF_LUWA1920
+MQT HDDL        AUSWAHLOK = 'N'
+
+MQT REFRESH     OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+MQT REFRESH     OBJECT2 = ""
+MQT REFRESH     CALL AUFRUF_LUWA1915
+MQT REFRESH     AUSWAHLOK = 'N'
+
+IX TB           OBJECT1 = STRIP(TC) || '.' || STRIP(TN)
+IX TB           AUSWAHLOK = 'Y'
+
+IX TS           OBJECT1 = ""
+IX TS           OBJECT2 = TSID
+IX TS           AUSWAHLOK = 'Y'
+
+IX D            OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+IX D            OBJECT2 = ""
+IX D            DB2_LIST_OBJ  = SYSCATS".INDEXES"
+IX D            AUSWAHLOK = 'Y'
+
+IX IXI          EINGABE = 'D'
+IX IXI          OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+IX IXI          OBJECT2 = ""
+IX IXI          DB2_LIST_OBJ  = "ADMIN_GET_INDEX_INFO"
+IX IXI          AUSWAHLOK = 'Y'
+
+IX COMP         EINGABE = 'D'
+IX COMP         OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+IX COMP         OBJECT2 = ""
+IX COMP         DB2_LIST_OBJ  = "ADMIN_GET_INDEX_COMPRESS_INFO"
+IX COMP         AUSWAHLOK = 'Y'
+
+IX KC           OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+IX KC           OBJECT2 = ""
+IX KC           AUSWAHLOK = 'Y'
+
+IX PRIV         OBJECT1    = STRIP(CR) || "." || STRIP(NM)
+IX PRIV         OBJECT2    = ""
+IX PRIV         AUSWAHLOK = 'Y'
+
+IX IA           OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+IX IA           OBJECT2 = ""
+IX IA           AUSWAHLOK = 'Y'
+
+IX DROP         OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+IX DROP         OBJECT2 = ""
+IX DROP         CALL AUFRUF_LUWA1915
+IX DROP         AUSWAHLOK = 'N'
+
+IX DDL          OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+IX DDL          OBJECT2 = ""
+IX DDL          CALL AUFRUF_LUWA1920
+IX DDL          AUSWAHLOK = 'N'
+
+IX HDDL         OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+IX HDDL         OBJECT2 = ""
+IX HDDL         CALL AUFRUF_LUWA1920
+IX HDDL         AUSWAHLOK = 'N'
+
+IX ALTER        OBJECT1    = STRIP(CR) || '.' || STRIP(NM)
+IX ALTER        CURNR      = CRP
+IX ALTER        CALL AUFRUF_LUWA1925
+IX ALTER        AUSWAHLOK = 'N'
+
+IA D            OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+IA D            OBJECT2 = STRIP(GT) || '.' || STRIP(GE)
+IA D            DB2_LIST_OBJ  = SYSCATS".INDEXAUTH"
+IA D            AUSWAHLOK = 'Y'
+
+TG TB           OBJECT1 = STRIP(TS) || '.' || STRIP(TN)
+TG TB           OBJECT2 = ""
+TG TB           AUSWAHLOK = 'Y'
+
+TG VW           OBJECT1 = STRIP(TS) || '.' || STRIP(TN)
+TG VW           OBJECT2 = ""
+TG VW           AUSWAHLOK = 'Y'
+
+TG D            OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+TG D            OBJECT2 = ""
+TG D            DB2_LIST_OBJ  = SYSCATS".TRIGGERS"
+TG D            AUSWAHLOK = 'Y'
+
+TG DROP         OBJECT1    = CR || "." || NM
+TG DROP         OBJECT2 = ""
+TG DROP         CALL AUFRUF_LUWA1915
+TG DROP         AUSWAHLOK = 'N'
+
+TG DDL          OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+TG DDL          OBJECT2 = ""
+TG DDL          CALL AUFRUF_LUWA1920
+TG DDL          AUSWAHLOK = 'N'
+
+TG HDDL         OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+TG HDDL         OBJECT2 = ""
+TG HDDL         CALL AUFRUF_LUWA1920
+TG HDDL         AUSWAHLOK = 'N'
+
+AL TB           OBJECT1 = STRIP(BS) || '.' || STRIP(BN)
+AL TB           OBJECT2 = ""
+AL TB           AUSWAHLOK = 'Y'
+
+AL VW           OBJECT1 = STRIP(BS) || '.' || STRIP(BN)
+AL VW           OBJECT2 = ""
+AL VW           AUSWAHLOK = 'Y'
+
+AL D            OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+AL D            OBJECT2 = ""
+AL D            DB2_LIST_OBJ  = SYSCATS".TABLES"
+AL D            AUSWAHLOK = 'Y'
+
+AL DROP         OBJECT1    = CR || "." || NM
+AL DROP         OBJECT2 = ""
+AL DROP         CALL AUFRUF_LUWA1915
+AL DROP         AUSWAHLOK = 'N'
+
+AL DDL          OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+AL DDL          OBJECT2 = ""
+AL DDL          CALL AUFRUF_LUWA1920
+AL DDL          AUSWAHLOK = 'N'
+
+AL HDDL         OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+AL HDDL         OBJECT2 = ""
+AL HDDL         CALL AUFRUF_LUWA1920
+AL HDDL         AUSWAHLOK = 'N'
+
+PG TB           OBJECT1 =  STRIP(CR) || '.' || NM
+PG TB           OBJECT2 = ""
+PG TB           AUSWAHLOK = 'Y'
+
+PG ST           OBJECT1 = STRIP(CR) || '.' || NM
+PG ST           OBJECT2 = VW
+PG ST           IF VW =  '-' THEN OBJECT2 = ""
+PG ST           AUSWAHLOK = 'Y'
+
+PG D            OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+PG D            OBJECT2 = ""
+PG D            IF VW <> '-' THEN OBJECT2 = VW
+PG D            DB2_LIST_OBJ  = SYSCATS".PACKAGES"
+PG D            AUSWAHLOK = 'Y'
+
+PG DROP         OBJECT1 = STRIP(CR) || "." || STRIP(NM)
+PG DROP         IF VW <> "-" THEN OBJECT1 = OBJECT1 "VERSION " VW
+PG DROP         CALL AUFRUF_LUWA1915
+PG DROP         AUSWAHLOK = 'N'
+
+BP TS           OBJECT1 = ""
+BP TS           OBJECT2 = ""
+BP TS           OBJECT3 = STRIP(ID)
+BP TS           AUSWAHLOK = 'Y'
+
+BP D            OBJECT1 = STRIP(NM)
+BP D            OBJECT2 = ""
+BP D            DB2_LIST_OBJ  = SYSCATS".BUFFERPOOLS"
+BP D            AUSWAHLOK = 'Y'
+
+BP HIT          EINGABE = 'D'
+BP HIT          OBJECT1 =  STRIP(NM)
+BP HIT          OBJECT2    = ""
+BP HIT          DB2_LIST_OBJ  = SYSIBMA".BP_HITRATIO"
+BP HIT          AUSWAHLOK = 'Y'
+
+BP RIO          EINGABE = 'D'
+BP RIO          OBJECT1 =  STRIP(NM)
+BP RIO          OBJECT2    = ""
+BP RIO          DB2_LIST_OBJ  = SYSIBMA".BP_READ_IO"
+BP RIO          AUSWAHLOK = 'Y'
+
+BP WIO          EINGABE = 'D'
+BP WIO          OBJECT1 =  STRIP(NM)
+BP WIO          OBJECT2    = ""
+BP WIO          DB2_LIST_OBJ  = SYSIBMA".BP_WRITE_IO"
+BP WIO          AUSWAHLOK = 'Y'
+
+BP MONBP        EINGABE = 'D'
+BP MONBP        OBJECT1 =  STRIP(NM)
+BP MONBP        OBJECT2    = ""
+BP MONBP        DB2_LIST_OBJ  = SYSIBMA".MON_BP_UTILIZATION"
+BP MONBP        AUSWAHLOK = 'Y'
+
+BP SNBP         EINGABE = 'D'
+BP SNBP         OBJECT1 =  STRIP(NM)
+BP SNBP         OBJECT2    = ""
+BP SNBP         DB2_LIST_OBJ  = SYSIBMA".SNAPBP"
+BP SNBP         AUSWAHLOK = 'Y'
+
+BP SNBPP        EINGABE = 'D'
+BP SNBPP        OBJECT1 =  STRIP(NM)
+BP SNBPP        OBJECT2    = ""
+BP SNBPP        DB2_LIST_OBJ  = SYSIBMA".SNAPBP_PART"
+BP SNBPP        AUSWAHLOK = 'Y'
+
+BP DROP         OBJECT1 = STRIP(NM)
+BP DROP         OBJECT2 = ""
+BP DROP         CALL AUFRUF_LUWA1915
+BP DROP         AUSWAHLOK = 'N'
+
+BP DDL          OBJECT1    = STRIP(NM) || '.' || STRIP(ID)
+BP DDL          OBJECT2 = ""
+BP DDL          CALL AUFRUF_LUWA1920
+BP DDL          AUSWAHLOK = 'N'
+
+BP DDL          OBJECT1    = STRIP(NM) || '.' || STRIP(ID)
+BP HDDL         OBJECT2 = ""
+BP HDDL         CALL AUFRUF_LUWA1920
+BP HDDL         AUSWAHLOK = 'N'
+
+BP ALTER        OBJECT1    = STRIP(NM) || '.' || STRIP(ID)
+BP ALTER        CURNR      = CRP
+BP ALTER        CALL AUFRUF_LUWA1925
+BP ALTER        AUSWAHLOK = 'N'
+
+NN SV           OBJECT1 = STRIP(CR) || '.' || NM
+NN SV           OBJECT1 = STRIP(SV)
+NN SV           AUSWAHLOK = 'Y'
+
+NN D            OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+NN D            OBJECT2 = ""
+NN D            DB2_LIST_OBJ  = SYSCATS".NICKNAMES"
+NN D            AUSWAHLOK = 'Y'
+
+NN CO           OBJECT1 = ""
+NN CO           OBJECT2 = STRIP(CR) || '.' || STRIP(NM)
+NN CO           AUSWAHLOK = 'Y'
+
+NN COPT         OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+NN COPT         OBJECT2 = ""
+NN COPT         AUSWAHLOK = 'Y'
+
+NN TABOPT       OBJECT1 = STRIP(CR) || '.' || NM
+NN TABOPT       OBJECT2 = ""
+NN TABOPT       AUSWAHLOK = 'Y'
+
+NN PRIV         OBJECT1    = STRIP(CR) || "." || STRIP(NM)
+NN PRIV         OBJECT2    = ""
+NN PRIV         AUSWAHLOK = 'Y'
+
+NN DROP         OBJECT1    = CR || "." || NM
+NN DROP         OBJECT2 = ""
+NN DROP         CALL AUFRUF_LUWA1915
+NN DROP         AUSWAHLOK = 'N'
+
+NN DDL          OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+NN DDL          OBJECT2 = ""
+NN DDL          CALL AUFRUF_LUWA1920
+NN DDL          AUSWAHLOK = 'N'
+
+NN HDDL         OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+NN HDDL         OBJECT2 = ""
+NN HDDL         CALL AUFRUF_LUWA1920
+NN HDDL         AUSWAHLOK = 'N'
+
+TABOPT D        OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+TABOPT D        OBJECT2 = OP
+TABOPT D        DB2_LIST_OBJ  = SYSCATS".TABOPTIONS"
+TABOPT D        AUSWAHLOK = 'Y'
+
+SE D            OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+SE D            OBJECT2 = ""
+SE D            DB2_LIST_OBJ  = SYSCATS".SEQUENCES"
+SE D            AUSWAHLOK = 'Y'
+
+SE DROP         OBJECT1    = CR || "." || NM
+SE DROP         OBJECT2 = ""
+SE DROP         CALL AUFRUF_LUWA1915
+SE DROP         AUSWAHLOK = 'N'
+
+SE DDL          OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+SE DDL          OBJECT2 = ""
+SE DDL          CALL AUFRUF_LUWA1920
+SE DDL          AUSWAHLOK = 'N'
+
+SE HDDL         OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+SE HDDL         OBJECT2 = ""
+SE HDDL         CALL AUFRUF_LUWA1920
+SE HDDL         AUSWAHLOK = 'N'
+
+SE ALTER        OBJECT1    = STRIP(CR) || '.' || STRIP(NM)
+SE ALTER        CURNR      = CRP
+SE ALTER        CALL AUFRUF_LUWA1925
+SE ALTER        AUSWAHLOK = 'N'
+
+PK D            OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+PK D            OBJECT2 = ""
+PK D            DB2_LIST_OBJ  = SYSCATS".INDEXES"
+PK D            AUSWAHLOK = 'Y'
+
+PK KC           OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+PK KC           OBJECT2 = ""
+PK KC           AUSWAHLOK = 'Y'
+
+PK TB           OBJECT1 = STRIP(TCR) || '.' || STRIP(TNM)
+PK TB           OBJECT2 = ""
+PK TB           AUSWAHLOK = 'Y'
+
+PK IA           OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+PK IA           OBJECT2 = ""
+PK IA           AUSWAHLOK = 'Y'
+
+PK DDL          OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+PK DDL          OBJECT2 = ""
+PK DDL          CALL AUFRUF_LUWA1920
+PK DDL          AUSWAHLOK = 'N'
+
+PK HDDL         OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+PK HDDL         OBJECT2 = ""
+PK HDDL         CALL AUFRUF_LUWA1920
+PK HDDL         AUSWAHLOK = 'N'
+
+FN PRIV         OBJECT1    = STRIP(CR) || "." || STRIP(SP)
+FN PRIV         OBJECT2    = ""
+FN PRIV         AUSWAHLOK = 'Y'
+
+FN D            OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+FN D            OBJECT2 = SP
+FN D            DB2_LIST_OBJ  = SYSCATS".FUNCTIONS"
+FN D            AUSWAHLOK = 'Y'
+
+FN FP           EINGABE = 'D'
+FN FP           OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+FN FP           OBJECT2 = SP
+FN FP           DB2_LIST_OBJ  = SYSCATS".FUNCPARMS"
+FN FP           AUSWAHLOK = 'Y'
+
+FN FD           EINGABE = 'D'
+FN FD           OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+FN FD           OBJECT2 = SP
+FN FD           DB2_LIST_OBJ  = SYSCATS".FUNCDEP"
+FN FD           AUSWAHLOK = 'Y'
+
+FN DROP         OBJECT1    = CR || "." || NM
+FN DROP         OBJECT2 = SP
+FN DROP         CALL AUFRUF_LUWA1915
+FN DROP         AUSWAHLOK = 'N'
+
+FN DDL          OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+FN DDL          OBJECT2 = SP
+FN DDL          CALL AUFRUF_LUWA1920
+FN DDL          AUSWAHLOK = 'N'
+
+FN HDDL         OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+FN HDDL         OBJECT2 = SP
+FN HDDL         CALL AUFRUF_LUWA1920
+FN HDDL         AUSWAHLOK = 'N'
+
+FN ALTER        OBJECT1    = STRIP(CR) || '.' || STRIP(NM)
+FN ALTER        CURNR      = CRP
+FN ALTER        CALL AUFRUF_LUWA1925
+FN ALTER        AUSWAHLOK = 'N'
+
+PR PRIV         OBJECT1    = STRIP(CR) || "." || STRIP(SP)
+PR PRIV         OBJECT2    = ""
+PR PRIV         AUSWAHLOK = 'Y'
+
+PR D            OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+PR D            OBJECT2 = SP
+PR D            DB2_LIST_OBJ  = SYSCATS".PROCEDURES"
+PR D            AUSWAHLOK = 'Y'
+
+PR PPARM        OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+PR PPARM        OBJECT2 = SP
+PR PPARM        AUSWAHLOK = 'Y'
+
+PR DROP         OBJECT1    = CR || "." || NM
+PR DROP         OBJECT2 = SP
+PR DROP         CALL AUFRUF_LUWA1915
+PR DROP         AUSWAHLOK = 'N'
+
+PR DDL          OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+PR DDL          OBJECT2 = SP
+PR DDL          CALL AUFRUF_LUWA1920
+PR DDL          AUSWAHLOK = 'N'
+
+PR HDDL         OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+PR HDDL         OBJECT2 = SP
+PR HDDL         CALL AUFRUF_LUWA1920
+PR HDDL         AUSWAHLOK = 'N'
+
+PPARM D         OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+PPARM D         OBJECT2 = SP || '.' || OR
+PPARM D         DB2_LIST_OBJ  = SYSCATS".PROCPARMS"
+PPARM D         AUSWAHLOK = 'Y'
+
+PPARM PR        OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+PPARM PR        OBJECT2 = SP
+PPARM PR        AUSWAHLOK = 'Y'
+
+RT PRIV         OBJECT1    = STRIP(CR) || "." || STRIP(SP)
+RT PRIV         OBJECT2    = ""
+RT PRIV         AUSWAHLOK = 'Y'
+
+RT D            OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+RT D            OBJECT2 = SP
+RT D            DB2_LIST_OBJ  = SYSCATS".ROUTINES"
+RT D            AUSWAHLOK = 'Y'
+
+RT DROP         OBJECT1    = CR || "." || NM
+RT DROP         OBJECT2 = SP
+RT DROP         CALL AUFRUF_LUWA1915
+RT DROP         AUSWAHLOK = 'N'
+
+RT DDL          OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+RT DDL          OBJECT2 = SP
+RT DDL          CALL AUFRUF_LUWA1920
+RT DDL          AUSWAHLOK = 'N'
+
+RT HDDL         OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+RT HDDL         OBJECT2 = SP
+RT HDDL         CALL AUFRUF_LUWA1920
+RT HDDL         AUSWAHLOK = 'N'
+
+SV WR           OBJECT1 = WORD(LZEILE, 1)
+SV WR           AUSWAHLOK = 'Y'
+
+SV UOPT         OBJECT1 = STRIP(NM)
+SV UOPT         AUSWAHLOK = 'Y'
+
+SV NN           OBJECT2 = WORD(LZEILE, 2)
+SV NN           AUSWAHLOK = 'Y'
+
+SV D            OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+SV D            OBJECT2 = ""
+SV D            DB2_LIST_OBJ  = SYSCATS".SERVERS"
+SV D            AUSWAHLOK = 'Y'
+
+SV SO           EINGABE = 'D'
+SV SO           OBJECT1 = STRIP(NM)
+SV SO           OBJECT2 = ""
+SV SO           DB2_LIST_OBJ  = SYSCATS".SERVEROPTIONS"
+SV SO           AUSWAHLOK = 'Y'
+
+SV DROP         OBJECT1 = STRIP(NM)
+SV DROP         OBJECT2 = ""
+SV DROP         CALL AUFRUF_LUWA1915
+SV DROP         AUSWAHLOK = 'N'
+
+SV DDL          OBJECT1 = STRIP(NM)
+SV DDL          OBJECT2 = ""
+SV DDL          CALL AUFRUF_LUWA1920
+SV DDL          AUSWAHLOK = 'N'
+
+SV HDDL         OBJECT1 = STRIP(NM)
+SV HDDL         OBJECT2 = ""
+SV HDDL         CALL AUFRUF_LUWA1920
+SV HDDL         AUSWAHLOK = 'N'
+
+WR SV           OBJECT1 = ""
+WR SV           OBJECT2 = STRIP(NM)
+WR SV           DB2_LIST_OBJ  = SYSCATS".WRAPPERS"
+WR SV           AUSWAHLOK = 'Y'
+
+WR D            OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+WR D            OBJECT2 = ""
+WR D            DB2_LIST_OBJ  = SYSCATS".WRAPPERS"
+WR D            AUSWAHLOK = 'Y'
+
+WR OPT          EINGABE = 'D'
+WR OPT          OBJECT1 = STRIP(NM)
+WR OPT          OBJECT2 = ""
+WR OPT          DB2_LIST_OBJ  = SYSCATS".WRAPOPTIONS"
+WR OPT          AUSWAHLOK = 'Y'
+
+WR DROP         OBJECT1 = STRIP(NM)
+WR DROP         OBJECT2 = ""
+WR DROP         CALL AUFRUF_LUWA1915
+WR DROP         AUSWAHLOK = 'N'
+
+WR DDL          OBJECT1 = STRIP(NM)
+WR DDL          OBJECT2 = ""
+WR DDL          CALL AUFRUF_LUWA1920
+WR DDL          AUSWAHLOK = 'N'
+
+WR HDDL         OBJECT1 = STRIP(NM)
+WR HDDL         OBJECT2 = ""
+WR HDDL         CALL AUFRUF_LUWA1920
+WR HDDL         AUSWAHLOK = 'N'
+
+CK TB           OBJECT1 = STRIP(TC) || '.' || STRIP(TN)
+CK TB           OBJECT2 = ""
+CK TB           AUSWAHLOK = 'Y'
+
+CK D            OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+CK D            OBJECT2 = ""
+CK D            DB2_LIST_OBJ  = SYSCATS".CHECKS"
+CK D            AUSWAHLOK = 'Y'
+
+CK DROP         OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+CK DROP         OBJECT2 = ""
+CK DROP         CALL AUFRUF_LUWA1915
+CK DROP         AUSWAHLOK = 'N'
+
+CK DDL          OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+CK DDL          OBJECT2 = ""
+CK DDL          CALL AUFRUF_LUWA1920
+CK DDL          AUSWAHLOK = 'N'
+
+CK HDDL         OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+CK HDDL         OBJECT2 = ""
+CK HDDL         CALL AUFRUF_LUWA1920
+CK HDDL         AUSWAHLOK = 'N'
+
+UOPT D          OBJECT1 = STRIP(SV) || '.' || STRIP(OP)
+UOPT D          OBJECT2 = ""
+UOPT D          DB2_LIST_OBJ  = SYSCATS".USEROPTIONS"
+UOPT D          AUSWAHLOK = 'Y'
+
+UOPT DDL        OBJECT1 = STRIP(SV) || '.' || STRIP(OP)
+UOPT DDL        OBJECT2 = ""
+UOPT DDL        CALL AUFRUF_LUWA1920
+UOPT DDL        AUSWAHLOK = 'N'
+
+UOPT HDDL       OBJECT1 = STRIP(SV) || '.' || STRIP(OP)
+UOPT HDDL       OBJECT2 = ""
+UOPT HDDL       CALL AUFRUF_LUWA1920
+UOPT HDDL       AUSWAHLOK = 'N'
+
+VA D            OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+VA D            OBJECT2 = VN
+VA D            DB2_LIST_OBJ  = SYSCATS".VARIABLES"
+VA D            AUSWAHLOK = 'Y'
+
+VA VADEP        OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+VA VADEP        OBJECT2 = VN
+VA VADEP        AUSWAHLOK = 'Y'
+
+VA VAAUTH       OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+VA VAAUTH       OBJECT2 = ""
+VA VAAUTH       AUSWAHLOK = 'Y'
+
+VA DROP         OBJECT1    = CR || "." || NM
+VA DROP         OBJECT2 = ""
+VA DROP         CALL AUFRUF_LUWA1915
+VA DROP         AUSWAHLOK = 'N'
+
+VADEP D         OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+VADEP D         OBJECT2 = VN
+VADEP D         DB2_LIST_OBJ  = SYSCATS".VARIABLEDEP"
+VADEP D         AUSWAHLOK = 'Y'
+
+DT D            OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+DT D            OBJECT2 = ""
+DT D            DB2_LIST_OBJ  = SYSCATS".DATATYPES"
+DT D            AUSWAHLOK = 'Y'
+
+DT DROP         OBJECT1    = CR || "." || NM
+DT DROP         OBJECT2 = ""
+DT DROP         CALL AUFRUF_LUWA1915
+DT DROP         AUSWAHLOK = 'N'
+
+FK TB           OBJECT1 = STRIP(TC) || '.' || STRIP(TN)
+FK TB           AUSWAHLOK = 'Y'
+
+FK PT           EINGABE = 'TB'
+FK PT           OBJECT1 = STRIP(PC) || '.' || STRIP(PN)
+FK PT           AUSWAHLOK = 'Y'
+
+FK D            OBJECT1 = FN
+FK D            OBJECT2 = STRIP(TC) || '.' || STRIP(TN)
+FK D            DB2_LIST_OBJ  = SYSCATS".REFERENCES"
+FK D            AUSWAHLOK = 'Y'
+
+FK DROP         OBJECT1 = STRIP(TC) || '.' || STRIP(TN)
+FK DROP         OBJECT2    = FN
+FK DROP         CALL AUFRUF_LUWA1915
+FK DROP         AUSWAHLOK = 'N'
+
+FK DDL          OBJECT1    = FN
+FK DDL          OBJECT2 = STRIP(TC) || '.' || STRIP(TN)
+FK DDL          CALL AUFRUF_LUWA1920
+FK DDL          AUSWAHLOK = 'N'
+
+FK HDDL         OBJECT1    = FN
+FK HDDL         OBJECT2 = STRIP(TC) || '.' || STRIP(TN)
+FK HDDL         CALL AUFRUF_LUWA1920
+FK HDDL         AUSWAHLOK = 'N'
+
+WL D            OBJECT1 = STRIP(NM)
+WL D            OBJECT2 = ""
+WL D            DB2_LIST_OBJ  = SYSCATS".WORKLOADS"
+WL D            AUSWAHLOK = 'Y'
+
+WL DROP         OBJECT1 = STRIP(NM)
+WL DROP         OBJECT2 = ""
+WL DROP         CALL AUFRUF_LUWA1915
+WL DROP         AUSWAHLOK = 'N'
+
+KC TB           OBJECT1 = STRIP(TC) || '.' || TN
+KC TB           OBJECT2 = ''
+KC TB           AUSWAHLOK = 'Y'
+
+KC IX           OBJECT1 = STRIP(IS) || '.' || IN
+KC IX           OBJECT2 = ''
+KC IX           AUSWAHLOK = 'Y'
+
+KC D            OBJECT1 = STRIP(IS) || '.' || IN
+KC D            OBJECT2 = CO
+KC D            DB2_LIST_OBJ  = SYSCATS".INDEXCOLUSE"
+KC D            AUSWAHLOK = 'Y'
+
+KC CO           EINGABE = 'D'
+KC CO           OBJECT1 = STRIP(TC) || '.' || TN
+KC CO           OBJECT2 = CO
+KC CO           DB2_LIST_OBJ  = SYSCATS".COLUMNS"
+KC CO           AUSWAHLOK = 'Y'
+
+CO D            OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+CO D            OBJECT2 = STRIP(CN)
+CO D            DB2_LIST_OBJ  = SYSCATS".COLUMNS"
+CO D            AUSWAHLOK = 'Y'
+
+CO CD           EINGABE = 'D'
+CO CD           OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+CO CD           OBJECT2 = STRIP(CN)
+CO CD           DB2_LIST_OBJ  = SYSCATS".COLDIST"
+CO CD           AUSWAHLOK = 'Y'
+
+CO COPT         OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+CO COPT         OBJECT2 = STRIP(CN)
+CO COPT         AUSWAHLOK = 'Y'
+
+CO ID           OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+CO ID           OBJECT2 = STRIP(CN)
+CO ID           AUSWAHLOK = 'Y'
+
+CO TB           OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+CO TB           OBJECT2 = ""
+CO TB           AUSWAHLOK = 'Y'
+
+CO VW           OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+CO VW           OBJECT2 = ""
+CO VW           AUSWAHLOK = 'Y'
+
+CO NN           OBJECT1 = STRIP(CR) || '.' || STRIP(NM)
+CO NN           OBJECT2 = ""
+CO NN           AUSWAHLOK = 'Y'
+
+CO SE           OBJECT1 = ""
+CO SE           OBJECT2 = ""
+CO SE           OBJECT3 = STRIP(CR) || '.' || STRIP(NM)
+CO SE           OBJECT4 = STRIP(CN) || ".*"
+CO SE           AUSWAHLOK = 'Y'
+
+CO ALTER        OBJECT1    = STRIP(TC) || '.' || STRIP(TN)
+CO ALTER        OBJECT2    = CN
+CO ALTER        CURNR      = CRP
+CO ALTER        CALL AUFRUF_LUWA1925
+CO ALTER        AUSWAHLOK  = 'Y'
+
+COPT D          OBJECT1 = STRIP(TC) || "." || STRIP(TN)
+COPT D          OBJECT2 = STRIP(CO) || "." || STRIP(OP)
+COPT D          DB2_LIST_OBJ  = SYSCATS".COLOPTIONS"
+COPT D          AUSWAHLOK = 'Y'
+
+EV D            OBJECT1 = STRIP(NM)
+EV D            OBJECT2 = ""
+EV D            DB2_LIST_OBJ  = SYSCATS".EVENTS"
+EV D            AUSWAHLOK = 'Y'
+
+EV EM           OBJECT1 = STRIP(NM)
+EV EM           OBJECT2 = ""
+EV EM           AUSWAHLOK = 'Y'
+
+EV ET           OBJECT1 = STRIP(NM)
+EV ET           OBJECT2 = ""
+EV ET           AUSWAHLOK = 'Y'
+
+ET D            OBJECT1 = STRIP(NM)
+ET D            OBJECT2 = ""
+ET D            DB2_LIST_OBJ  = SYSCATS".EVENTTABLES"
+ET D            AUSWAHLOK = 'Y'
+
+ET EM           OBJECT1 = STRIP(NM)
+ET EM           OBJECT2 = ""
+ET EM           AUSWAHLOK = 'Y'
+
+ET EV           OBJECT1 = STRIP(NM)
+ET EV           OBJECT2 = ""
+ET EV           AUSWAHLOK = 'Y'
+
+ET TB           OBJECT1 = STRIP(TC) || '.' || TN
+ET TB           OBJECT2 = ""
+ET TB           AUSWAHLOK = 'Y'
+
+EM D            OBJECT1 = STRIP(NM)
+EM D            OBJECT2 = ""
+EM D            DB2_LIST_OBJ  = SYSCATS".EVENTMONITORS"
+EM D            AUSWAHLOK = 'Y'
+
+EM ET           OBJECT1 = STRIP(NM)
+EM ET           OBJECT2 = ""
+EM ET           AUSWAHLOK = 'Y'
+
+EM EV           OBJECT1 = STRIP(NM)
+EM EV           OBJECT2 = ""
+EM EV           AUSWAHLOK = 'Y'
+
+EM DROP         OBJECT1 = STRIP(NM)
+EM DROP         OBJECT2 = ""
+EM DROP         CALL AUFRUF_LUWA1915
+EM DROP         AUSWAHLOK = 'N'
+
+SI DBCFG        OBJECT1 = ""
+SI DBCFG        OBJECT2 = ""
+SI DBCFG        AUSWAHLOK = 'Y'
+
+SI DBMCFG       OBJECT1 = ""
+SI DBMCFG       OBJECT2 = ""
+SI DBMCFG       AUSWAHLOK = 'Y'
+
+SI REG          OBJECT1 = ""
+SI REG          OBJECT2 = ""
+SI REG          AUSWAHLOK = 'Y'
+
+SI LEVEL        OBJECT1 = ""
+SI LEVEL        OBJECT2 = ""
+SI LEVEL        AUSWAHLOK = 'Y'
+
+SI LICM         OBJECT1 = ""
+SI LICM         OBJECT2 = ""
+SI LICM         AUSWAHLOK = 'Y'
+
+SI FEAT         OBJECT1 = ""
+SI FEAT         OBJECT2 = ""
+SI FEAT         AUSWAHLOK = 'Y'
+
+SI SDB          EINGABE = 'D'
+SI SDB          OBJECT1 = ""
+SI SDB          OBJECT2 = ""
+SI SDB          DB2_LIST_OBJ  = SYSIBMA".SNAPDB"
+SI SDB          AUSWAHLOK = 'Y'
+
+SI SDBM         EINGABE = 'D'
+SI SDBM         OBJECT1 = ""
+SI SDBM         OBJECT2 = ""
+SI SDBM         DB2_LIST_OBJ  = SYSIBMA".SNAPDBM"
+SI SDBM         AUSWAHLOK = 'Y'
+
+DBMCFG UP       OBJECT1 = STRIP(NM)
+DBMCFG UP       OBJECT2 = STRIP(VA)
+DBMCFG UP       CALL AUFRUF_LUWA1915
+DBMCFG UP       AUSWAHLOK = 'N'
+
+DBMCFG D        OBJECT1 = STRIP(NM)
+DBMCFG D        OBJECT2 = ""
+DBMCFG D        DB2_LIST_OBJ  = SYSIBMA".DBMCFG"
+DBMCFG D        AUSWAHLOK = 'Y'
+
+DBMCFG DROP     EINGABE = "RUNSTATS"
+DBMCFG DROP     OBJECT1 = STRIP(NM)
+DBMCFG DROP     OBJECT2 = STRIP(VA)
+DBMCFG DROP     DO_ALL  = ""
+DBMCFG DROP     CALL AUFRUF_LUWA1915
+DBMCFG DROP     AUSWAHLOK = 'N'
+
+DBCFG UP        OBJECT1 = STRIP(NM)
+DBCFG UP        OBJECT2 = STRIP(VA)
+DBCFG UP        CALL AUFRUF_LUWA1915
+DBCFG UP        AUSWAHLOK = 'N'
+
+DBCFG D         OBJECT1 = STRIP(NM)
+DBCFG D         OBJECT2 = ""
+DBCFG D         DB2_LIST_OBJ  = SYSIBMA".DBCFG"
+DBCFG D         AUSWAHLOK = 'Y'
+
+DBCFG DROP      EINGABE = "RUNSTATS"
+DBCFG DROP      OBJECT1 = STRIP(NM)
+DBCFG DROP      OBJECT2 = STRIP(VA)
+DBCFG DROP      DO_ALL  = ""
+DBCFG DROP      CALL AUFRUF_LUWA1915
+DBCFG DROP      AUSWAHLOK = 'N'
+
+REG D           OBJECT1 = STRIP(DN) || "." || STRIP(NM)
+REG D           OBJECT2 = ""
+REG D           DB2_LIST_OBJ  = SYSIBMA".REG_VARIABLES"
+REG D           AUSWAHLOK = 'Y'
+
+LICM D          OBJECT1 = STRIP(NM)
+LICM D          OBJECT2 = ""
+LICM D          DB2_LIST_OBJ  = SYSIBMA".ENV_PROD_INFO"
+LICM D          AUSWAHLOK = 'Y'
+
+LEVEL D         OBJECT1 = STRIP(NM)
+LEVEL D         OBJECT2 = ""
+LEVEL D         DB2_LIST_OBJ  = SYSIBMA".ENV_INST_INFO"
+LEVEL D         AUSWAHLOK = 'Y'
+
+RO D            OBJECT1 = STRIP(NM)
+RO D            OBJECT2 = ID
+RO D            DB2_LIST_OBJ  = SYSCATS".ROLES"
+RO D            AUSWAHLOK = 'Y'
+
+RO DROP         OBJECT1    = STRIP(NM)
+RO DROP         OBJECT2 = ""
+RO DROP         CALL AUFRUF_LUWA1915
+RO DROP         AUSWAHLOK = 'N'
+
+RO DDL          OBJECT1 = STRIP(NM) || "." || STRIP(ID)
+RO DDL          OBJECT2 = ""
+RO DDL          CALL AUFRUF_LUWA1920
+RO DDL          AUSWAHLOK = 'N'
+
+RO HDDL         OBJECT1 = STRIP(NM) || "." || STRIP(ID)
+RO HDDL         OBJECT2 = ""
+RO HDDL         CALL AUFRUF_LUWA1920
+RO HDDL         AUSWAHLOK = 'N'
+
+OI D            OBJECT1 = STRIP(OS) || "." || STRIP(ON)
+OI D            OBJECT2 = STRIP(OM) || "." || STRIP(RT)
+OI D            DB2_LIST_OBJ  = SYSCATS".INVALIDOBJECTS"
+OI D            AUSWAHLOK = 'Y'
+
+UT D            OBJECT1 = STRIP(UT)
+UT D            OBJECT2 = ""
+UT D            DB2_LIST_OBJ  = SYSIBMA".SNAPUTIL"
+UT D            AUSWAHLOK = 'Y'
+
+UT PROG         EINGABE = 'D'
+UT PROG         OBJECT1 = STRIP(UT)
+UT PROG         OBJECT2 = ""
+UT PROG         DB2_LIST_OBJ  = SYSIBMA".SNAPUTIL_PROGRESS"
+UT PROG         AUSWAHLOK = 'Y'
+
+HIST D          OBJECT1 = STRIP(EID)
+HIST D          OBJECT2 = ""
+HIST D          DB2_LIST_OBJ  = SYSIBMA".DB_HISTORY"
+HIST D          AUSWAHLOK = 'Y'
+
+HIST PRUNE      OBJECT1 = STIME || '.' || ETIME
+HIST PRUNE      OBJECT2 = STRIP(FLOG)  || ':' || STRIP(LLOG)
+HIST PRUNE      OBJECT3 = STRIP(OP)  || '.' || STRIP(OPT)
+HIST PRUNE      OBJECT3 = SPACE(OBJECT3  || '.' || STRIP(OBT), 0)
+HIST PRUNE      CALL AUFRUF_LUWA1915
+HIST PRUNE      AUSWAHLOK = 'N'
+
+CG D            OBJECT1 = STRIP(CR) || "." || STRIP(NM)
+CG D            OBJECT2 = ""
+CG D            DB2_LIST_OBJ  = SYSCATS".COLGROUPS"
+CG D            AUSWAHLOK = 'Y'
+
+CG DROP         OBJECT1    = CR || "." || NM
+CG DROP         OBJECT2 = ""
+CG DROP         CALL AUFRUF_LUWA1915
+CG DROP         AUSWAHLOK = 'N'
+
+TBS TB          OBJECT1 = STRIP(CR) || "." || STRIP(NM)
+TBS TB          OBJECT2 = ""
+TBS TB          AUSWAHLOK = 'Y'
+
+TBS VW          OBJECT1 = STRIP(CR) || "." || STRIP(NM)
+TBS VW          OBJECT2 = ""
+TBS VW          AUSWAHLOK = 'Y'
+
+TBS IX          OBJECT1 = ""
+TBS IX          OBJECT2 = STRIP(CR) || "." || STRIP(NM)
+TBS IX          AUSWAHLOK = 'Y'
+
+TBS D           OBJECT1 = STRIP(CR) || "." || STRIP(NM)
+TBS D           OBJECT2 = ""
+TBS D           DB2_LIST_OBJ  = SYSIBMA".ADMINTABINFO"
+TBS D           AUSWAHLOK = 'Y'
+
+ID D            OBJECT1 = STRIP(CR) || "." || STRIP(NM)
+ID D            OBJECT2 = CN
+ID D            DB2_LIST_OBJ  = SYSCATS".COLIDENTATTRIBUTES"
+ID D            AUSWAHLOK = 'Y'
+
+ID TB           OBJECT1 = STRIP(CR) || "." || STRIP(NM)
+ID TB           OBJECT2 = ""
+ID TB           AUSWAHLOK = 'Y'
+
+ID CO           OBJECT1 = ""
+ID CO           OBJECT2 = STRIP(CR) || '.' || STRIP(NM)
+ID CO           AUSWAHLOK = 'Y'
+
+ID SE           OBJECT1 = ""
+ID SE           OBJECT2 = ID
+ID SE           AUSWAHLOK = 'Y'
+
+MSG D           OBJECT1 = STRIP(INS) || "." || STRIP(DB)
+MSG D           OBJECT2 = TS
+MSG D           DB2_LIST_OBJ  = "SYSPROC.PD_GET_LOG_MSGS"
+MSG D           AUSWAHLOK = 'Y'
+
+LOCKS D         OBJECT1 = STRIP(AG)
+LOCKS D         OBJECT2 = ""
+LOCKS D         DB2_LIST_OBJ  = SYSIBMA".LOCKS_HELD"
+LOCKS D         AUSWAHLOK = 'Y'
+
+LOCKS APPLI     OBJECT1 = STRIP(AG)
+LOCKS APPLI     OBJECT2 = ""
+LOCKS APPLI     AUSWAHLOK = 'Y'
+
+LOCKS APPL      EINGABE = 'D'
+LOCKS APPL      OBJECT1 = STRIP(AG)
+LOCKS APPL      OBJECT2 = ""
+LOCKS APPL      DB2_LIST_OBJ  = SYSIBMA".SNAPAPPL"
+LOCKS APPL      AUSWAHLOK = 'Y'
+
+LOCKHOLD APPLI  OBJECT1   =  STRIP(HAPP)
+LOCKHOLD APPLI  OBJECT2   =  ''
+LOCKHOLD APPLI  AUSWAHLOK = 'Y'
+
+LOCKHOLD HAPP   EINGABE   =  'APPLI'
+LOCKHOLD HAPP   OBJECT1   =  STRIP(HAPP)
+LOCKHOLD HAPP   OBJECT2   =  ''
+LOCKHOLD HAPP   AUSWAHLOK = 'Y'
+
+LOCKHOLD RAPP   EINGABE   =  'APPLI'
+LOCKHOLD RAPP   OBJECT1   =  STRIP(RAPP)
+LOCKHOLD RAPP   OBJECT2   =  ''
+LOCKHOLD RAPP   AUSWAHLOK = 'Y'
+
+LOCKHOLD RLOCKS EINGABE   =  'LOCKS'
+LOCKHOLD RLOCKS OBJECT1   =  ''
+LOCKHOLD RLOCKS OBJECT2   =  STRIP(RAPP)
+LOCKHOLD RLOCKS AUSWAHLOK = 'Y'
+
+LOCKHOLD HLOCKS EINGABE   =  'LOCKS'
+LOCKHOLD HLOCKS OBJECT1   =  ''
+LOCKHOLD HLOCKS OBJECT2   =  STRIP(HAPP)
+LOCKHOLD HLOCKS AUSWAHLOK = 'Y'
+
+LOCKHOLD D      OBJECT1   =  STRIP(LN)
+LOCKHOLD D      OBJECT2   =  STRIP(HAPP) || '.' STRIP(RAPP)
+LOCKHOLD D      DB2_LIST_OBJ = SYSIBMA".MON_LOCKWAITS"
+LOCKHOLD D      AUSWAHLOK = 'Y'
+
+APPLI D         OBJECT1 = STRIP(AG)
+APPLI D         OBJECT2 = ""
+APPLI D         DB2_LIST_OBJ  = SYSIBMA".SNAPAPPL_INFO"
+APPLI D         AUSWAHLOK = 'Y'
+
+APPLI APPL      EINGABE = 'D'
+APPLI APPL      OBJECT1 = STRIP(AG)
+APPLI APPL      OBJECT2 = ""
+APPLI APPL      DB2_LIST_OBJ  = SYSIBMA".SNAPAPPL"
+APPLI APPL      AUSWAHLOK = 'Y'
+
+APPLI LOCKS     OBJECT1 = ""
+APPLI LOCKS     OBJECT2 = STRIP(AG)
+APPLI LOCKS     AUSWAHLOK = 'Y'
+
+FEAT D          OBJECT1 = STRIP(NM)
+FEAT D          OBJECT2 = ""
+FEAT D          DB2_LIST_OBJ  = SYSIBMA".ENV_FEATURE_INFO"
+FEAT D          AUSWAHLOK = 'Y'
+
+PRIV D          OBJECT1 = STRIP(OS) || "." || STRIP(ON)
+PRIV D          OBJECT2 = AI
+PRIV D          DB2_LIST_OBJ  = SYSIBMA".PRIVILEGES"
+PRIV D          AUSWAHLOK = 'Y'
+
+ST D            OBJECT1 = STRIP(CR) || '.' || STRIP(NM) || ' ' VW
+ST D            OBJECT2 = SM SC SQ
+ST D            IF STRIP(VW) = "-" THEN OBJECT2 = ""
+ST D            DB2_LIST_OBJ  = SYSCATS".STATEMENTS"
+ST D            AUSWAHLOK = 'Y'
+
+SC   D          OBJECT1   =  STRIP(SC) || '.' || STRIP(SN)
+SC   D          OBJECT2   =  ''
+SC   D          DB2_LIST_OBJ = SYSCATS".SCHEMATA"
+SC   D          AUSWAHLOK = 'Y'
+
+SC   TB         OBJECT1   =  STRIP(SN) || '.*'
+SC   TB         OBJECT2   =  ''
+SC   TB         AUSWAHLOK = 'Y'
+
+SC   IX         OBJECT1   =  STRIP(SN) || '.*'
+SC   IX         OBJECT2   =  ''
+SC   IX         AUSWAHLOK = 'Y'
+
+SC   VW         OBJECT1   =  STRIP(SN) || '.*'
+SC   VW         OBJECT2   =  ''
+SC   VW         AUSWAHLOK = 'Y'
+
+SC   DROP       OBJECT1   =  STRIP(SN)
+SC   DROP       OBJECT2 = ""
+SC   DROP       CALL AUFRUF_LUWA1915
+SC   DROP       AUSWAHLOK = 'N'
+
+SC DDL          OBJECT1 = STRIP(SC) || '.' || STRIP(SN)
+SC DDL          OBJECT2 = ""
+SC DDL          CALL AUFRUF_LUWA1920
+SC DDL          AUSWAHLOK = 'N'
+
+SC HDDL         OBJECT1 = STRIP(SC) || '.' || STRIP(SN)
+SC HDDL         OBJECT2 = ""
+SC HDDL         CALL AUFRUF_LUWA1920
+SC HDDL         AUSWAHLOK = 'N'
+
+MEM  D          OBJECT1   =  '*.' || STRIP(NR)
+MEM  D          DB2_LIST_OBJ  = "DB_MEMBERS"
+MEM  D          AUSWAHLOK = 'Y'
+
+PERM D          OBJECT1   =  STRIP(CR) || '.' || STRIP(NM)
+PERM D          DB2_LIST_OBJ  = SYSCATS".CONTROLS"
+PERM D          AUSWAHLOK = 'Y'
+
+PERM TB         OBJECT1   =  STRIP(TC) || '.' || STRIP(TN)
+PERM TB         AUSWAHLOK = 'Y'
+
+PERM VW         OBJECT1   =  STRIP(TC) || '.' || STRIP(TN)
+PERM VW         AUSWAHLOK = 'Y'
+
+PERM CO         OBJECT1   =  STRIP(CON)
+PERM CO         OBJECT2   =  STRIP(TC) || '.' || STRIP(TN)
+PERM CO         AUSWAHLOK = 'Y'
+PERM CO         IF COTY = 'R' THEN AUSWAHLOK = 'N'
+
+PERM ACTIVATE   OBJECT1   =  STRIP(TC) || '.' || STRIP(TN)
+PERM ACTIVATE   OBJECT2   =  ""
+PERM ACTIVATE   OBJECT3   =  COTY
+PERM ACTIVATE   CALL AUFRUF_LUWA1915
+PERM ACTIVATE   AUSWAHLOK = 'N'
+
+PERM DEACTIVATE   OBJECT1   =  STRIP(TC) || '.' || STRIP(TN)
+PERM DEACTIVATE   OBJECT2   =  ""
+PERM DEACTIVATE   OBJECT3   =  COTY
+PERM DEACTIVATE   CALL AUFRUF_LUWA1915
+PERM DEACTIVATE   AUSWAHLOK = 'N'
+
+PERM ENABLE     OBJECT1   =  STRIP(CR) || '.' || STRIP(NM)
+PERM ENABLE     OBJECT2   =  ""
+PERM ENABLE     OBJECT3   =  COTY
+PERM ENABLE     CALL AUFRUF_LUWA1915
+PERM ENABLE     AUSWAHLOK = 'N'
+
+PERM DISABLE    OBJECT1   =  STRIP(CR) || '.' || STRIP(NM)
+PERM DISABLE    OBJECT2   =  ""
+PERM DISABLE    OBJECT3   =  COTY
+PERM DISABLE    CALL AUFRUF_LUWA1915
+PERM DISABLE    AUSWAHLOK = 'N'
+
+PERM REGENERATE OBJECT1   =  STRIP(CR) || '.' || STRIP(NM)
+PERM REGENERATE OBJECT2   =  ""
+PERM REGENERATE OBJECT3   =  COTY
+PERM REGENERATE CALL AUFRUF_LUWA1915
+PERM REGENERATE AUSWAHLOK = 'N'
+
+PERM DROP       OBJECT1    = CR || "." || NM
+PERM DROP       OBJECT2 = ""
+PERM DROP       CALL AUFRUF_LUWA1915
+PERM DROP       AUSWAHLOK = 'N'
+
+VER  D          OBJECT1   =  '*.' || STRIP(VTS)
+VER  D          DB2_LIST_OBJ  = SYSIBMS".SYSVERSIONS"
+VER  D          AUSWAHLOK = 'Y'
+

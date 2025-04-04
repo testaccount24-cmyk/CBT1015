@@ -1,0 +1,1055 @@
+/* REXX */
+/*******************************************************************/
+/*                                                                 */
+/* ProgramNAME      : ZOSC1200  (fuer zOS V12 Nr 200)              */
+/* AUSRUF           : AUS ISPF                                     */
+/* AUTHER           : ULRICH BRAEUER                               */
+/* FUNKTION         : Auswahl Catalog Informationen                */
+/*                                                                 */
+/*                                                                 */
+/*******************************************************************/
+
+"DELSTACK"
+ENV      = "TSO"
+X        = MSG('OFF')
+USER     = USERID()
+SMFID    = MVSVAR('SYSNAME')
+SYSUID  = ""
+SYSPWD  = ""
+
+ADDRESS ISPEXEC "CONTROL ERRORS RETURN"
+
+ADDRESS ISPEXEC 'VGET (UDBAUSW2 UDBOBJ UDBTRACE) PROFILE'
+IF UDBTRACE = 'ON' THEN TRACE R
+ELSE                    TRACE
+
+MAXBLOBS  = '10K'
+ENV = "WIN"
+ENV = "TSO"
+USER = USERID()
+SYSCATS  = "SYSCAT"
+SYSIBMS  = "SYSIBM"
+SYSIBMA  = "SYSIBMADM"
+SYSPROCA = "SYSPROC"
+DSNRECON = "Y"
+SYSUID  = ""
+SYSPWD  = ""
+MAXRows  = 0
+TBADD_MULT = 1
+MAXFetch = "FETCH FIRST 100 ROWS ONLY"
+MAXFetch = ""
+Fetch_Data = "YES"
+
+If Env = 'TSO' Then do
+   X = MSG('OFF')
+   ADDRESS ISPEXEC 'VGET (DSNRECON) PROFILE'
+   ADDRESS ISPEXEC 'VGET (UDBTRACE) PROFILE'
+   ADDRESS ISPEXEC 'VGET (SYSIBMS) PROFILE'
+   ADDRESS ISPEXEC 'VGET (SYSCATS) PROFILE'
+   ADDRESS ISPEXEC 'VGET (SYSIBMA) PROFILE'
+   ADDRESS ISPEXEC 'VGET (SYSPROCA) PROFILE'
+   ADDRESS ISPEXEC 'VGET (MAXROWS)  PROFILE'
+   ADDRESS ISPEXEC 'VGET (MAXBLOBS) PROFILE'
+   ADDRESS ISPEXEC 'VGET (SYSUID)   PROFILE'
+   ADDRESS ISPEXEC 'VGET (SYSPWD)   PROFILE'
+   ADDRESS ISPEXEC "VGET (ZSCREENW,ZSCREEND)"
+   ADDRESS ISPEXEC 'VGET (DDLSPUFI) PROFILE'
+   ADDRESS ISPEXEC 'VGET (ACOMMIT) PROFILE'
+   IF UDBTRACE = 'ON' THEN TRACE R
+   ELSE                    TRACE
+ End
+
+
+SSID     = arg(1)
+Location = arg(2)
+LNR      = arg(3)
+tabnr    = arg(4)
+DB2Vers  = arg(5)
+DB2CatL  = arg(6)
+proclib  = arg(7)
+auswahl  = UDBAUSW2
+Object   = UDBOBJ
+editsql  = ""
+STATEMENT= ""
+
+/*  do i = 1 to arg(); say i Arg(I); end; */
+ADDRESS ISPEXEC 'VGET ('STRIP(SSID)'SQID) PROFILE'
+db2_ssid = SSID
+
+OK      = LISTDSI(ISPFILE "FILE")
+ISPFILE = SYSDSNAME
+
+call LOAD_DSNREXX
+call CONNECT_DSNREXX
+
+If length(LOCation) > 0 Then do
+   RETC = Connect_Location_2(Location)
+   Call DB2V12_Modlevel
+ End
+
+OK = DISConnect_Location(location)
+
+DB_env  = Substr(DB2Vers, 1, 3)
+DB_Vers = Substr(DB2Vers, 4, 2)
+DB_Rel  = Substr(Db2Vers, 6, 1)
+DB_Mod  = Substr(DB2Vers, 7, 3)
+
+UDBVERS = DB_VERS || "." || DB_Rel || "." || DB_MOD
+
+select
+    when DB_MOD = 0 THEN UDBVERS = UDBVERS "(CM)"
+    when DB_MOD = 1 THEN UDBVERS = UDBVERS "(ENF)"
+    when DB_MOD = 2 THEN UDBVERS = UDBVERS "(ENF)"
+    OTHERWISE            UDBVERS = UDBVERS "(NFM)"
+  end
+Version = UDBVERS
+
+
+DBC_env  = Substr(DB2CatL, 1, 3)
+DBC_Vers = Substr(DB2CatL, 4, 2)
+DBC_Rel  = Substr(DB2CatL, 6, 1)
+DBC_Mod  = Substr(DB2CatL, 7, 3)
+CATVERS  = DBC_VERS || "." || DBC_Rel || "." || DBC_MOD
+
+select
+    when DBC_MOD = 0 THEN CATVERS = CATVERS "(CM)"
+    when DBC_MOD = 1 THEN CATVERS = CATVERS "(ENF)"
+    when DBC_MOD = 2 THEN CATVERS = CATVERS "(ENF)"
+    OTHERWISE             CATVERS = CATVERS "(NFM)"
+  end
+CatLvL  = CATVERS
+
+if DSNRECON =  "Y" Then Do
+   call DISCONNECT_DSNREXX
+   call UNLOAD_DSNREXX
+ End
+
+Call Init_Menu
+IF area.0 > ZSCREEND - 12      Then Do
+   PFSHOW = "PF3=END PF4=CANCEL  PF7=BACK PF8=NEXT  "
+ END
+Else Do
+   PFSHOW = "PF3=END PF4=CANCEL "
+ END
+
+
+STEUTAB = "STEUTAB"
+DO FOREVER
+   ADDRESS ISPEXEC  'TBOPEN  'STEUTAB
+   IF RC =  0 THEN Do
+      ADDRESS ISPEXEC  'TBCLOSE 'STEUTAB
+    End
+   Else Do
+      Call Get_Config_FILE
+    End
+
+   CURSQLID  = ""
+   ADDRESS ISPEXEC 'VGET (CURSQLID) PROFILE'
+   ADDRESS ISPEXEC 'VGET ('STRIP(DB2_SSID)'SQID) PROFILE'
+   SSID_CURRENT_SQLID = value(STRIP(SSID)"SQID")
+   If length(SSID_CURRENT_SQLID) > 0 then do
+      CURSQLID = SSID_CURRENT_SQLID
+    End
+   IF CURSQLID   = "NONE" THEN CURSQLID = USERID()
+
+   ADDRESS ISPEXEC 'VGET (UDBTRACE) PROFILE'
+   IF UDBTRACE = 'ON' THEN TRACE R
+   ELSE                    TRACE
+
+   dynarea = substr(dyndata,1+(curline-1)*80) /*set dynamic variable */
+   size = length(dynarea)                     /*Set scalar variable  */
+   ADDRESS ISPEXEC "DISPLAY PANEL(PAUSW200)"
+   COMMAND = ZCMD
+   ADDRESS ISPEXEC "VGET (ZVERB,ZSCROLLA,ZSCROLLN)"
+   MaxScreenLines = DYNDPTH
+
+   /* PF Tasten Pruefen  */
+   Select
+      When zverb  = 'UP'   Then Do     /* Scroll up              */
+           If zscrolla = 'MAX' Then Do          /*  if scroll was max */
+              curline = 1                       /*    scroll to top   */
+           End
+           Else Do
+              curline = curline - MaxScreenLines    /* (max bottom)   */
+              if curline < 1 then Curline = 1
+            End
+           ZCMD    = ""
+           Iterate
+       End
+      When zverb  = 'DOWN'  Then Do
+           If zscrolla = 'MAX' Then Do
+            curline = maxlines
+           end
+           Else do
+            curline_Act = curline
+            curline = curline + MaxScreenLines
+            If curline > maxlines Then Curline = curline_Act
+            if DynArea_len >= dyndata_len Then Do
+               curline = 1
+             End
+            end
+           ZCMD    = ""
+           Iterate
+       End
+      When SUBSTR(COMMAND,1,3) = "REF"  THEN Do
+           Call Get_Config_FILE
+           ZCMD    = ""
+           Iterate
+       End
+      When SUBSTR(COMMAND,1,3) = "CAN"  THEN LEAVE
+      WHEN SUBSTR(COMMAND,1,5) = "ZPARM"  THEN DO
+           Call ZOSZPARM ssid, lnr
+           ZCMD    = ""
+           Iterate
+       end
+      WHEN WORD(COMMAND, 1) = "CONNECT" ,
+         | WORD(COMMAND, 1) = "RESET" Then do
+           Select
+             When Word(Command, 1) = "RESET" Then Location = ""
+             When Word(Command, 2) = "RESET" Then Location = ""
+             When Words(Command) = 3  Then Location = Word(Command, 3)
+             When Words(Command) = 2  Then Location = Word(Command, 2)
+             Otherwise                     Location = ""
+            End
+             If length(LOCation) > 0 Then do
+                If DSNRECON  <> "Y"  Then do
+                   RETC = Connect_Location(Location)
+                 End
+                Else Do
+                   RETC = 0
+                 End
+                IF RETC > 0 then do
+                   Location = ""
+                   ZCMD     = ""
+                   ITERATE
+                 END
+              End
+             Else Do
+                RETC = 4
+              End
+
+             If RETC = 0 Then Do
+                parse value sqlerrp with DB_ENV 4 DB_Vers 6 DB_Rel 8
+                sqlerrp_S = sqlerrp
+                DB2_ENV = DB_ENV
+                RETC = DISConnect_Location(Location)
+                DB_ENV = DB2_ENV
+                parse value sqlerrp_s with DB_ENV 4 DB_Vers 6 DB_Rel 8
+                DBR    = DB_Rel
+                errp   = sqlerrp_s
+                proc   = proclib
+                Select
+                  WHEN DB_ENV = "DSN" Then NOP
+                  WHEN DB_ENV = "SQL" Then DO
+                       Select
+                         When DB_Vers = 11 & DBR = 05  Then Do
+                             CALL LUWB5200 ssid, location, LNR, ,
+                                           Tabnr,  errp, proc
+                          End
+                         When DB_Vers = 11 Then do
+                              CALL LUWB1200 ssid, location, lnr, ,
+                                           Tabnr,  errp, proc
+                          End
+                         When DB_Vers = 10 & DBR = 05  Then Do
+                             CALL LUWA5200 ssid, location, LNR, ,
+                                           Tabnr,  errp, proc
+                          End
+                         When DB_Vers = 10 Then do
+                              CALL LUWA1200 ssid, location, lnr, ,
+                                           Tabnr,  errp, proc
+                          End
+                         Otherwise do
+                              CALL LUW97200 ssid, location, lnr, ,
+                                           Tabnr,  errp, proc
+                          End
+                        End
+                       Location = ""
+                       RETC = DISConnect_Location(Location)
+                       if DSNRECON <> "Y" Then Do
+                          call DISCONNECT_DSNREXX
+                          call UNLOAD_DSNREXX
+                          call LOAD_DSNREXX
+                          call CONNECT_DSNREXX
+                        End
+                   End
+                  Otherwise Location = ""
+                 End
+              End
+             Else Do
+                Location = ""
+            End
+            ZCMD    = ""
+            Iterate
+       end
+      WHEN WORD(COMMAND,1) = "TRACE" then do
+           IF WORD(COMMAND, 2) = "ON"  Then trace('R')
+           IF WORD(COMMAND, 2) = "OFF" Then trace('O')
+           UDBTRACE = word(COMMAND, 2)
+           UDBAUSW2 = auswahl
+           UDBOBJ   = Object
+           ADDRESS ISPEXEC 'VPUT (UDBTRACE) PROFILE'
+           ZCMD = ''
+           Iterate
+       end
+      WHEN SUBSTR(COMMAND,1,6) = "SQLERR"  THEN DO
+           Call SQLERR
+           ZCMD = ''
+           Iterate
+       end
+      WHEN SUBSTR(COMMAND,1,5) = "SQLID"  THEN DO
+           if word(command, 2) =  "" Then SETSQLID = USERID()
+           Else                           SETSQLID = word(command, 2)
+           interpret STRIP(SSID)'SQID ='SETSQLID
+           ADDRESS ISPEXEC 'VPUT ('STRIP(SSID)'SQID) PROFILE'
+           ZCMD = ''
+           Iterate
+       end
+      WHEN SUBSTR(COMMAND,1,6) = "SCHEMA"  THEN DO
+           if word(command, 2) =  "" Then CURSCHEM = USERID()
+           Else                           CURSCHEM = word(command, 2)
+           ADDRESS ISPEXEC 'VPUT (CURSCHEM) PROFILE'
+           ZCMD = ''
+           Iterate
+       end
+      WHEN SUBSTR(COMMAND,1,3) = "SQL"  THEN DO
+           command = "SQL"
+           call AUFRUF_ZOSC1910
+           ZCMD = ''
+           Iterate
+       end
+      WHEN SUBSTR(COMMAND,1,3) = "OPT"  THEN DO
+           call ARXPARM1 SSID
+           ZCMD = ''
+           Iterate
+       end
+      WHEN SUBSTR(COMMAND,1,4) = "PSQL"  THEN DO
+           Call AUFRUF_ZOSC1935
+           ZCMD = ''
+           Iterate
+       end
+      WHEN SUBSTR(COMMAND,1,7) = "DSNTIAD"     ,
+         | SUBSTR(COMMAND,1,8) = "DSNTIAUL"    ,
+         | SUBSTR(COMMAND,1,7) = "DSNTEP2"     ,
+         | SUBSTR(COMMAND,1,7) = "DSNTEP4"     ,
+         | SUBSTR(COMMAND,1,8) = "DSNJU003"    ,
+         | SUBSTR(COMMAND,1,8) = "DSNJU004"    ,
+         | SUBSTR(COMMAND,1,8) = "DSN1LOGP"    ,
+         | SUBSTR(COMMAND,1,8) = "DSN1PRNT"    ,
+         | SUBSTR(COMMAND,1,8) = "DIAGNOSE"    ,
+         | SUBSTR(COMMAND,1,8) = "DSN1SDMP"    Then Do
+           EINGABE    = COMMAND
+           OBJECT1    = ""
+           OBJECT2    = ""
+           OBJECT3    = ""
+           OBJECT4    = ""
+           OBJECT5    = ""
+           CALL AUFRUF_ZOSC1915
+           ZCMD = ''
+           Iterate
+       end
+      WHEN SUBSTR(COMMAND,1,8) = "DSN1COPY" Then Do
+           EINGABE    = COMMAND
+           CALL AUFRUF_ZOSC1940
+           command = ""
+           ZCMD = ''
+           Iterate
+       end
+      WHEN SUBSTR(COMMAND,1,7) = "EXPLAIN"     Then Do
+           EINGABE    = COMMAND
+           OBJECT1    = ""
+           OBJECT2    = ""
+           OBJECT3    = ""
+           OBJECT4    = ""
+           OBJECT5    = ""
+           CALL AUFRUF_ZOSC1930
+           ZCMD = ''
+           Iterate
+       end
+      When PF                  = 'PF01' THEN Do
+           ADDRESS ISPEXEC "DISPLAY PANEL(PAUSW20H)"
+           LEAVE
+       End
+      When PF                  = 'PF03' THEN Do
+           ADDRESS ISPEXEC  'TBCLOSE 'STEUTAB
+           ADDRESS ISPEXEC  'TBERASE 'STEUTAB
+           LEAVE
+       End
+      When PF                  = 'PF04' THEN DO
+           ADDRESS ISPEXEC  'TBCLOSE 'STEUTAB
+           ADDRESS ISPEXEC  'TBERASE 'STEUTAB
+           if DSNRECON <> "Y" Then Do
+              call UNLOAD_DSNREXX
+              call DISCONNECT_DSNREXX
+            End
+           EXIT 0
+       End
+      Otherwise DO
+           UDBAUSW2 = auswahl
+           UDBOBJ   = Object
+           ADDRESS ISPEXEC 'VPUT (UDBAUSW2 UDBOBJ) PROFILE'
+       End
+     End
+
+   If Object = '' Then do
+      Object = '%'
+      MSGLINE = "Bitte Object angeben || (Wildcard *, %)"
+    end
+
+   AwOk = ZOSC1900("ZOSC1210" ,,
+                   "CHKFKAW"  ,,
+                    auswahl   ,,
+                    lnr    )
+
+   If AwOk = '' Then do
+      MSGLINE = "Bitte richtige auswahl treffen "
+      iterate
+    end
+
+   Object = Strip(Translate(Object))
+   Object = TRANSLATE(Object, '%', '*')
+
+   /* Aufruf der gewaehlten Funktion */
+   MSGLINE = " "
+
+   CALL ZOSC1210 SSID,     ,
+                 EDITSQL , ,
+                 LOCATION, ,
+                 lnr,      ,
+                 tabnr,    ,
+                 DB2Vers,  ,
+                 DB2CatL,  ,
+                 proclib,  ,
+                 ISPFILE,  ,
+                 AUSWAHL,  ,
+                 OBJECT
+   if RESULT /= 0 Then do
+      MSGLINE = "Returncode ZOSC1210 = "RESULT
+    end
+ end
+
+if DSNRECON <> "Y" Then Do
+   call DISCONNECT_DSNREXX
+   call UNLOAD_DSNREXX
+ End
+
+Return 0
+
+/* -------------------------------------------------------------*/
+
+LOAD_DSNREXX:
+    'SUBCOM DSNREXX'
+    RC2 = RXSUBCOM('ADD','DSNREXX','DSNREXX')
+    IF RC2 <> 0 THEN DO
+       SAY "Error on LOAD DSNREXX RC2:"RC2
+       OK = SET_RC(12)
+       EXIT MAXRC
+     End
+RETURN
+
+UNLOAD_DSNREXX:
+    S_RC = RXSUBCOM('DELETE','DSNREXX','DSNREXX')
+RETURN
+
+CONNECT_DSNREXX:
+    ADDRESS DSNREXX 'CONNECT 'SSID
+    IF RC <  0 THEN DO
+       SAY "ERROR ON CONNECT, RC="RC ,
+           "SQLCODE="SQLCODE         ,
+           "SQLERRMC="SQLERRMC       ,
+           ""
+    OK = SET_RC(12)
+    EXIT MAXRC
+    END
+RETURN 0
+
+DISCONNECT_DSNREXX:
+'SUBCOM DSNREXX'
+If RC = 0 Then do
+   ADDRESS DSNREXX "DISCONNECT"
+ End
+Return 0
+
+Connect_Location:
+
+if DSNRECON =  "Y" Then Do
+   call LOAD_DSNREXX
+   call CONNECT_DSNREXX
+ end
+
+ADDRESS DSNREXX "EXECSQL CONNECT TO "ARG(1)
+If sqlcode =  0 then OK = DisConnect_Location(ARG(1) )
+ ELSE Do
+      OK = GetPWD()
+      IF Datatype(OK) = 'NUM' Then Return 8
+      ELSE PARSE VALUE OK WITH SYSUID SYSPWD .
+  End
+
+If Length(SYSUID) > 0 & Length(SYSPWD) > 0 Then do
+   ADDRESS DSNREXX "EXECSQL CONNECT TO "ARG(1) ,
+                   "USER :SYSUID USING :SYSPWD "
+ End
+ELSE Do
+    ADDRESS DSNREXX "EXECSQL CONNECT TO "ARG(1)
+ End
+ IF SQLCODE <> 0 THEN DO
+    MSGTXT = 'Error in CONNECT TO ' || LOCATION ||,
+             ' SQLCODE: ' || SQLCODE
+    SAY MSGTXT
+    call SQL_ERROR
+    maxrc = 8
+  END
+ ElSE Do
+    MAXRC = 0
+    parse value sqlerrp with DB_ENV 4 DB_Vers 6 DB_Rel 8 DB_Mod
+    UDBVERS = DB_VERS || "." || DB_Rel || "." || DB_MOD
+    select
+        when DB_MOD = 0 THEN UDBVERS = UDBVERS "(CM)"
+        when DB_MOD = 1 THEN UDBVERS = UDBVERS "(ENF)"
+        when DB_MOD = 2 THEN UDBVERS = UDBVERS "(ENF)"
+        OTHERWISE            UDBVERS = UDBVERS "(NFM)"
+      end
+  END
+
+if DSNRECON =  "Y" Then Do
+   call DISCONNECT_DSNREXX
+   call UNLOAD_DSNREXX
+ End
+Return maxrc
+
+Connect_Location_2:
+
+If Length(SYSUID) > 0 & Length(SYSPWD) > 0 Then do
+   ADDRESS DSNREXX "EXECSQL CONNECT TO "ARG(1) ,
+                   "USER :SYSUID USING :SYSPWD "
+ End
+ELSE Do
+    ADDRESS DSNREXX "EXECSQL CONNECT TO "ARG(1)
+ End
+ IF SQLCODE <> 0 THEN DO
+    MSGTXT = 'Error in CONNECT TO ' || LOCATION ||,
+             ' SQLCODE: ' || SQLCODE
+    SAY MSGTXT
+    call SQL_ERROR
+    maxrc = 8
+  END
+
+Return maxrc
+
+DisConnect_Location:
+
+if DSNRECON =  "Y" Then Do
+   call LOAD_DSNREXX
+   call CONNECT_DSNREXX
+ end
+
+ ADDRESS DSNREXX "EXECSQL RELEASE " arg(1)
+ ADDRESS DSNREXX "EXECSQL COMMIT  "
+ ADDRESS DSNREXX "EXECSQL CONNECT RESET "
+ parse value sqlerrp with DB_ENV 4 DB_Vers 6 DB_Rel 8 DB_Mod
+ UDBVERS = DB_VERS || "." || DB_Rel || "." || DB_MOD
+ select
+     when DB_MOD = 0 THEN UDBVERS = UDBVERS "(CM)"
+     when DB_MOD = 1 THEN UDBVERS = UDBVERS "(ENF)"
+     when DB_MOD = 2 THEN UDBVERS = UDBVERS "(ENF)"
+     OTHERWISE            UDBVERS = UDBVERS "(NFM)"
+   end
+if DSNRECON =  "Y" Then Do
+   call DISCONNECT_DSNREXX
+   call UNLOAD_DSNREXX
+ End
+
+ IF SQLCODE <> 0 THEN DO
+    Return 8
+  END
+Return 0
+
+AUFRUF_ZOSC1910:
+
+  object1     = ''
+  object2     = ''
+  tablespace  = ''
+  EDIT = 'YES'
+
+  Stmt = ZOSC1910(SSID,     ,
+                 LOCATION,  ,
+                 EINGABE,   ,
+                 OBJECT1,   ,
+                 EDIT,      ,
+                 LNR,       ,
+                 db2vers,   ,
+                 db2catl,   ,
+                 )
+
+return
+
+AUFRUF_ZOSC1915:
+
+  EDIT = 'YES'
+  TABLE   = COLTAB
+
+  Stmt = ZOSC1915(SSID,     ,
+                 LOCATION,  ,
+                 AUSWKZ,    ,
+                 lnr,       ,
+                 tabnr   ,  ,
+                 ISPFILE ,  ,
+                 EINGABE,   ,
+                 EINGABE2,  ,
+                 OBJECT1,   ,
+                 OBJECT2,   ,
+                 OBJECT3,   ,
+                 OBJECT4,   ,
+                 OBJECT5,   ,
+                 EDIT,      ,
+                 DB2Vers,   ,
+                 DB2CatL,   ,
+                 proclib,   ,
+                 curnr,     ,
+                 )
+
+return
+
+AUFRUF_ZOSC1930:
+
+  EDIT = 'YES'
+  TABLE   = COLTAB
+
+  Stmt = ZOSC1930(SSID,     ,
+                 LOCATION,  ,
+                 AUSWKZ,    ,
+                 lnr,       ,
+                 tabnr   ,  ,
+                 EINGABE,   ,
+                 EINGABE2,  ,
+                 STATEMENT, ,
+                 OBJECT1,   ,
+                 OBJECT2,   ,
+                 OBJECT3,   ,
+                 OBJECT4,   ,
+                 OBJECT5,   ,
+                 EDIT,      ,
+                 DB2Vers,   ,
+                 DB2CatL,   ,
+                 proclib,   ,
+                 )
+
+return
+
+AUFRUF_ZOSC1935:
+
+  EDIT = 'YES'
+
+  Stmt = ZOSC1935(SSID,     ,
+                 LOCATION,  ,
+                 AUSWKZ,    ,
+                 lnr,       ,
+                 tabnr   ,  ,
+                 DO_ALL,    ,
+                 EINGABE,   ,
+                 EINGABE2,  ,
+                 STATEMENT, ,
+                 OBJECT1,   ,
+                 OBJECT2,   ,
+                 OBJECT3,   ,
+                 OBJECT4,   ,
+                 OBJECT5,   ,
+                 EDIT,      ,
+                 Object_List,,
+                 DB2Vers,   ,
+                 proclib,   ,
+                 curnr,     ,
+                 DB2CatL    )
+
+return
+
+AUFRUF_ZOSC1940:
+
+  EDIT = 'YES'
+
+  Stmt = ZOSC1940(SSID,     ,
+                 LOCATION,  ,
+                 AUSWKZ,    ,
+                 lnr,       ,
+                 tabnr   ,  ,
+                 ISPFILE ,  ,
+                 EINGABE,   ,
+                 EINGABE2,  ,
+                 OBJECT1,   ,
+                 OBJECT2,   ,
+                 OBJECT3,   ,
+                 OBJECT4,   ,
+                 OBJECT5,   ,
+                 EDIT,      ,
+                 DB2Vers,   ,
+                 DB2CatL,   ,
+                 proclib    )
+
+
+STATEMENT = ""
+
+ return
+
+SET_RC:
+   IF ARG(1) > MAXRC THEN MAXRC = ARG(1)
+   IF SRC.8 = 'ISPF' THEN DO
+      ZISPFRC = MAXRC
+      ADDRESS ISPEXEC "VPUT (ZISPFRC) SHARED"
+    END
+Return MAXRC
+
+DB2V12_Modlevel:
+
+CNR = 1
+SNR = 1
+SQLSTMT   = "SELECT  LVU.FUNCTION_LVL AS FUNCTION_LEVEL  ",
+            "      , LVU.CATALOG_LVL  AS CTALOG_LEVEL    ",
+            "FROM "SYSIBMS".SYSLEVELUPDATES LVU             ",
+            "WHERE OPERATION_TYPE = 'F'                  ",
+            "ORDER BY  LVU.EFFECTIVE_TIME  DESC          ",
+            "FETCH FIRST 1 ROWS ONLY FOR FETCH ONLY      ",
+            "WITH UR                                     ",
+            ""
+
+call OPEN_CURSOR_200
+
+SQLTEXT = " FETCH C"CNR" INTO :FUN_LEVEL, :CAT_LEVEL"
+Call EXECUTE_SQL_TEXT_200
+Call Close_CURSOR_200
+
+parse value  CAT_LEVEL With "V" Version "R" Rel "M" ModLevel
+DB2CatL   = "DSN" || Version || Rel || ModLevel
+
+parse value  FUN_LEVEL With "V" Version "R" Rel "M" ModLevel
+DB2Vers   = "DSN" || Version || Rel || ModLevel
+
+return
+
+OPEN_CURSOR_200:
+
+   IF DATATYPE(CNR) <> 'NUM' THEN CNR = 1
+   IF DATATYPE(SNR) <> 'NUM' THEN SNR = 1
+   SQLTEXT =         " CLOSE C"CNR
+   Call EXECUTE_SQL_TEXT_200
+   SQLTEXT =         " DECLARE C"CNR" CURSOR FOR S"SNR
+   Call EXECUTE_SQL_TEXT_200
+   IF SQLCODE <> 0 THEN DO
+      SAY "ERROR ON DECLARE, RC="RC ,
+          "SQLCODE="SQLCODE         ,
+          "SQLERRMC="SQLERRMC       ,
+          ""
+      If sqlcode < 0 Then Do
+         call SQL_ERROR
+         return 8
+       End
+   END
+   If ENV = TSO Then do
+       PREP_ATTR =   "CONCENTRATE STATEMENTS WITH LITERALS  "
+       SQLTEXT = " PREPARE S"SNR "INTO :OUTSQLDA " ,
+                 " ATTRIBUTES :PREP_ATTR " ,
+                 " FROM :SQLSTMT" ,
+                 ""
+     End
+     Else Do
+       SQLTEXT = " PREPARE S"SNR "INTO :OUTSQLDA " ,
+                 " FROM :SQLSTMT" ,
+                 ""
+     End
+   Call EXECUTE_SQL_TEXT_200
+   IF SQLCODE <> 0 THEN DO
+      SAY "ERROR ON PREPARE S"SNR"RC="RC ,
+          "SQLCODE="SQLCODE         ,
+          "SQLERRMC="SQLERRMC       ,
+          ""
+      If sqlcode < 0 Then Do
+         call SQL_ERROR
+         return 8
+       End
+   END
+
+   SQLTEXT =  " DESCRIBE S"SNR" INTO :OUTSQLDA"
+   Call EXECUTE_SQL_TEXT_200
+   SQLTEXT =         " OPEN C"CNR
+   Call EXECUTE_SQL_TEXT_200
+   IF SQLCODE <> 0 THEN DO
+      SAY "ERROR ON OPEN C"CNR" , RC="RC ,
+          "SQLCODE="SQLCODE         ,
+          "SQLERRMC="SQLERRMC       ,
+          ""
+      If sqlcode < 0 Then Do
+         call SQL_ERROR
+         return 8
+       End
+    END
+
+RETURN
+
+CLOSE_CURSOR_200:
+
+    IF DATATYPE(CNR) <> 'NUM' THEN CNR = 1
+    SQLTEXT =         " CLOSE C"CNR
+    Call EXECUTE_SQL_TEXT_200
+
+RETURN
+
+EXECUTE_SQL_TEXT_200:
+ Select
+    When ENV = 'TSO' Then Do
+         ADDRESS DSNREXX "EXECSQL "SQLTEXT
+
+         Select
+           When rc =  -2168 Then do
+                SQLCODE    = -99999
+                SQLERRMC   = "Returncode war " RC
+            End
+           When word(SQLTEXT, 1) = "CLOSE" Then NOP
+           When sqlcode < 0 Then do
+                say SQLTEXT
+                call SQL_ERROR
+                return 8
+            End
+           Otherwise nop
+          End
+     End
+    When ENV = 'WIN' Then Do
+         CALL SQLEXEC SQLTEXT
+         SQLCODE    = SQLCA.SQLCODE
+         SQLERRMC   = SqlMsg
+     End
+    Otherwise NOP
+  End
+Return
+
+SQL_ERROR:
+
+If ENV = "WIN" Then do
+   say
+   say '**** SQL returned the following : '
+   say '     STEP        = ' STEP
+   say '     SQLCODE     = ' sqlca.Sqlcode
+   say '     Message   = ' SqlMsg
+   say
+   Return
+ End
+
+SQLC = D2X(SQLCODE,8)
+SQLC = X2C(SQLC)
+
+
+SQL_ERRD = ""
+SQL_WARN = ""
+If DB_ENV = "DSN" Then do
+   Do I = 1 To 6
+      SQL_ERRD = SQL_ERRD || D2C(SQLERRD.I,4)
+   End
+   Do I = 0 To 10
+      SQL_WARN = SQL_WARN || LEFT(SQLWARN.I,1)
+   End
+ End
+
+MSG_LEN = 80
+SQLCA = 'SQLCA   '
+SQLCA = SQLCA || X2C(00000088)
+SQLCA = SQLCA || SQLC
+SQLCA = SQLCA || D2C(70,2)
+SQLCA = SQLCA || 'DSN     '
+SQLCA = SQLCA || LEFT(SQLERRMC,70)
+SQLCA = SQLCA || LEFT(SQLERRP,8)
+SQLCA = SQLCA || SQL_ERRD
+SQLCA = SQLCA || SQL_WARN
+SQLCA = SQLCA || LEFT(SQLSTATE,5)
+TIAR_MSG = D2C(MSG_LEN * 12,2) || COPIES(' ',MSG_LEN * 12)
+TEXT_LEN = D2C(MSG_LEN,4)
+ADDRESS ATTCHPGM 'DSNTIAR SQLCA TIAR_MSG TEXT_LEN'
+
+If RC < 5 Then,
+   Do
+   If RC = 4 Then Say "DSNTIAR RC=4 Message Area Truncated"
+   S_POS = 3              /* Bypass the length bytes in Message Area */
+   Do I = 1 to 12         /* Loop through all lines of message */
+      MSG_TEXT = Substr(tiar_msg,S_POS,MSG_LEN) /* Pick out text */
+      MSG_TEXT = Strip(MSG_TEXT,T," ") /* Remove trailing blanks */
+      If MSG_TEXT > " " Then Say MSG_TEXT /* Echo msg to terminal */
+      Else Iterate /* Some msg lines are blank, skip */
+      S_POS = S_POS + MSG_LEN /* Skip to next "line" of MSG data */
+   End I
+   say "SQLCODE="SQLCODE "SQLSTATE="SQLSTATE
+End
+Else Do
+   Say "Call to DSNTIAR - Failed. RC=" RC
+   Say 'SQLCODE ='SQLCODE; Say 'SQLERRM ='SQLERRMC
+   Say 'SQLERRP ='SQLERRP; Say 'SQLSTATE='SQLSTATE
+   XX = "SQLERRD ="
+   Do I = 1 to 6 ; XX = XX||SQLERRD.I||',';End;Say XX
+   XX = "SQLWARN ="
+   Do I = 0 to 10; XX = XX||SQLWARN.I||',';End;Say XX
+End
+
+RETURN
+
+Get_Config_FILE:
+
+PARSE SOURCE SRC.1  , /* ENVIRONMENT  (TSO)            */
+             SRC.2  , /* AUFRUF ALS (COMMAND)          */
+             SRC.3  , /* Program NAME (LUW97000)       */
+             SRC.4  , /* SYS00186 (TEMP FILE)          */
+             SRC.5  , /* AUFRUF AUS LIB (X.X.CLISTUDB) */
+             SRC.6  , /* ?                             */
+             SRC.7  , /* TSO                           */
+             SRC.8  , /* ISPF                          */
+             SRC.9  , /* ?                             */
+
+mem     = "#STEUZC1"
+CFGFILE = Strip(proclib) || "(" || mem || ")"
+
+ADDRESS TSO "FREE FILE(CFGF) NOHOLD"
+ADDRESS TSO "ALLOC F(CFGF) DATASET('"CFGFILE"') SHR"
+ADDRESS TSO "EXECIO * DISKR CFGF (STEM CONFIG. FINIS"
+ADDRESS TSO "EXECIO 0 DISKR CFGF (FINIS"
+ADDRESS TSO "FREE FILE(CFGF) NOHOLD"
+
+
+ADDRESS ISPEXEC  'TBCLOSE 'STEUTAB
+ADDRESS ISPEXEC  'TBERASE 'STEUTAB
+ADDRESS ISPEXEC  'TBOPEN  'STEUTAB
+IF RC <> 0 THEN Do
+   ADDRESS ISPEXEC 'TBCREATE 'STEUTAB   ,
+                   'NAMES(VON, NACH, STEUER)'
+   If rc <> 0 Then say "TBCREATE RC="RC
+ End
+
+
+STEUER = ""
+Do I = 1 TO CONFIG.0
+   y = i + 1
+
+   If Strip(Config.i)        = ''  Then Iterate
+   If Substr(Config.I, 1, 1) = '*' Then Iterate
+   VON   = WORD(CONFIG.I, 1)
+   NACH  = WORD(CONFIG.I, 2)
+   If y > CONFIG.0 Then do
+      VNEXT = "Fertig"
+      NNEXT = "Fertig"
+    End
+   Else Do
+      VNEXT = WORD(CONFIG.Y, 1)
+      NNEXT = WORD(CONFIG.Y, 2)
+    End
+   STEUER = STEUER Space(SUBWORD(CONFIG.I, 3) || ";" , 1)
+   If von || nach  <> VNEXT || NNEXT Then do
+      ADDRESS ISPEXEC 'TBADD 'STEUTAB
+      If rc <> 0 Then Do
+         say von nach STEUER
+         say "TBADD    RC="RC
+       End
+      STEUER = ""
+    End
+ End
+
+ADDRESS ISPEXEC  'TBCLOSE 'STEUTAB
+
+return 0
+
+Init_Menu:
+
+red   = '01'x                              /* Assign colors to       */
+blue  = '02'x                              /*   Attribute bytes      */
+green = '03'x                              /*   found in the data    */
+white = '04'x
+maxlines = 0                               /* set max number of lines*/
+dyndata  = ''                              /* initialize data        */
+cmddata  = ''                              /* initialize data        */
+wl     = 21
+curline = 1                                /* set current line #     */
+
+
+area.0  = 34
+area.1  = "%SG   Storegegroup %AL   Alias          %RO   Role         "
+area.2  = "%DB   Database     %SY   Synonyme       %                  "
+area.3  = "%TS   TableSpace   %PL   Plans          %ST   Statements   "
+area.4  = "%TB   Table        %PG   Packages       %CK   Checks       "
+area.5  = "%IX   Index        %TG   Trigger        %DBRM DBRM         "
+area.6  = "%VW   Views        %MQT  Mat.Query Table%PERM Perm/Mask    "
+area.7  = "%CO   Columns      %RT   Routines       %SR   Strings      "
+area.8  = "%DT   Datatypes    %SE   Sequences      %KT   Key Target.  "
+area.9  = "%TP   Tablespart   %VO   Volumes (SG)   %TCO  Trusted Cont."
+area.10 = "%IP   Indexpart    %IS   Indexspace     %SC   Schema       "
+area.11 = "%IC   ImageCopy    %PK   Primary Keys   %FK   Foreign key  "
+area.12 = "%IXC  Index Cleanup%IMU  IX Memory Cont.%ICO  IC ONLY      "
+area.13 = "%VAR  Variable     %LIC  Last ICopy     %LFIC Last Full IC "
+area.14 = "%DEP  Dependencies %STF  Stats feedback %STP  Stats Profile"
+area.15 = "%JAR  JAR Objects  %CID  Collection ID  %ATW  AUTOTIMEWINDOW"
+area.16 = "%PGLI Packagelist  %ENV  ENV-VAR-Object %PGC  PACKAGE COPY "
+area.17 = "%PDDL Pending DDL  %PTB  Pending TB     %PTS  Pending TS   "
+area.18 = "%PRGA Prog Auth    %XMLS XML String     %XO   XSD Objects  "
+area.19 = "%LO   Locations    %IPN  IP-Names       %UN   User Names   "
+area.20 = "%LU   LU Names     %UT   UTILITY        %RFS  RestFul Serv."
+area.21 = "%LVU  Level Update %OBDS OBDS (RECOVER) %                  "
+area.22 = "%UA   User Auth.   %TBA  Table Auth.    %DBA  Database Auth"
+area.23 = "%RA   Recource Auth%RTA  Routine Auth.  %SEA  Sequence Auth"
+area.24 = "%PGA  Package Auth %PLA  Plan Austh     %SCA  Schema Auth  "
+area.25 = "%                                                          "
+area.26 = "%PSQL Performance SQL                                      "
+area.27 = "%                                                          "
+area.28 = "%Stored Procedure :                                        "
+area.29 = "%BP   Bufferpool   %DSINFO DS Memberlist%ZPARM Zparm Info. "
+area.30 = "%THD  Threads      %GRP    DS Group Info%DDF  DDF Info     "
+area.31 = "%DISTS DISPLAY TS  %DISR DIS RESTRICT   %DISA DIS ADVISORY "
+area.32 = "%SSIDINFO INFO SSID                                        "
+area.33 = "                                                           "
+area.34 = "                                                           "
+
+area.0  = 35
+area.1  = "%SG   Storegegroup  %VO   Volumes (SG)  %                   "
+area.2  = "%DB   Database      %TS   TableSpace    %TP   Tablespart    "
+area.3  = "%TB   Table         %IX   Index         %IP   Indexpart     "
+area.4  = "%KT   Key Target.   %PK   Primary Keys  %FK   Foreign key   "
+area.5  = "%IS   Indexspace    %TG   Trigger       %VW   Views         "
+area.6  = "%MQT  Mat.Query Tab %RT   Routines      %SE   Sequences     "
+area.7  = "%AL   Alias         %SY   Synonyme      %PERM Perm/Mask     "
+area.8  = "%VAR  Variable      %DT   Datatypes     %CK   Checks        "
+area.9  = "%RO   Role          %CO   Columns       %TCO  Trusted Cont. "
+area.10 = "%SC   Schema        %DEP  Dependencies  %UT   UTILITY       "
+area.11 = "%PTS  Pending TS    %PTB  Pending TB    %PDDL Pending DDL   "
+area.12 = "%RFS  RestFul Serv. %STF  Stats Feedback%STP  Stats Profile "
+area.13 = "%IMU  IX Memory Con %IXC  Index Cleanup %IC   ImageCopy     "
+area.14 = "%ICO  IC ONLY       %LFIC Last Full IC  %LIC  Last ICopy    "
+area.15 = "%PL   Plans         %CID  Collection ID %PG   Packages      "
+area.16 = "%PGC  PACKAGE COPY  %PGLI Packagelist   %SR   Strings       "
+area.17 = "%ST   Statements    %XO   XSD Objects   %XMLS XML String    "
+area.18 = "%JAR  JAR Objects   %IPN  IP-Names      %LO   Locations     "
+area.19 = "%LU   LU Names      %UN   User Names    %ENV  ENV-VAR-Objec "
+area.20 = "%OBDS OBDS (RECOVER)%DBRM DBRM          %ATW  AUTOTIMEWINDOw"
+area.21 = "%LVU  Level Update  %                   %                   "
+area.22 = "%                                                           "
+area.23 = "%Permissions:       %                   %                   "
+area.24 = "%DBA  Database Auth %RA   Recource Auth %UA   User Auth     "
+area.25 = "%SCA  Schema Auth   %TBA  Table Auth    %RTA  Routine Auth  "
+area.26 = "%SEA  Sequence Auth %PGA  Package Auth  %PLA  Plan Auth     "
+area.27 = "%PRGA Prog Auth     %VARA Variable Auth %                   "
+area.28 = "%                                                           "
+area.29 = "%Stored Procedure : %                   %                   "
+area.30 = "%BP   Bufferpool    %THD  Threads       %DDF  DDF Info      "
+area.31 = "%DISTS DISPLAY TS   %DISA DIS ADVISORY  %DISR DIS RESTRICT  "
+area.32 = "%DSINFO Meberlist   %GRP  Group Info    %ZPARM Zparm Info.  "
+area.33 = "%                                                           "
+area.34 = "%PSQL Performance SQL                   %                   "
+area.35 = "                                                            "
+
+MaxLines = area.0
+FUNC     = "Function: "
+Do ai = 1 to area.0
+   parse value area.ai with '%' W1 '%' W2 '%' W3
+   dynzeil = ""
+   dynzeil = dynzeil || red || func || White || Substr(W1, 1, wl)
+   dynzeil = dynzeil || White || Substr(W2, 1, wl)
+   dynzeil = dynzeil || White || Substr(W3, 1, wl)
+   dyndata = dyndata || left(dynzeil, 80, ' ' )
+   FUNC    = "          "
+ end
+
+ADDRESS ISPEXEC  "VGET (ZSCREENW,ZSCREEND)"
+MaxScreenLines = ZSCREEND-5
+dyndata_len = Length(dyndata)
+znr     = 1
+
+Return

@@ -1,0 +1,122 @@
+//MGDB05RB JOB (40208,F16),'SYSPROG',MSGLEVEL=(1,1),
+//         MSGCLASS=T,CLASS=A,
+//*        TYPRUN=HOLD,
+//         TIME=1440,REGION=0M,NOTIFY=&SYSUID
+//*
+//****************************************************
+//* JOB GENARATED FROM MGDB05
+//*     ON DATE: 7 MAY 2014  TIME: 18:40:55
+//****************************************************
+//*
+//*
+// SET DB2HLQ=DB2C.V12R1M0
+// SET STEPL1=&DB2HLQ..SDSNEXIT
+// SET STEPL2=&DB2HLQ..SDSNLOAD
+// SET STEPL3=&DB2HLQ..RUNLIB.LOAD
+// SET DBRM1=&DB2HLQ..SDSNDBRM
+// SET DBRM2=&DB2HLQ..DBRMLIB.DATA
+// SET DBRM3=&DB2HLQ..SDSNSAMP
+//*
+//*-----------------------------------------------------------------
+//*     BINDEN DSNREXX
+//*-----------------------------------------------------------------
+//BNDREXX EXEC PGM=IKJEFT01
+//STEPLIB  DD  DISP=SHR,DSN=&STEPL1
+//         DD  DISP=SHR,DSN=&STEPL2
+//         DD  DISP=SHR,DSN=&STEPL3
+//DBRMLIB  DD  DISP=SHR,DSN=&DBRM1
+//         DD  DISP=SHR,DSN=&DBRM2
+//ABNLIGNR DD DUMMY
+//SYSTERM  DD SYSOUT=*
+//SYSPRINT DD SYSOUT=*
+//SYSTSPRT DD SYSOUT=*
+//SYSTSIN  DD *
+DSN SYSTEM(DB2C)
+BIND PACKAGE(SYSTABLE.DSNREXX) MEMBER(DSNREXX)              +
+     OWNER(MGDB05)     QUALIFIER(MGDB05) SQLERROR(CONTINUE) +
+     VALIDATE(BIND)    ISOLATION(CS)      CURRENTDATA(NO)
+BIND PACKAGE(SYSTABLE.DSNREXX) MEMBER(DSNREXX)              +
+     OWNER(MGDB05)     QUALIFIER(MGDB05) SQLERROR(CONTINUE) +
+     VALIDATE(BIND)    ISOLATION(RR)      CURRENTDATA(NO)
+BIND PACKAGE(SYSTABLE.DSNREXX) MEMBER(DSNREXX)              +
+     OWNER(MGDB05)     QUALIFIER(MGDB05) SQLERROR(CONTINUE) +
+     VALIDATE(BIND)    ISOLATION(UR)      CURRENTDATA(NO)
+/*
+//*-----------------------------------------------------------------
+//*     BINDEN SPUFI
+//*-----------------------------------------------------------------
+//BNDSPFI EXEC PGM=IKJEFT01
+//STEPLIB  DD  DISP=SHR,DSN=&STEPL1
+//         DD  DISP=SHR,DSN=&STEPL2
+//         DD  DISP=SHR,DSN=&STEPL3
+//DBRMLIB  DD  DISP=SHR,DSN=&DBRM1
+//         DD  DISP=SHR,DSN=&DBRM2
+//ABNLIGNR DD DUMMY
+//SYSTERM  DD SYSOUT=*
+//SYSPRINT DD SYSOUT=*
+//SYSTSPRT DD SYSOUT=*
+//SYSTSIN  DD *
+DSN SYSTEM(DB2C)
+BIND PACKAGE(SYSTABLE.DSNESPCS) MEMBER(DSNESM68)            +
+     OWNER(MGDB05)    QUALIFIER(MGDB05) SQLERROR(NOPACKAGE) +
+     VALIDATE(RUN)    ISOLATION(CS)      CURRENTDATA(YES)
+/*
+//*-----------------------------------------------------------------
+//*     BINDEN DSNTEP2
+//*-----------------------------------------------------------------
+//BNDTEP2 EXEC PGM=IKJEFT01
+//STEPLIB  DD  DISP=SHR,DSN=&STEPL1
+//         DD  DISP=SHR,DSN=&STEPL2
+//         DD  DISP=SHR,DSN=&STEPL3
+//DBRMLIB  DD  DISP=SHR,DSN=&DBRM1
+//         DD  DISP=SHR,DSN=&DBRM3
+//         DD  DISP=SHR,DSN=&DBRM2
+//ABNLIGNR DD DUMMY
+//SYSTERM  DD SYSOUT=*
+//SYSPRINT DD SYSOUT=*
+//SYSTSPRT DD SYSOUT=*
+//SYSTSIN  DD *
+DSN SYSTEM(DB2C)
+BIND PACKAGE(SYSTABLE.DSNTEP2) MEMBER(DSN@EP2L)                 +
+     OWNER(MGDB05)          QUALIFIER(MGDB05) SQLERROR(CONTINUE)+
+     VALIDATE(RUN)          ISOLATION(CS)
+/*
+//*-----------------------------------------------------------------
+//*     BINDEN DSNTEP4
+//*-----------------------------------------------------------------
+//BNDTEP4 EXEC PGM=IKJEFT01
+//STEPLIB  DD  DISP=SHR,DSN=&STEPL1
+//         DD  DISP=SHR,DSN=&STEPL2
+//         DD  DISP=SHR,DSN=&STEPL3
+//DBRMLIB  DD  DISP=SHR,DSN=&DBRM1
+//         DD  DISP=SHR,DSN=&DBRM3
+//         DD  DISP=SHR,DSN=&DBRM2
+//ABNLIGNR DD DUMMY
+//SYSTERM  DD SYSOUT=*
+//SYSPRINT DD SYSOUT=*
+//SYSTSPRT DD SYSOUT=*
+//SYSTSIN  DD *
+DSN SYSTEM(DB2C)
+BIND PACKAGE(SYSTABLE.DSNTEP4)    MEMBER(DSN@EP4L)            +
+     OWNER(MGDB05) QUALIFIER(MGDB05) SQLERROR(CONTINUE)       +
+     VALIDATE(RUN)   ISOLATION(CS)
+/*
+//*-----------------------------------------------------------------
+//*     BINDEN DSNUGSQL (CROSSLOAD)
+//*-----------------------------------------------------------------
+//BNDCRLO EXEC PGM=IKJEFT01
+//STEPLIB  DD  DISP=SHR,DSN=&STEPL1
+//         DD  DISP=SHR,DSN=&STEPL2
+//         DD  DISP=SHR,DSN=&STEPL3
+//DBRMLIB  DD  DISP=SHR,DSN=&DBRM1
+//         DD  DISP=SHR,DSN=&DBRM2
+//ABNLIGNR DD DUMMY
+//SYSTERM  DD SYSOUT=*
+//SYSPRINT DD SYSOUT=*
+//SYSTSPRT DD SYSOUT=*
+//SYSTSIN  DD *
+DSN SYSTEM(DB2C)
+BIND PACKAGE(SYSTABLE.DSNUTIL) MEMBER(DSNUGSQL)               +
+     OWNER(MGDB05) QUALIFIER(MGDB05) SQLERROR(CONTINUE)       +
+     VALIDATE(RUN)  ISOLATION(CS)
+/*

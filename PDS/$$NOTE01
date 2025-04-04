@@ -1,0 +1,132 @@
+Subject:  Re: Fwd: WG: Hi
+From:     "Ulrich_Braeuer§t-online.de" <Ulrich_Braeuer§t-online.de>
+Date:     6/12/2021, 8:52 AM
+To:       Sam Golob <sbgolob§cbttape.org>
+
+Hi Sam,
+
+The Program is  simple to use, just execute
+ex 'BIMS64.TSO.CLISTUDB(LUWDB2)'
+where or BIMS64.TSO is my userid and the qualifier.
+
+The Panels and Skeletons would by dynamically allocated.
+
+There are different tools for every Database Version from
+DB2 LUW 9.7 - 11.5 and DB2 z/OS for v8  to v12
+
+It's a DB2 Navigation and Administration tool to
+navigate a DB2 Catalog or genearate / execute DDL's , DML-s, SQL-s
+
+You can also alter object's (Table, index, Stored Procedures, .....)
+Run the IBM Online and  offline Utilities
+
+It's simple to use, all you need is the DSNREXX that is included
+in the DB2 Environment.
+
+What you also need to do is to edit the file #SSIDINF
+and change the ssid specifig datasets for each SSID
+Its nessesary for The IBM Online Utilities (Copy, Reorg, runstats, ....)
+Or Offline Utilities (DIAGNOSE, DSN1SDMP, DSN1PRNT, DSN1LOGP, ...)
+
+your_ssid LOAD1    = "your.SDSNLOAD"
+your_ssid LOAD2    = "your.SDSNEXIT"
+your_ssid LOAD3    = ""
+your_ssid LOAD4    = ""
+your_ssid LOAD5    = ""
+your_ssid DBRM1    = "your.DBRMLIB.DATA"
+your_ssid DBRM2    = ""
+your_ssid DBRM3    = ""
+your_ssid DBRM4    = ""
+your_ssid DBRM5    = ""
+your_ssid RUNLIB   = "your.RUNLIB.LOAD"
+your_ssid MAPTAB   = "DB2MAP.Mapping_Table"   /*your mapping table */
+your_ssid MAPDB    = "Mapping_Database"       /*your mapping Database */
+your_ssid BSDS1    = "your.BSDS01"
+your_ssid BSDS2    = "your.BSDS02"
+
+To Start the Program just execute the REXX LUWDB2
+
+After you execute luwdb2  (ex 'BIMS64.TSO.CLISTUDB(LUWDB2)'   )
+you get this Panel to select what database if you want to
+Administrate a DB2 LUW (LinuxUnixWindows) or a DB2 on z/OS
+
+Enter the SSID you want to use and you get the second PANEL
+If you want to use a LUW Database, you have to enter the location
+for this Database
+
+
+for zos
+ ---------------------- Verwalten DB2/LUW          --------------------
+ Command ===>
+
+    User-ID  BIMS64     SMFID  D158   Datum  9 JUN 2021    Zeit  07:52:35
+
+      FUNKTION     1.) DB2 LUW   From 10.1 to 11.5 ( Catalog Information)
+                   2.) DB2 z/OS  From V10 until V12 (Catalog Information)
+                   3.) Schattenkataloge             (Catalog Information)
+                  20.) REXX Parms
+
+                  99.) ENDE
+
+
+
+
+      AUSWAHL  ===> 2   /* Select the function */
+
+      SSID     ===> DB4E
+      Location ===>
+      Userid   ===>
+      Password ===>
+
+ ---------------------- Verarbeiten DB2 for zOS    ---------------------
+ Command ===>
+  User-ID BIMS64   SSID DB4E  LOCATION              FUNLEVEL 12.1.508 (NFM)
+  Session NR0001   SQLID DB2SW                      CATLEVEL 12.1.507 (NFM)
+
+
+ Function:  SG   Storegegroup     VO   Volumes (SG)
+            DB   Database         TS   TableSpace       TP   Tablespart
+            TB   Table            IX   Index            IP   Indexpart
+            KT   Key Target.      PK   Primary Keys     FK   Foreign key
+            IS   Indexspace       TG   Trigger          VW   Views
+            MQT  Mat.Query Tab    RT   Routines         SE   Sequences
+            AL   Alias            SY   Synonyme         PERM Perm/Mask
+            VAR  Variable         DT   Datatypes        CK   Checks
+            RO   Role             CO   Columns          TCO  Trusted Cont.
+            SC   Schema           DEP  Dependencies     UT   UTILITY
+            PTS  Pending TS       PTB  Pending TB       PDDL Pending DDL
+            RFS  RestFul Serv.    STF  Stats Feedback   STP  Stats Profile
+            IMU  IX Memory Con    IXC  Index Cleanup    IC   ImageCopy
+            ICO  IC ONLY          LFIC Last Full IC     LIC  Last ICopy
+            PL   Plans            CID  Collection ID    PG   Packages
+            PGC  PACKAGE COPY     PGLI Packagelist      SR   Strings
+            ST   Statements       XO   XSD Objects      XMLS XML String
+            JAR  JAR Objects      IPN  IP-Names         LO   Locations
+            LU   LU Names         UN   User Names       ENV  ENV-VAR-Objec
+            OBDS OBDS (RECOVER)   DBRM DBRM             ATW  AUTOTIMEWINDOw
+            LVU  Level Update
+            Permissions:
+            DBA  Database Auth    RA   Recource Auth    UA   User Auth
+            SCA  Schema Auth      TBA  Table Auth       RTA  Routine Auth
+            SEA  Sequence Auth    PGA  Package Auth     PLA  Plan Auth
+            PRGA Prog Auth        VARA Variable Auth
+
+            Stored Procedure :
+            BP   Bufferpool       THD  Threads          DDF  DDF Info
+            DISTS DISPLAY TS      DISA DIS ADVISORY     DISR DIS RESTRICT
+            DSINFO Meberlist      GRP  Group Info       ZPARM Zparm Info.
+
+            PSQL Performance SQL
+
+  Auswahl ===> TB                   Edit SQL ===>    Y/N
+  Object  ===> BIMS64.%
+
+ PF3=ENDE PF4=CANCEL  PF7=BACK PF8=NEXT
+ ----------------------------------  E n d e  ----------------------------------
+
+
+Have a nice weekend
+
+Uli
+
+

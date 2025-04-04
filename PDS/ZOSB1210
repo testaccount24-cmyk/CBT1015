@@ -1,0 +1,1879 @@
+/* REXX */
+/*******************************************************************/
+/*                                                                 */
+/* ProgramNAME      : ZOSB1210  (fuer UDB V11 Nr 210)              */
+/* AUSRUF           : AUS ISPF                                     */
+/* AUTHER           : ULRICH BRAEUER                               */
+/* FUNKTION         : Auswahl Catalog Informationen                */
+/*                                                                 */
+/*                                                                 */
+/*******************************************************************/
+
+"DELSTACK"
+ENV      = "TSO"
+X        = MSG('OFF')
+USER     = USERID()
+SMFID    = MVSVAR('SYSNAME')
+
+SIGNAL  ON FAILURE
+SIGNAL OFF ERROR
+SIGNAL  ON SYNTAX
+SIGNAL  ON HALT
+
+ADDRESS ISPEXEC "CONTROL ERRORS RETURN"
+ADDRESS ISPEXEC 'VGET (UDBTRACE) PROFILE'
+IF UDBTRACE = 'ON' THEN TRACE R
+ELSE                    TRACE
+
+SYSCATS    = "SYSCAT"
+SYSIBMS    = "SYSIBM"
+SYSIBMA    = "SYSIBMADM"
+SYSPROCA   = "SYSPROC"
+RECLEN     = 4096
+TRACKS  = 60
+ADDRESS ISPEXEC 'VGET (TRACKS) PROFILE'
+ADDRESS ISPEXEC 'VGET (RECLEN) PROFILE'
+ADDRESS ISPEXEC 'VGET (SYSIBMS) PROFILE'
+ADDRESS ISPEXEC 'VGET (SYSCATS) PROFILE'
+ADDRESS ISPEXEC 'VGET (SYSIBMA) PROFILE'
+ADDRESS ISPEXEC 'VGET (SYSPROCA) PROFILE'
+ADDRESS ISPEXEC 'VGET (CURSQLID) PROFILE'
+
+if arg() > 10 then do
+   SSID        = ARG(1)
+   EDIT_SQL    = ARG(2)
+   LOCATION    = ARG(3)
+   LNR         = ARG(4)
+   TABNR       = ARG(5)
+   DB2Vers     = ARG(6)
+   proclib     = ARG(7)
+   ISPFILE     = ARG(8)
+   AUSWAHL     = ARG(9)
+   OBJECT      = ARG(10)
+   OBJECT2     = ARG(11)
+   OBJECT3     = ARG(12)
+   OBJECT4     = ARG(13)
+   OBJECT5     = ARG(14)
+   TABLESPACE  = ARG(15)
+   DATABASE    = ARG(16)
+   STGROUP     = ARG(17)
+   LISTOBJECT  = ARG(18)
+ end
+else do
+   SSID        = ARG(1)
+   EDIT_SQL    = ARG(2)
+   LOCATION    = ARG(3)
+   LNR         = ARG(4)
+   TABNR       = ARG(5)
+   DB2Vers     = ARG(6)
+   proclib     = ARG(7)
+   ISPFILE     = ARG(8)
+   AUSWAHL     = ARG(9)
+   OBJECT      = ARG(10)
+   OBJECT2     = ''
+   OBJECT3     = ''
+   OBJECT4     = ''
+   OBJECT5     = ''
+   TABLESPACE  = ''
+   DATABASE    = ''
+   STGROUP     = ''
+   LISTOBJECT  = ''
+   Object_list = ''
+ end
+
+Init_Object  = Object
+Init_Object2 = Object2
+Init_Object3 = Object3
+Init_Object4 = Object4
+Init_Object5 = Object5
+
+Select
+   When WORD(AUSWAHL, 2) = "LIC"  Then do
+        AUSWAHL    = "IC"
+        LISTOBJECT = "LIC"
+    End
+   When WORD(AUSWAHL, 2) = "LFIC"  Then Do
+        AUSWAHL    = "IC"
+        LISTOBJECT = "LFIC"
+    End
+   When AUSWAHL = "LIC"  Then Do
+        AUSWAHL    = "IC"
+        LISTOBJECT = "LIC"
+    End
+   When AUSWAHL = "LFIC" Then do
+        AUSWAHL = "IC"
+        LISTOBJECT = "LFIC"
+    End
+   When AUSWAHL = "PTB" Then do
+        AUSWAHL    = "TB"
+        LISTOBJECT = "PENDING TABLES"
+    End
+   When AUSWAHL = "PTS" Then do
+        AUSWAHL    = "TS"
+        LISTOBJECT = "PENDING TABLES"
+    End
+   When AUSWAHL = "IS"  Then do
+        OBJECT5 = OBJECT
+        OBJECT  = ""
+        AUSWAHL = "IX"
+    End
+   When AUSWAHL = "TB  PT" Then do
+        AUSWAHL = "TB  FK"
+    End
+   When AUSWAHL = "TB  CT" Then do
+        AUSWAHL = "TB  FK"
+    End
+   When AUSWAHL = "PSQL" Then do
+        Call AUFRUF_ZOSB1935
+        return 0
+    End
+   Otherwise NOP
+ End
+STATEMENT = ""
+
+Call Get_CFG_FILE
+
+ADDRESS ISPEXEC 'VGET ('STRIP(SSID)'SQID) PROFILE'
+SSID_CURRENT_SQLID = value(STRIP(SSID)"SQID")
+If length(SSID_CURRENT_SQLID) > 0 then do
+   CURSQLID = SSID_CURRENT_SQLID
+ End
+IF CURSQLID   = "NONE" THEN CURSQLID = ""
+
+listtb         = ListObject
+LUWTABLE       = "LUWTB"tabnr
+COLTAB         = "COLTB"tabnr
+BRTAB          = "BROWS"tabnr
+TBCOL          = "TBCOL"tabnr
+crlf           = "0a0d"x
+
+SIGNAL ON  ERROR
+AwOk = ZOSB1900("ZOSB1210" ,,
+                "CHKFKAW"  ,,
+                 auswahl   ,,
+                 lnr    )
+
+SIGNAL OFF ERROR
+If AwOk = '' Then Return 8
+
+parse value AwOk with auswkz '-NW' ,
+                      auswtext '-NW' ,
+                      Azeile   '-NW' ,
+                      Hzeile   '-NW' ,
+                      .
+Search = strip(object) strip(object2) strip(tablespace)
+auswahl = auswkz
+
+address ispexec  'TBERASE 'TBCOL    ' LIBRARY(ISPTABL)'
+address ispexec  'TBERASE 'BRTAB    ' LIBRARY(ISPTABL)'
+address ispexec  'TBERASE 'COLTAB   ' LIBRARY(ISPTABL)'
+address ispexec  'TBERASE 'LUWTABLE ' LIBRARY(ISPTABL)'
+If RC >  8  Then do
+   say "Error on TBERASE RC="RC "TABLE="LUWTABLE
+   say Errortext(rc)
+ End
+address ispexec  'TBOPEN ' LUWTABLE
+if rc /= 0 then Do
+   ADDRESS ISPEXEC 'TBCREATE 'LUWTABLE  ,
+                   'KEYS(ROWNR) NAMES(LCMD, LZEILE)'
+ End
+address ispexec 'TBCLOSE ' LUWTABLE
+
+call Lesen_daten
+IF LENGTH(DDLTEXT) = 0 THEN DO
+   X        = MSG('ON')
+   ZEDSMSG = ""
+   ZEDLMSG = "KEIN TREFFER ZUR AUSWAHL "
+   msgfld  = '1,5'
+   ADDRESS ISPEXEC "SETMSG MSG(ISRZ001) MSGLOC(MSGFLD) WINDOW=RESP"
+   X        = MSG('OFF')
+   RETURN 0
+ End
+
+CURSOR = 'CURSOR( )'
+CSRROW = 'CSRROW(1)'
+RETCODE = RC
+MESSAGE = 'MSG( )'
+ZTDSELS = 0
+ZTDTOP = 0
+LAUFNR = 1
+LOBJ   = ""
+
+/*  OK = ISPF_TAB_INFO(BRTAB) */
+
+address ISPEXEC 'TBOPEN 'BRTAB
+address ISPEXEC 'TBTOP  'BRTAB
+address ISPEXEC 'TBSKIP 'BRTAB
+address ISPEXEC 'TBCLOSE'BRTAB
+
+area_start = 1
+Zeilen_Len = Length(BZeile)
+
+DO FOREVER
+   IF LISTDSI(IPFFILE "FILE") <> 0 THEN do
+      TLIB  = reverse(ISPFILE)
+      PARSE VALUE TLIB WITH x1 "." FILE
+      TLIB  = "'" || reverse(FILE) || "." || "TABLEUDB'"
+      ADDRESS "TSO" "ALLOC F(ISPFILE) DA("SPFILE") SHR "
+      ADDRESS ISPEXEC "LIBDEF ISPTLIB DATASET ID("TLIB") UNCOND STACK"
+      ADDRESS ISPEXEC "LIBDEF ISPTABL DATASET ID("TLIB") UNCOND STACK"
+    End
+
+   Call Alter_PFKEY
+   address ispexec  'TBOPEN 'LUWTABLE
+   CURSOR = 'CURSOR(LZeile)'
+   CSRROW = 'CSRROW(1)'
+   address ISPEXEC 'TBTOP  'LUWTABLE
+   address ISPEXEC 'TBSKIP 'LUWTABLE' NUMBER('ZTDTOP')'
+   address ispexec 'TBDISPL 'LUWTABLE' PANEL(PLUWOBJA)',
+                   MESSAGE CURSOR 'CSRROW('LAUFNR')' ,
+                   'AUTOSEL(NO) POSITION(CRP)'
+
+   Call Rest_PFKEY
+   COMMAND = ZCMD
+
+   ADDRESS ISPEXEC "VGET (ZVERB,ZSCROLLA,ZSCROLLN, ZSCROLLD) "
+   ADDRESS ISPEXEC "VGET (ZXSMAX, ZXSMIN) "
+   ADDRESS ISPEXEC "VGET (ZSCREENW,ZSCREEND,ZSCREENC)"
+   Cur_Scroll = ZSCREENC // ZSCREENW
+   Cur_Zeile  = ZSCREENC % ZSCREENW
+   Cur_CRP    = ZTDTOP + (Cur_Zeile - 5)  /* Aktuelle CRP vom Cursor */
+
+   If Cur_Zeile < 4 Then Cur_Scroll = 0
+   /* PF Tasten Pruefen  */
+   Select
+      WHEN SUBSTR(COMMAND,1,3) = "CAN"  THEN DO
+           address ispexec 'TBCLOSE 'LUWTABLE
+           address ispexec 'TBERASE 'LUWTABLE
+           address ispexec 'TBCLOSE 'COLTAB
+           address ispexec 'TBERASE 'COLTAB
+           address ispexec 'TBCLOSE 'BRTAB
+           address ispexec 'TBERASE 'BRTAB
+           address ispexec 'TBCLOSE 'TBCOL
+           address ispexec 'TBERASE 'TBCOL
+           Leave
+       end
+      WHEN SUBSTR(COMMAND,1,4) = "EDIT"  THEN DO
+           Call Rest_PFKEY
+           call Edit_Table
+           command = ""
+           Iterate
+       end
+      WHEN SUBSTR(COMMAND,1,6) = "SQLERR"  THEN DO
+           Call SQLERR
+           command = ""
+           Iterate
+       end
+      WHEN SUBSTR(COMMAND,1,5) = "SQLID"  THEN DO
+           if word(command, 2) =  "" Then SETSQLID = USERID()
+           Else                           SETSQLID = word(command, 2)
+           interpret STRIP(SSID)'SQID ='SETSQLID
+           ADDRESS ISPEXEC 'VPUT ('STRIP(SSID)'SQID) PROFILE'
+           ZCMD = ''
+           Iterate
+       end
+      WHEN SUBSTR(COMMAND,1,6) = "SCHEMA"  THEN DO
+           if word(command, 2) =  "" Then CURSCHEM = USERID()
+           Else                           CURSCHEM = word(command, 2)
+           ADDRESS ISPEXEC 'VPUT (CURSCHEM) PROFILE'
+           ZCMD = ''
+           Iterate
+       end
+      WHEN SUBSTR(COMMAND,1,3) = "SQL"  THEN DO
+           command = "SQL"
+           call AUFRUF_ZOSB1910
+           ZCMD = ''
+           Iterate
+       end
+      WHEN SUBSTR(COMMAND,1,4) = "PSQL"  THEN DO
+           Call AUFRUF_ZOSB1935
+           ZCMD = ''
+           Iterate
+       end
+      WHEN SUBSTR(COMMAND,1,5) = "ZPARM"  THEN DO
+           Call ZOSZPARM ssid, lnr
+           command = ""
+           Iterate
+       end
+      WHEN SUBSTR(COMMAND,1,7) = "DSNTIAD"     ,
+         | SUBSTR(COMMAND,1,8) = "DSNTIAUL"    ,
+         | SUBSTR(COMMAND,1,7) = "DSNTEP2"     ,
+         | SUBSTR(COMMAND,1,7) = "DSNTEP4"     ,
+         | SUBSTR(COMMAND,1,8) = "DSNJU003"    ,
+         | SUBSTR(COMMAND,1,8) = "DSNJU004"    ,
+         | SUBSTR(COMMAND,1,8) = "DSN1LOGP"    ,
+         | SUBSTR(COMMAND,1,8) = "DSN1PRNT"    ,
+         | SUBSTR(COMMAND,1,8) = "DIAGNOSE"    ,
+         | SUBSTR(COMMAND,1,8) = "DSN1SDMP"    Then Do
+           EINGABE    = COMMAND
+           OBJECT1    = ""
+           OBJECT2    = ""
+           OBJECT3    = ""
+           OBJECT4    = ""
+           OBJECT5    = ""
+           parse value CZeile with cr value(crlf) ,
+                                   nm value(crlf) .
+           object1     = strip(cr) || '.' || strip(nm)
+           CALL AUFRUF_ZOSB1915
+           command = ""
+           Iterate
+       end
+      WHEN SUBSTR(COMMAND,1,7) = "EXPLAIN"     Then Do
+           EINGABE    = COMMAND
+           OBJECT1    = ""
+           OBJECT2    = ""
+           OBJECT3    = ""
+           OBJECT4    = ""
+           OBJECT5    = ""
+           parse value CZeile with cr value(crlf) ,
+                                   nm value(crlf) .
+           object1     = strip(cr) || '.' || strip(nm)
+           CALL AUFRUF_ZOSB1930
+           command = ""
+           Iterate
+       end
+      WHEN SUBSTR(COMMAND,1,8) = "DSN1COPY" Then Do
+           EINGABE    = COMMAND
+           CALL AUFRUF_ZOSB1940
+           command = ""
+           Iterate
+       end
+      WHEN WORD(COMMAND,1) = "TRACE" then do
+           IF WORD(COMMAND, 2) = "ON"  Then trace('R')
+           IF WORD(COMMAND, 2) = "OFF" Then trace('O')
+           UDBTRACE = word(COMMAND, 2)
+           ADDRESS ISPEXEC 'VPUT (UDBTRACE) PROFILE'
+           ZCMD = ''
+       end
+      WHEN WORD(COMMAND, 1) = "REF" then do
+           call Lesen_daten
+           Iterate
+       end
+      WHEN SUBSTR(COMMAND,1,3) = "OPT"  THEN DO
+           call ARXPARM1 SSID
+           ZCMD = ''
+           Iterate
+       end
+      When PF                  = 'PF01' THEN DO
+           Call LUWHELP "ZOS", ,
+                        lnr,   ,
+                        tabnr, ,
+                        auswahl, ,
+                        Azeile, ,
+                        Hzeile, ,
+                        UZeile, ,
+                        "ZOSB1"
+
+           If Strip(result) > "" Then do
+              crp     = Cur_CRP
+              ROWNR   = Cur_CRP
+              ADDRESS ISPEXEC 'TBSCAN  'LUWTABLE ,
+                              ' ARGLIST(ROWNR) CONDLIST(EQ)'
+              ADDRESS ISPEXEC 'TBGET   'LUWTABLE
+              HCMD = Strip(RESULT) || " "
+              LZeile = HCMD Substr(Lzeile, Length(HCMD)+1 )
+              ZTDSELS = 1
+
+            End
+           ELSE Iterate
+       end
+      When PF                  = 'PF03' THEN DO
+           address ispexec 'TBCLOSE 'LUWTABLE
+           address ispexec 'TBERASE 'LUWTABLE
+           address ispexec 'TBCLOSE 'COLTAB
+           address ispexec 'TBERASE 'COLTAB
+           address ispexec 'TBCLOSE 'BRTAB
+           address ispexec 'TBERASE 'BRTAB
+           address ispexec 'TBCLOSE 'TBCOL
+           address ispexec 'TBERASE 'TBCOL
+           LEAVE
+       end
+      When PF                  = 'PF04' THEN DO
+           address ispexec 'TBCLOSE 'LUWTABLE
+           address ispexec 'TBERASE 'LUWTABLE
+           address ispexec 'TBCLOSE 'COLTAB
+           address ispexec 'TBERASE 'COLTAB
+           address ispexec 'TBCLOSE 'BRTAB
+           address ispexec 'TBERASE 'BRTAB
+           address ispexec 'TBCLOSE 'TBCOL
+           address ispexec 'TBERASE 'TBCOL
+           Leave
+       end
+      When PF                  = 'PF05' THEN DO
+           Object  = Init_Object
+           Object2 = Init_Object2
+           Object3 = Init_Object3
+           Object4 = Init_Object4
+           Object5 = Init_Object5
+           call Lesen_daten
+           Iterate
+       end
+      When PF                  = 'PF10' THEN Do
+           select
+             when area_start = 1      Then Iterate
+             when Word(ZCmd, 2) = 'M' Then do
+                  area_start = 1
+              End
+             when Datatype(Word(ZCmd, 2)) = 'NUM' Then do
+                  area_start = area_start - Word(ZCmd, 2)
+              End
+             when Cur_Scroll > 1 Then do /* Cursor wurde Positioniert */
+                  area_start = area_start - (ZSCREENW - Cur_Scroll - 1)
+              End
+             Otherwise do
+                  area_start = area_start -  ZSCREENW + 1
+              End
+             End
+
+           if area_start < 1 Then area_start = 1
+           Call Schift_LZeile
+           ZCMD = ''
+           Iterate
+       End
+      When PF                  = 'PF11' THEN Do
+           select
+             when area_start = Zeilen_len - ZSCREENW + 1 Then Iterate
+             when Word(ZCmd, 2) = 'M' Then do
+                  area_start = Zeilen_len - ZSCREENW + 1
+              End
+             when Datatype(Word(ZCmd, 2)) = 'NUM' Then do
+                  area_start = area_start + Word(ZCmd, 2)
+              End
+             when Cur_Scroll > 1 Then do /* Cursor wurde Positioniert */
+                  area_start = area_start + Cur_Scroll - 1
+              End
+             Otherwise do
+                  area_start = area_start +  ZSCREENW - 1
+              End
+             End
+
+           if area_start > Zeilen_Len Then Do
+              area_start = area_start - ZSCREENW + 1
+            End
+           if area_start < 1 Then area_start = 1
+
+           Call Schift_LZeile
+           ZCMD = ''
+           Iterate
+       End
+      When RC > 4 THEN DO
+          SAY "Error on display panel PLUWOBJA RC="RC
+          LEAVE
+       END
+      Otherwise NOP
+     End
+
+    if ZTDSELS > 0 Then    LAUFNR = crp
+    drop selrows.
+    selrows.0 = 0
+    DO while ZTDSELS > 0
+       eingabe = ''
+       GZeile  = LZeile
+       selrows.0 = selrows.0 + 1
+       seli      = selrows.0
+       selrows.seli = ROWNR
+       address ispexec 'TBGET   'LUWTABLE
+       OZeile   = Substr(LZeile, 1, length(GZeile))
+       Eingabe  = find_command(Gzeile, Ozeile)
+       Eingabe  = Translate(Eingabe)
+       LCMD     = EINGABE
+       If LCMD = "=" & LastLCMD <> "" Then LCMD = LastLCMD
+       if LCMD <> LastLCMD Then LastLCMD = LCMD
+       address ispexec 'TBMOD   'LUWTABLE 'SAVE(LCMD)'
+       ADDRESS ISPEXEC 'TBSKIP 'LUWTABLE 'POSITION(ROWNO)'
+       if ZTDSELS = 1 then leave
+       address ispexec 'TBDISPL 'LUWTABLE
+     end /* DO cnt = 1....   */
+
+    if ZTDSELS = 0 then Iterate   /* Keine Auswahl getroffen */
+
+    ADDRESS ISPEXEC 'TBQUERY 'LUWTABLE ' ROWNUM(ROWINTAB)'
+    ADDRESS ISPEXEC 'TBTOP   'LUWTABLE
+    ADDRESS ISPEXEC 'TBOPEN  'COLTAB
+    ADDRESS ISPEXEC 'TBTOP   'COLTAB
+    do seli = 1 to  selrows.0
+       rownr  = selrows.seli
+       ADDRESS ISPEXEC 'TBSCAN  'LUWTABLE' ARGLIST(ROWNR) CONDLIST(EQ)'
+       Eingabe = ""
+       ADDRESS ISPEXEC 'TBTOP   'COLTAB
+       ADDRESS ISPEXEC 'TBSCAN  'COLTAB' ARGLIST(ROWNR) CONDLIST(EQ)'
+       address ispexec 'TBGET   'COLTAB
+
+       LCMD = Strip(LCMD)
+       if Length(LCMD) = 0  Then Do
+          Address ispexec 'TBSKIP  'LUWTABLE
+          ADDRESS ISPEXEC 'TBGET   'LUWTABLE
+          Iterate
+        End
+
+       eingabe2 = ""
+       If Words(lcmd) > 1 Then Do
+          eingabe2 = Subword(lcmd, 2)
+          lcmd     = Word(lcmd, 1)
+          Eingabe  = lcmd
+        End
+
+       if wordpos(lcmd, AZeile, 1) > 0 ,
+        | wordpos(lcmd, HZeile, 1) > 0 THEN Do
+          eingabe = lcmd
+          CALL AUFRUF_ZOSB1210
+        end
+
+       ADDRESS ISPEXEC 'VGET (UDBTRACE) PROFILE'
+       IF UDBTRACE = 'ON' THEN TRACE R
+       ELSE                    TRACE
+       LCMD = "    "
+       address ispexec 'TBMOD   'LUWTABLE 'SAVE(LCMD)'
+       Address ispexec 'TBSKIP  'LUWTABLE
+       ADDRESS ISPEXEC 'TBGET   'LUWTABLE
+     end /* DO cnt = 1....   */
+    ADDRESS ISPEXEC 'TBCLOSE 'LUWTABLE
+    ADDRESS ISPEXEC 'TBCLOSE 'COLTAB
+ end /*DO FOREVER */
+
+Call Rest_PFKEY
+
+Return 0
+
+Alter_PFKEY:
+
+address ISPEXEC "VGET (zpf01) PROFILE"
+address ISPEXEC "VGET (zpf10) PROFILE"
+address ISPEXEC "VGET (zpf11) PROFILE"
+address ISPEXEC "VGET (zpf05) PROFILE"
+save_pf01 = zpf01
+save_pf05 = zpf05
+save_pf10 = zpf10
+save_pf11 = zpf11
+
+If save_pf01 = "" Then do
+   save_pf01 = 'HELP'
+   zpf01     = save_pf01
+   address ISPEXEC "VPUT (zpf01) PROFILE"
+ End
+
+zpf01 = "UDBH"
+zpf05 = "UDBF"
+zpf10 = "UDBL"
+zpf11 = "UDBR"
+address ISPEXEC "VPUT (zpf01) PROFILE"
+address ISPEXEC "VPUT (zpf05) PROFILE"
+address ISPEXEC "VPUT (zpf10) PROFILE"
+address ISPEXEC "VPUT (zpf11) PROFILE"
+
+Return 0
+
+Rest_PFKEY:
+
+zpf01     = 'HELP'
+zpf05     = 'RFIND'
+zpf10     = 'LEFT'
+zpf11     = 'RIGHT'
+address ISPEXEC "VPUT (zpf01) PROFILE"
+address ISPEXEC "VPUT (zpf05) PROFILE"
+address ISPEXEC "VPUT (zpf10) PROFILE"
+address ISPEXEC "VPUT (zpf11) PROFILE"
+
+Return 0
+
+Schift_LZeile:
+
+  If Zeilen_len - ZSCREENW < 1 Then Return /* Kein Schiften */
+
+  ADDRESS ISPEXEC 'TBCLOSE 'LUWTABLE
+  ADDRESS ISPEXEC 'TBERASE 'LUWTABLE
+  ADDRESS ISPEXEC 'TBCREATE 'LUWTABLE  ,
+                  'KEYS(ROWNR) NAMES(LCMD, LZEILE)'
+  ADDRESS ISPEXEC 'TBOPEN  'LUWTABLE
+
+  ADDRESS ISPEXEC 'TBOPEN 'BRTAB
+  ADDRESS ISPEXEC 'TBTOP  'BRTAB
+  ADDRESS ISPEXEC 'TBSKIP 'BRTAB
+
+  Do While RC = 0
+     LZeile = Substr(BZeile, area_start,  ZSCREENW )
+/*   if area_start > 1 then LZEILE = "       " || LZEILE  */
+     ADDRESS ISPEXEC 'TBADD 'LUWTABLE
+     ADDRESS ISPEXEC 'TBSKIP 'BRTAB
+   End
+
+  ADDRESS ISPEXEC 'TCLOSE 'BRTAB
+  ADDRESS ISPEXEC 'TCLOSE 'LUWTABLE
+
+  UZeile = Substr(SUZeile, area_start,  ZSCREENW )
+
+return
+
+Lesen_daten:
+
+LOC  = LOCATION
+FK   = AUSWKZ
+OB   = object
+OB2  = Object2
+OB3  = Object3
+OB4  = Object4
+OB5  = Object5
+TS   = Tablespace
+DB   = DATABASE
+SG   = STGROUP
+LOBJ = ListObject
+
+DDLTEXT = ""
+DDLTEXT = DDLTEXT ZOSB1AC3(SSID,   ,           /* SSID    */
+                           EDIT_SQL,,          /* Edit SQL */
+                           LOC,    ,           /* LOCATION */
+                           LNR,    ,           /* TABLENR */
+                           TABNR,  ,           /* TABLENR */
+                           FK,     ,           /* FUKTION */
+                           OB,     ,           /* OBJECT  */
+                           OB2,    ,           /* TABLE   */
+                           OB3,    ,           /* TABLE   */
+                           OB4,    ,           /* TABLE   */
+                           OB5,    ,           /* TABLE   */
+                           TS,     ,           /* TABLESPACE */
+                           DB,     ,           /* DATABASE   */
+                           SG,     ,           /* STORAGEGROUP */
+                           LOBJ,   ,           /* List Object*/
+                           ISPFILE)            /* ISPFILE    */
+
+DDLTEXT = STRIP(DDLTEXT)
+EDIT_SQL = ""
+IF LENGTH(DDLTEXT) = 0 THEN DO
+   X        = MSG('ON')
+   ZEDSMSG = ""
+   ZEDLMSG = " -KEIN TREFFER ZUR AUSWAHL- "
+   msgfld  = '1,5'
+   ADDRESS ISPEXEC "SETMSG MSG(ISRZ001) MSGLOC(MSGLINE)"
+   X        = MSG('OFF')
+   RETURN 0
+ End
+
+DO FOREVER
+   PARSE VALUE DDLTEXT WITH LZEILE  '-NR' REST
+   IF SUBSTR(LZEILE, 1, 4) = "*UZ*" THEN DO
+      UZeile = substr(LZeile, 5)
+      UZeile = "       " || substr(LZeile, 5)
+    end
+   IF REST = '' THEN LEAVE
+   DDLTEXT = REST
+ END
+ SUZeile = UZeile
+
+return
+
+fuellen_auswahl:
+   listtb = ''
+   DB2_LIST_OBJ = ""
+   auswahlok = 'N'
+   call Get_Command
+
+   select
+      when auswkz = 'SG' Then do
+           Call Auto_Parse
+           nm    = NAME
+           cr    = CREATOR
+       end
+      when auswkz = 'DB' then do
+           Call Auto_Parse
+           dn    =   NAME
+           cr    =   CREATOR
+           sg    =   STGROUP
+           STGROUP = ""
+           bp    =   BPOOL
+           ixbp  =   INDEXBP
+
+       end
+      when auswkz = 'TS' then do
+           Call Auto_Parse
+             db  = dbname
+             ts  = name
+             sg  = STORNAME
+             bp  = BPOOL
+           type  = TYPE
+       end
+      when auswkz = 'TB' then do
+           Call Auto_Parse
+                cr  = creator
+                nm  = name
+                ty  = type
+                db  = dbname
+                ts  = tsname
+              tbcr  = tbcreator
+              tbnm  = tbname
+              vecr  = VERSIONING_SCHEMA
+              venm  = VERSIONING_TABLE
+              arcr  = ARCHIVING_SCHEMA
+              arnm  = ARCHIVING_TABLE
+       end
+      when auswkz = 'TBH' then do
+           Call Auto_Parse
+                cr  = creator
+                nm  = name
+                db  = DBName
+                ts  = TSName
+              Stime = STATSTIME
+       end
+      when auswkz = 'BASE'   ,
+         | auswkz = 'XML'    ,
+         | auswkz = 'AUX'    ,
+         | auswkz = 'TSBASE' ,
+         | auswkz = 'TSAUX'  ,
+         | auswkz = 'TSXML' then do
+           Call Auto_Parse
+           cr    = Creator
+           nm    = Name
+           ty    = Type
+           db    = DBName
+           ts    = TSName
+       end
+      when auswkz = 'VW' then do
+           Call Auto_Parse
+           cr   = DCREATOR
+           nm   = DNAME
+           ty   = BTYPE
+           tc   = BCREATOR
+           tn   = BNAME
+       end
+      when auswkz = 'MQT' then do
+           Call Auto_Parse
+           cr   = CREATOR
+           nm   = NAME
+           ty   = TYPE
+           db   = DBNAME
+           ts   = TSNAME
+
+       end
+      when auswkz = 'IX' then do
+           Call Auto_Parse
+           cr   = CREATOR
+           nm   = NAME
+           tc   = TBCREATOR
+           tn   = TBNAME
+           bp   = BPOOL
+           db   = DBNAME
+           is   = INDEXSPACE
+           hash   = HASH
+        End
+      when auswkz = 'IP' then do
+           Call Auto_Parse
+           cr     = IXCREATOR
+           nm     = IXNAME
+           pa     = PARTITION
+           db     = DBNAME
+           is     = INDEXSPACE
+           vsam   = VSAMDS
+       end
+      when auswkz = 'KT' then do
+           Call Auto_Parse
+           nm     = IXNAME
+           cr     = IXSCHEMA
+           kseq   = KEYSEQ
+           cno    = COLNO
+        End
+      when auswkz = 'TBA' then do
+           parse value CZeile with go value(crlf) ,
+                                   ge value(crlf) ,
+                                   db value(crlf) ,
+                                   sc value(crlf) ,
+                                   st value(crlf) ,
+                                   tn value(crlf) ,
+                                   tc value(crlf) ,
+                                  aut value(crlf) ,
+                                  sel value(crlf) ,
+                                  ins value(crlf) ,
+                                  upd value(crlf) ,
+                                  del value(crlf) ,
+                                  alt value(crlf) ,
+                                  ind value(crlf) ,
+                                  ref value(crlf) ,
+                                  tri value(crlf) ,
+                                   .
+
+       end
+      when auswkz = 'RA'   then do
+           parse value CZeile with go value(crlf) ,
+                                   ge value(crlf) ,
+                                   cr value(crlf) ,
+                                   nm value(crlf) ,
+                                  ahg value(crlf) ,
+                                  obt value(crlf) ,
+                                   .
+       end
+      when auswkz = 'DBA'  then do
+           Call Auto_Parse
+           go  = GRANTOR
+           ge  = GRANTEE
+           nm  = NAME
+       end
+      when auswkz = 'RTA'  then do
+           parse value CZeile with go value(crlf) ,
+                                   ge value(crlf) ,
+                                   cr value(crlf) ,
+                                   nm value(crlf) ,
+                                  dts value(crlf) ,
+                                   .
+       end
+      when auswkz = 'SEA'  then do
+           Call Auto_Parse
+           go   = GRANTOR
+           ge   = GRANTEE
+           sc   = SCHEMA
+           nm   = NAME
+           dts  = GRANTEDTS
+       end
+      when auswkz = 'PGA'  then do
+           Call Auto_Parse
+            go   = GRANTOR
+            ge   = GRANTEE
+            lo   = LOCATION
+            co   = COLLID
+            nm   = NAME
+           cot   = CONTOKEN
+           dts   = TIMESTAMP
+       end
+      when auswkz = 'UA'  then do
+           Call Auto_Parse
+           go  = GRANTOR
+           ge  = GRANTEE
+           dts = TIMESTAMP
+       end
+      when auswkz = 'COA' then do
+           parse value CZeile with go value(crlf) ,
+                                   ge value(crlf) ,
+                                   tc value(crlf) ,
+                                   tn value(crlf) ,
+                                   co value(crlf) ,
+                                   .
+       end
+      when auswkz = 'PLA'  then do
+           parse value CZeile with go value(crlf) ,
+                                   ge value(crlf) ,
+                                   nm value(crlf) ,
+                                  dts value(crlf) ,
+                                   .
+       end
+      when auswkz = 'TP' then do
+           Call Auto_Parse
+           parse value CZeile with pa value(crlf) ,
+                                   db value(crlf) ,
+                                   ts value(crlf) ,
+                                 vsam value(crlf) ,
+                                    .
+       end
+      when auswkz = 'KC' then do
+           parse value CZeile with nm value(crlf) ,
+                                   cr value(crlf) ,
+                                   co value(crlf) ,
+                                   cn value(crlf) ,
+                                   cs value(crlf) ,
+                                   or value(crlf) ,
+                                   Tc value(crlf) ,
+                                   Tn value(crlf) ,
+                                   .
+       end
+      when auswkz = 'TG' Then do
+           parse value CZeile with nm value(crlf) ,
+                                   cr value(crlf) ,
+                                   tn value(crlf) ,
+                                   tc value(crlf) .
+
+       end
+      When auswkz = 'AL'   THEN DO
+           parse value CZeile with cr value(crlf) ,
+                                   nm value(crlf) ,
+                                   TY value(crlf) ,
+                                   lc value(crlf) ,
+                                   tc value(crlf) ,
+                                   tn value(crlf) ,
+                                   .
+
+         END
+      When auswkz = 'SY'   THEN DO
+           parse value CZeile with cr value(crlf) ,
+                                   nm value(crlf) ,
+                                   tc value(crlf) ,
+                                   tn value(crlf) ,
+                                   .
+
+         END
+      when auswkz = 'SE' Then do
+           parse value CZeile with sc value(crlf) ,
+                                   sn value(crlf) ,
+                                   ty value(crlf) ,
+                                   DC value(crlf) ,
+                                   DN value(crlf) ,
+                                  COL value(crlf) ,
+                                   .
+
+       end
+      when auswkz = 'PK' Then do
+           parse value CZeile with co value(crlf) ,
+                                   tc value(crlf) ,
+                                   tn value(crlf) ,
+                                   ic value(crlf) ,
+                                   in value(crlf) ,
+                                   ty value(crlf) ,
+                                   .
+       end
+      when auswkz = 'RT' Then do
+           parse value CZeile with tc value(crlf) ,
+                                   tn value(crlf) ,
+                                   tp value(crlf) ,
+                                   nm value(crlf) ,
+                                   ln value(crlf) ,
+                                   id value(crlf) ,
+                                orgin value(crlf) ,
+                                ftype value(crlf) ,
+                           PARM_COUNT value(crlf) ,
+                               COLLID value(crlf) ,
+                      SQL_DATA_ACCESS value(crlf) ,
+                               DBINFO value(crlf) ,
+                      WLM_ENVIRONMENT value(crlf) ,
+                   WLM_ENV_FOR_NESTED value(crlf) ,
+                         PROGRAM_TYPE value(crlf) ,
+                    EXTERNAL_SECURITY value(crlf) ,
+                     COMMIT_ON_RETURN value(crlf) ,
+                          RESULT_SETS value(crlf) ,
+                           LOBCOLUMNS value(crlf) ,
+                        EXTERNAL_NAME value(crlf) ,
+                      PARAMETER_CCSID value(crlf) ,
+                              VERSION value(crlf) ,
+                               ACTIVE value(crlf) ,
+                           DEBUG_MODE value(crlf) ,
+                           TEXT_ENVID value(crlf) ,
+                           RELCREATED value(crlf) ,
+                               SECURE value(crlf) ,
+                       SYSTEM_DEFINED value(crlf) ,
+                               INLINE value(crlf) ,
+                          PACKAGEPATH value(crlf) ,
+                              RUNOPTS value(crlf) ,
+                                    .
+
+       end
+      when auswkz = 'CO' Then do
+           parse value CZeile with tc value(crlf) ,
+                                   tn value(crlf) ,
+                                   cn value(crlf) ,
+                                   nm value(crlf) ,
+                                   .
+           auswahlok = 'Y'
+       end
+      when auswkz = 'VO' Then do
+           parse value CZeile with sn value(crlf) ,
+                                   sc value(crlf) ,
+                                   vo value(crlf) ,
+                                   .
+
+       end
+      when auswkz = 'SR' Then do
+           parse value CZeile with so value(crlf) ,
+                                   tg value(crlf) ,
+                                   .
+
+       end
+      when auswkz = 'PL' Then do
+           parse value CZeile with na value(crlf) ,
+                                   cr value(crlf) ,
+                                   .
+       end
+      when auswkz = 'PG' Then do
+           parse value CZeile with lo value(crlf) ,
+                                   co value(crlf) ,
+                                   nm value(crlf) ,
+                                  ver value(crlf) ,
+                                  val value(crlf) ,
+                                   BD value(crlf) ,
+                                   op value(crlf) ,
+                                   ow value(crlf) ,
+                                 qual value(crlf) ,
+                                   .
+       end
+      when auswkz = 'CK' Then do
+           parse value CZeile with tc value(crlf) ,
+                                   tn value(crlf) ,
+                                   cn value(crlf) ,
+                                   .
+           object1 = tc || "." || tn
+           auswahlok = 'Y'
+       end
+      when auswkz = 'FK' then do
+           parse value CZeile with tc value(crlf) ,
+                                   tn value(crlf) ,
+                                  rel value(crlf) ,
+                                   rc value(crlf) ,
+                                   rn value(crlf) ,
+                                   .
+       end
+      when auswkz = 'IC' then do
+           parse value CZeile with db value(crlf) ,
+                                   ts value(crlf) ,
+                                  tis value(crlf) ,
+                                  dnr value(crlf) ,
+                                  ict value(crlf) ,
+                                  icd value(crlf) ,
+                                 srba value(crlf) ,
+                                 fseq value(crlf) ,
+                                 devt value(crlf) ,
+                                 DSN  value(crlf) ,
+                               OTYPE  value(crlf) ,
+                               STYPE  value(crlf) ,
+                                   .
+       end
+      when auswkz = 'LIC'then do
+           parse value CZeile with db value(crlf) ,
+                                   ts value(crlf) ,
+                                  tis value(crlf) ,
+                                  dnr value(crlf) ,
+                                  ict value(crlf) ,
+                                  icd value(crlf) ,
+                                 srba value(crlf) ,
+                                 fseq value(crlf) ,
+                                 devt value(crlf) ,
+                                 DSN  value(crlf) ,
+                                   .
+       end
+      when auswkz = 'LFIC' then do
+           parse value CZeile with db value(crlf) ,
+                                   ts value(crlf) ,
+                                  tis value(crlf) ,
+                                  dnr value(crlf) ,
+                                  ict value(crlf) ,
+                                  icd value(crlf) ,
+                                 srba value(crlf) ,
+                                 fseq value(crlf) ,
+                                 devt value(crlf) ,
+                                 DSN  value(crlf) ,
+                                   .
+
+       end
+      when auswkz = 'RO' then do
+           parse value CZeile with na value(crlf) ,
+                                   cr value(crlf) ,
+                                   .
+       end
+      when auswkz = 'LO' then do
+           parse value CZeile with lo value(crlf) ,
+                                   lk value(crlf) ,
+                                   .
+       end
+      when auswkz = 'LU' then do
+           parse value CZeile with lu value(crlf) ,
+                                   .
+       end
+      when auswkz = 'IPN' then do
+           parse value CZeile with lk value(crlf) ,
+                                   .
+       end
+      when auswkz = 'UN' then do
+           parse value CZeile with ty value(crlf) ,
+                                   ai value(crlf) ,
+                                   lk value(crlf) ,
+                                   .
+
+       end
+      when auswkz = 'DBRM' then do
+           Call Auto_Parse
+           nm  = NAME
+           pd  = PDSNAME
+           pn  = PLNAME
+           pc  = PLCREATOR
+       end
+      when auswkz = 'PERM' then do
+           parse value CZeile with ctrid value(crlf) ,
+                                     sch value(crlf) ,
+                                      nm value(crlf) ,
+                                   tbsch value(crlf) ,
+                                    tbnm value(crlf) ,
+                                   .
+       end
+      when auswkz = 'PDDL' then do
+           Call Auto_Parse
+             db = DBNAME
+             ts = TSNAME
+           objs = OBJSCHEMA
+           objn = OBJNAME
+           TY   = TSTYPE
+       end
+      when auswkz = 'BP'   then do
+           parse value CZeile with rn             value(crlf) ,
+                                   BP             value(crlf) ,
+                                   .
+       end
+      when auswkz = 'THD'  then do
+           parse value CZeile with RowNum         value(crlf) ,
+                                   Type           value(crlf) ,
+                                   NAME           value(crlf) ,
+                                   Status         value(crlf) ,
+                                   ACTIVE         value(crlf) ,
+                                   REQ            value(crlf) ,
+                                   ID             value(crlf) ,
+                                   AUTHID         value(crlf) ,
+                                   PLAN           value(crlf) ,
+                                   ASID           value(crlf) ,
+                                   TOKEN          value(crlf) ,
+                                   COORDINATOR    value(crlf) ,
+                                   RESET          value(crlf) ,
+                                   URID           value(crlf) ,
+                                   LUWID          value(crlf) ,
+                                   WORKSTATION    value(crlf) ,
+                                   USERID         value(crlf) ,
+                                   APPLICATION    value(crlf) ,
+                                   ACCOUNTING     value(crlf) ,
+                                   LOCATION_WS    value(crlf) ,
+                                   DETAIL         value(crlf) ,
+                                   .
+           Detail = Strip(DETAIL)
+           IPADDR = ""
+           LUNAME = ""
+           If Substr(Detail, 1, 4) = "V442" Then Do
+              parse value DETAIL With "V442-CRTKN=::" IPADDR " " DETAIL
+              parse value Reverse(IPADDR) with hugo "." IPADDR
+              parse value IPADDR With Port "." IPADDR
+              PORT   = Reverse(PORT  )
+              IPADDR = Reverse(IPADDR)
+              IPADDR = Space(ipaddr ".." PORT, 0)
+            End
+           Detail = Strip(DETAIL)
+           If Substr(Detail, 1, 4) = "V471" Then Do
+              LUNAME = SUBSTR(DETAIL, 6)
+              parse value Reverse(LUNAME) with hugo "." LUNAME DETAIL
+              LUNAME = Reverse(LUNAME)
+            End
+       end
+      when auswkz = 'TCO'  then do
+           parse value CZeile with NM value(crlf) ,
+                                   ID value(crlf) ,
+                                   .
+       end
+      when auswkz = 'TCOAUTH' Then do
+           parse value CZeile with ID value(crlf) ,
+                                 AUTH value(crlf) ,
+                                   .
+       end
+      when auswkz = 'TCOATTR' Then do
+           parse value CZeile with ID value(crlf) ,
+                                 NAME value(crlf) ,
+                                   .
+       end
+      when auswkz = 'LGRX' then do
+           parse value CZeile with DB value(crlf) ,
+                                   TS value(crlf) ,
+                                 dbid value(crlf) ,
+                                 psid value(crlf) ,
+                                 date value(crlf) ,
+                                 time value(crlf) ,
+                                 srba value(crlf) ,
+                                 prba value(crlf) ,
+                                 part value(crlf) ,
+                                slrsn value(crlf) ,
+                                plrsn value(crlf) ,
+                                 memb value(crlf) ,
+                                   .
+       end
+      when auswkz = 'SCA' then do
+           parse value CZeile with GTO value(crlf) ,
+                                   GTE value(crlf) ,
+                                   SCH value(crlf) ,
+                                   .
+       end
+      when auswkz = 'SC'  then do
+           parse value CZeile with SC  value(crlf) ,
+                                   .
+       end
+      when auswkz = 'VAR' then do
+           parse value CZeile with ID  value(crlf) ,
+                                   CR  value(crlf) ,
+                                   NM  value(crlf) ,
+                                   .
+       end
+      when auswkz = 'DT'  then do
+           parse value CZeile with CR  value(crlf) ,
+                                   OW  value(crlf) ,
+                                   NM  value(crlf) ,
+                                   .
+       end
+      when auswkz = 'IXC' then do
+           parse value CZeile with DBN value(crlf) ,
+                                   IXS value(crlf) ,
+                                   .
+       end
+      when auswkz = 'PRGA' then do
+           parse value CZeile with PGN value(crlf) ,
+                                   PLN value(crlf) ,
+                                   .
+       end
+      when auswkz = 'XMLS' then do
+           parse value CZeile with SID value(crlf) ,
+                                   .
+       end
+      when auswkz = 'STF'  then do
+           parse value CZeile with TY  value(crlf) ,
+                                   TC  value(crlf) ,
+                                   TN  value(crlf) ,
+                                   DB  value(crlf) ,
+                                   TS  value(crlf) ,
+                                   IC  value(crlf) ,
+                                   IN  value(crlf) ,
+                                   CO  value(crlf) ,
+                                   .
+       end
+      when auswkz = 'STP'  then do
+           parse value CZeile with TC  value(crlf) ,
+                                   TN  value(crlf) ,
+                                PROFT  value(crlf) ,
+                                   .
+       end
+      when auswkz = 'XO'   then do
+           parse value CZeile with XOID     value(crlf) ,
+                                   XOS      value(crlf) ,
+                                   XON      value(crlf) ,
+                                   XOTS     value(crlf) ,
+                                   .
+       end
+      when auswkz = 'XOC'  then do
+           parse value CZeile with XOID     value(crlf) ,
+                                   XOTS     value(crlf) ,
+                                   XOSL     value(crlf) ,
+                                   .
+       end
+      when auswkz = 'UT'   then do
+           parse value CZeile with UID       value(crlf) ,
+                                   JOBN      value(crlf) ,
+                                   AUTHID    value(crlf) ,
+                                   UTILTYPE  value(crlf) ,
+                                   UTILPHASE value(crlf) ,
+                                   DBN       value(crlf) ,
+                                   TSN       value(crlf) ,
+                                   .
+       end
+      when auswkz = 'UTIL' then do
+           parse value CZeile with Rownum    value(crlf) ,
+                                   csect     value(crlf) ,
+                                   user      value(crlf) ,
+                                   member    value(crlf) ,
+                                   uid       value(crlf) ,
+                                   .
+       end
+      when auswkz = 'DEP'  then do
+           parse value CZeile with BSCHEMA    value(crlf) ,
+                                   BNAME      value(crlf) ,
+                                   BTYPE      value(crlf) ,
+                                   BCOLNAME   value(crlf) ,
+                                   BCOLNO     value(crlf) ,
+                                   BOWNER     value(crlf) ,
+                                   BOWNERTYPE value(crlf) ,
+                                   DSCHEMA    value(crlf) ,
+                                   DNAME      value(crlf) ,
+                                   DTYPE      value(crlf) ,
+                                   DCOLNAME   value(crlf) ,
+                                   DCOLNO     value(crlf) ,
+                                   DOWNER     value(crlf) ,
+                                   DOWNERTYPE value(crlf) ,
+                                   .
+       end
+      when auswkz = 'STATS' then do
+           parse value CZeile with Statstime  value(crlf) ,
+                                   DB         value(crlf) ,
+                                   TS         value(crlf) ,
+                                   .
+       end
+      when auswkz = 'RFS'   then do
+           parse value CZeile with COLLID      value(crlf) ,
+                                   NAME        value(crlf) ,
+                                   CONTOKEN    value(crlf) ,
+                                   ENABLED     value(crlf) ,
+                                   .
+       end
+      when auswkz = 'ST' Then do
+           select
+             when EINGABE = 'DIS'   THEN DO
+                  CMDLine.0 = 0
+                  parse value CZeile with LOCATION   value(crlf) ,
+                                          COLLID     value(crlf) ,
+                                          NAME       value(crlf) ,
+                                          CONTOKEN   value(crlf) ,
+                                          SEQNO      value(crlf) ,
+                                          STMTNO     value(crlf) ,
+                                          SECTNO     value(crlf) ,
+                                          TEXT
+
+                  STMT = RXSQLFOR(Text)
+                  Call Anzeigen_daten stmt
+               End
+             otherwise nop
+            end
+           ok = Edit_temp_File(sl.)
+       end  /* END WHEN */
+      otherwise nop
+    end
+
+Select
+  when CMDLine.0 > 0 Then Do CMDLI = 1 To CMDLine.0
+       INTERPRET  CMDLine.CMDLI
+   end
+  otherwise NOP
+ End
+
+return
+
+AUFRUF_CCOMPTAB:
+  slocation = location
+  location  = ""
+  CALL CCOMPTAB SSID , ,
+                LOCATION,  ,
+                lnr,       ,
+                tabnr,     ,
+                auswkz EINGABE,   ,
+                OBJECT1 ,  ,
+                OBJECT2 ,  ,
+                TABLESPACE , ,
+                DB2_LIST_OBJ
+
+   location = Slocation
+return
+
+AUFRUF_ZOSB1210:
+  sobject1    = object1
+  sobject2    = object2
+  sobject3    = object3
+  sobject4    = object4
+  sobject5    = object5
+  stablespace = tablespace
+  sdatabase   = database
+  sstgroup    = stgroup
+  edit_sql    = ''
+  object1     = ''
+  object2     = ''
+  object3     = ''
+  object4     = ''
+  object5     = ''
+  If eingabe2 = "EDIT" Then EDIT_SQL = "Y"
+  tablespace  = ''
+  database    = ''
+  stgroup     = ''
+  tabnr       = tabnr + 1
+  CALL Fuellen_Auswahl
+  if auswahlok = 'Y' THEN Do
+     CALL ZOSB1210 SSID,      ,
+                   edit_sql,  ,
+                   LOCATION,  ,
+                   LNR,       ,
+                   tabnr,     ,
+                   DB2Vers,   ,
+                   proclib,   ,
+                   ISPFILE,   ,
+                   auswkz EINGABE,   ,
+                   OBJECT1 ,  ,
+                   OBJECT2 ,  ,
+                   OBJECT3 ,  ,
+                   OBJECT4 ,  ,
+                   OBJECT5 ,  ,
+                   TABLESPACE , ,
+                   DATABASE   , ,
+                   STGROUP    , ,
+                   DB2_LIST_OBJ
+   End
+  tabnr       = tabnr - 1
+  object1    = sobject1
+  object2    = sobject2
+  object3    = sobject3
+  object4    = sobject4
+  object5    = sobject5
+  tablespace = stablespace
+  database   = sdatabase
+  stgroup    = stgroup
+  eingabe2   = ''
+  EDIT_SQL = "N"
+
+return
+
+AUFRUF_ZOSB1910:
+
+  sobject1    = object1
+  sobject2    = object2
+  stablespace = tablespace
+  slocation   = location
+  parse value CZeile with cr value(crlf) ,
+                          nm value(crlf) .
+  object1     = strip(cr) || '.' || strip(nm)
+  object2     = ''
+  tablespace  = ''
+  EDIT = 'YES'
+  if command = "SQL" Then object1 = ""
+  Stmt = ZOSB1910(SSID,     ,
+                 LOCATION,  ,
+                 EINGABE,   ,
+                 OBJECT1,   ,
+                 EDIT,      ,
+                 LNR ,      ,
+                 tabnr,     ,
+                 ISPFILE )
+  object1    = sobject1
+  object2    = sobject2
+  location   = slocation
+  tablespace = stablespace
+ return
+
+AUFRUF_ZOSB1915:
+
+  EDIT = 'YES'
+  TABLE   = COLTAB
+
+  Stmt = ZOSB1915(SSID,     ,
+                 LOCATION,  ,
+                 AUSWKZ,    ,
+                 lnr,       ,
+                 tabnr   ,  ,
+                 ISPFILE ,  ,
+                 DO_ALL,    ,
+                 EINGABE,   ,
+                 EINGABE2,  ,
+                 STATEMENT, ,
+                 OBJECT1,   ,
+                 OBJECT2,   ,
+                 OBJECT3,   ,
+                 OBJECT4,   ,
+                 OBJECT5,   ,
+                 EDIT,      ,
+                 Object_List,,
+                 DB2Vers,   ,
+                 proclib,   ,
+                 curnr      )
+
+
+STATEMENT = ""
+
+ return
+
+AUFRUF_ZOSB1930:
+
+  EDIT = 'YES'
+  TABLE   = COLTAB
+
+  Stmt = ZOSB1930(SSID,     ,
+                 LOCATION,  ,
+                 AUSWKZ,    ,
+                 lnr,       ,
+                 tabnr   ,  ,
+                 DO_ALL,    ,
+                 EINGABE,   ,
+                 EINGABE2,  ,
+                 STATEMENT, ,
+                 OBJECT1,   ,
+                 OBJECT2,   ,
+                 OBJECT3,   ,
+                 OBJECT4,   ,
+                 OBJECT5,   ,
+                 EDIT,      ,
+                 Object_List,,
+                 DB2Vers,   ,
+                 proclib,   ,
+                 ISPFILE    )
+
+
+STATEMENT = ""
+
+ return
+
+AUFRUF_ZOSB1920:
+
+  auswahl = strip(auswahl)
+  AwOk = ZOSB1900("ZOSB1"    ,,
+                  eingabe    ,,
+                  auswahl    ,,
+                  lnr    )
+  If AwOk = '' Then Return 8
+
+  sobject1    = object1
+  sobject2    = object2
+  sobject3    = object3
+  sobject4    = object4
+  sobject5    = object5
+  stablespace = tablespace
+  sdatabase   = database
+
+  LCMD = eingabe
+  Stmt = ZOSB1920(SSID,     ,
+                 LOCATION,  ,
+                 auswkz,    ,
+                 OBJECT1,   ,
+                 OBJECT2,   ,
+                 OBJECT3,   ,
+                 OBJECT4,   ,
+                 OBJECT5,   ,
+                 TABLESPACE,,
+                 DATABASE,,
+                 LCMD,,
+                 LNR,       ,
+                 ALLOCMODE, ,
+                 ISPFILE   )
+  object1    = sobject1
+  object2    = sobject2
+  object3    = sobject3
+  object4    = sobject4
+  object5    = sobject5
+  tablespace = stablespace
+  database   = sdatabase
+return
+
+AUFRUF_ZOSB1925:
+
+  sobject1    = object1
+  sobject2    = object2
+  stablespace = tablespace
+
+  EDIT = 'YES'
+
+  Stmt = ZOSB1925(SSID,     ,
+                 LOCATION,  ,
+                 AUSWKZ,    ,
+                 lnr,       ,
+                 tabnr   ,  ,
+                 ISPFILE ,  ,
+                 DO_ALL,    ,
+                 EINGABE,   ,
+                 EINGABE2,  ,
+                 STATEMENT, ,
+                 OBJECT1,   ,
+                 OBJECT2,   ,
+                 OBJECT3,   ,
+                 OBJECT4,   ,
+                 OBJECT5,   ,
+                 EDIT,      ,
+                 Object_List,,
+                 DB2Vers,   ,
+                 proclib,   ,
+                 curnr      )
+
+  object1    = sobject1
+  object2    = sobject2
+  tablespace = stablespace
+
+return
+
+AUFRUF_ZOSB1935:
+
+  EDIT = 'YES'
+
+  Stmt = ZOSB1935(SSID,     ,
+                 LOCATION,  ,
+                 AUSWKZ,    ,
+                 lnr,       ,
+                 tabnr   ,  ,
+                 DO_ALL,    ,
+                 EINGABE,   ,
+                 EINGABE2,  ,
+                 STATEMENT, ,
+                 OBJECT1,   ,
+                 OBJECT2,   ,
+                 OBJECT3,   ,
+                 OBJECT4,   ,
+                 OBJECT5,   ,
+                 EDIT,      ,
+                 Object_List,,
+                 DB2Vers,   ,
+                 proclib,   ,
+                 curnr      )
+
+return
+
+AUFRUF_ZOSB1940:
+
+  EDIT = 'YES'
+
+  Stmt = ZOSB1940(SSID,     ,
+                 LOCATION,  ,
+                 AUSWKZ,    ,
+                 lnr,       ,
+                 tabnr   ,  ,
+                 ISPFILE ,  ,
+                 DO_ALL,    ,
+                 EINGABE,   ,
+                 EINGABE2,  ,
+                 STATEMENT, ,
+                 OBJECT1,   ,
+                 OBJECT2,   ,
+                 OBJECT3,   ,
+                 OBJECT4,   ,
+                 OBJECT5,   ,
+                 EDIT,      ,
+                 Object_List,,
+                 DB2Vers,   ,
+                 proclib    )
+
+
+STATEMENT = ""
+
+ return
+
+find_command: Procedure
+
+ Z1 = ARG(1)    /* GEAENDERTE ZEILE */
+ Z2 = ARG(2)    /* ORIGINALE  ZEILE */
+ cmd = ""
+ do While Z1 /= Z2
+    cmd = cmd || substr(z1, 1, 1)
+    z1  = substr(z1, 2)
+    z2  = substr(z2, 2)
+    if z1 = z2 then leave
+    if length(z2) = 0 Then Leave
+    if Z2 = ' ' Then Leave
+  end
+  cmd = strip(translate(cmd))
+
+Return cmd
+
+Edit_Table:
+Drop edtable.
+edtable.0 = 0
+address ispexec 'TBTOP   'LUWTABLE
+address ispexec 'TBSKIP  'LUWTABLE
+do while rc = 0
+  edtable.0 = edtable.0 + 1
+  edi       = edtable.0
+  edtable.edi = LZeile
+  address ispexec 'TBSKIP  'LUWTABLE
+ End
+address ispexec 'TBCLOSE 'LUWTABLE
+Ok = Edit_temp_File(edtable.)
+
+ return 0
+
+Edit_temp_File:
+/* ALLOCATE AND OPEN TEMP DATASET      */
+   OUTDSN = ZOSB1900("ZOSB1","DSNAME", "LISTE", LNR)
+   LRECL   = RECLEN
+   IF LISTDSI(OUTDSN) = 0 THEN ADDRESS "TSO"   "DELETE "OUTDSN
+   alloca = "ALLOC FI(TMP1) DA("OUTDSN") NEW CATALOG " ,
+            "   SPACE("TRACKS","TRACKS") TRACKS REUSE ",
+            "   LRECL("lrecl") UNIT(SYSDA)"
+   alloca = space(alloca, 1)
+   Call BPXWDYN(ALLOCA)
+   ADDRESS TSO "EXECIO * DISKW TMP1 (STEM "Arg(1)" FINIS"
+   ADDRESS ISPEXEC "EDIT DATASET("OUTDSN") PANEL(ISREFR01)"
+   Call BPXWDYN("FREE FI(TMP1) DELETE")
+
+/*
+   ADDRESS "TSO" "ALLOC F(TMP1) DA("OUTDSN") NEW CATALOG ,
+            SPACE("TRACKS","TRACKS") TRACKS REUSE,
+            LRECL("lrecl") UNIT(SYSDA)"
+   ADDRESS TSO "EXECIO * DISKW TMP1 (STEM "Arg(1)" FINIS"
+   ADDRESS ISPEXEC "EDIT DATASET("OUTDSN") PANEL(ISREFR01)"
+   ADDRESS TSO "FREE FILE(TMP1) NOHOLD"
+*/
+
+   IF LISTDSI(OUTDSN) = 0 THEN ADDRESS "TSO"   "DELETE "OUTDSN
+ return 0
+
+Get_Command:
+
+CommandFound = 'N'
+Drop CMDLine.
+CMDLine.0 = 0
+CMDLine.1 = ""
+CMDSTART  = 1
+WP        = wordpos(auswkz, CONFIGINDEX)
+IF WP = 0 Then  Return  /* NIX GEFUNDEN */
+CMDSTART = Word(CONFIGINDEX, WP + 1)
+
+Do Confi = CMDSTART to Config.0
+   If Strip(Config.Confi)        = ''  Then Iterate
+   If Substr(Config.Confi, 1, 1) = '*' Then Iterate
+
+   If Word(Config.Confi, 1) = auswkz ,
+    & Word(Config.Confi, 2) = Eingabe Then Do
+      CommandFound  = 'Y'
+      /*
+      CMDLine.0     = CMDLine.0 + 1
+      CMDLI         = CMDLine.0
+      CMDLine.CMDLI = Strip(Subword(Config.Confi, 3))
+      */
+      CMDLine.0  = 1
+      CMDLine.1  = CMDLine.1 || Strip(Subword(Config.Confi, 3)) ";"
+      Iterate
+    End
+
+   If Word(Config.Confi, 1) <> auswkz Then Leave
+
+   If  CommandFound = 'Y' Then Do
+       Leave
+    End
+ End
+
+Return
+
+Get_CFG_FILE:
+PARSE SOURCE SRC.1  , /* ENVIRONMENT  (TSO)            */
+             SRC.2  , /* AUFRUF ALS (COMMAND)          */
+             SRC.3  , /* Program NAME (LUW97000)       */
+             SRC.4  , /* SYS00186 (TEMP FILE)          */
+             SRC.5  , /* AUFRUF AUS LIB (X.X.CLISTUDB) */
+             SRC.6  , /* ?                             */
+             SRC.7  , /* TSO                           */
+             SRC.8  , /* ISPF                          */
+             SRC.9  , /* ?                             */
+/*  CFG FILE                            */
+mem     = "#STEUZB1"
+CFGFILE = Strip(sysdsname) || "(" || mem || ")"
+CFGFILE = Strip(proclib) || "(" || mem || ")"
+ADDRESS TSO "FREE FILE(CFGF) NOHOLD"
+ADDRESS TSO "ALLOC F(CFGF) DATASET('"CFGFILE"') SHR"
+ADDRESS TSO "EXECIO * DISKR CFGF (STEM CONFIG. FINIS"
+ADDRESS TSO "EXECIO 0 DISKR CFGF (FINIS"
+ADDRESS TSO "FREE FILE(CFGF) NOHOLD"
+
+CONFIGINDEX = '' /* KLEINEN INDEX AUFBAUEN */
+OLD = ''
+Do I = 1 TO CONFIG.0
+   If Strip(Config.i)        = ''  Then Iterate
+   If Substr(Config.I, 1, 1) = '*' Then Iterate
+   If Word(CONFIG.i, 1) <> OLD Then Do
+      CONFIGINDEX = CONFIGINDEX Word(CONFIG.i, 1) I
+      OLD         = Word(CONFIG.i, 1)
+    End
+ End
+
+return 0
+
+Anzeigen_daten:
+
+DDLTEXT = ARG(1)
+
+DROP LISTE.
+LISTE.0 = 0
+DROP SL.
+SL.0    = 0
+DO FOREVER
+   LISTE.0 = LISTE.0 + 1
+   IND = LISTE.0
+   PARSE VALUE DDLTEXT WITH LISTE.IND '-NR' REST
+   IF REST = '' THEN LEAVE
+   DDLTEXT = REST
+ END
+
+sqlterm = ";"
+
+DO IND = 1 TO LISTE.0
+   IF STRIP(LISTE.IND) = '' THEN ITERATE
+   DDLTEXT = LISTE.IND
+   DO FOREVER
+      PARSE VALUE DDLTEXT WITH ZEILE  '-NL' REST
+      DDLTEXT = REST
+      if length(zeile) = 0 Then Zeile = "   "
+      sl.0 = sl.0 + 1
+      sli = sl.0
+      sl.sli = ZEILE
+      If substr(Strip(sl.sli), 1, 10) = "--SQLTERM=" Then do
+         Parse value(sl.sli) with test "=" sqlterm .
+         sqlterm = Strip(Sqlterm)
+       end
+      IF REST = '' THEN do
+         If Strip(sl.sli) <> ""  ,
+          & substr(Strip(sl.sli), 1, 10) <> "--SQLTERM=" Then do
+            sl.sli = sl.sli"   " || sqlterm
+          End
+         leave
+       end
+    END
+ END
+
+max_blanks = 6
+blank_such = LEFT(' ',max_blanks,' ')
+
+Do i = 1 to SL.0
+   blz = 0
+   drop azline
+   azline = ""
+   sl.i = Strip( sl.i, 'T', ' ' )
+   if sl.i = "" Then SL.i = " "
+   IF POS(blank_such, sl.i) < 1 THEN Iterate
+   Do bli = 1 to length(sl.i)
+      if substr(sl.i, bli, 1) = " " Then Do
+         Blz = Blz + 1
+       End
+      Else Do
+         Blz = 0
+       End
+      if blz > max_blanks Then Iterate
+      azline = azline || substr(sl.i, bli, 1)
+    End
+   sl.i = azline
+ End
+
+DDLTEXT = ""
+DROP DDLTEXT
+
+return
+
+ISPF_TAB_INFO:
+tblname = arg(1)
+
+        /* Phase 1 - query the table, capture variable names */
+address ispexec "TBOPEN " tblname
+Address ISPEXEC "TBQUERY" tblname "KEYS(KEYS) NAMES(NAMES)",
+                                  "KEYNUM(KEYNUM) NAMENUM(NAMENUM)"
+
+keys  = strip(keys,l,'(')  ;
+keys  = strip(keys,t,')')
+names = strip(names,l,'(') ;
+names = strip(names,t,')')
+varnum = keynum + namenum
+allvars = keys names   /* chain keys and names together */
+
+drop col.
+col.0 = 0
+
+do col = 1 to varnum /* arrays of column headings, widths*/
+   name.col = word(allvars,col)     /* name of the variable */
+   hdw.col  = length(name.col)             /* width of name */
+   dwid.col = 0                  /* max width of data found */
+   col.0 = col.0 + 1
+end
+
+    /* Phase 2 - Review the table for data displayed widths --
+       currently fixed to max out at zscreenw-1 (usually 79) */
+Address ISPEXEC "VGET ZSCREENW"
+maxwid = zscreenw - 1     /* need one for attribute byte */
+Address ISPEXEC "TBTOP" tblname
+tbrc = 0
+do while tbrc = 0
+   Address ISPEXEC "TBSKIP" tblname
+   tbrc = rc
+   if tbrc = 0 then do col = 1 to varnum
+      if length(value(name.col)) > dwid.col then Do
+         dwid.col = length(value(name.col))
+    end
+   end
+end
+
+address ispexec "TBCLOSE" tblname
+
+return 0
+
+Auto_Parse:
+/* Zuweisen der CZeile zu den Column Names */
+
+address ispexec "TBOPEN " TBCOL
+Address ISPEXEC "TBTOP  " TBCOL
+Address ISPEXEC "TBSKIP" TBCOL
+
+PZeile = CZeile
+do while rc = 0
+   parse value PZeile with PVal "0a0d"x  PZeile
+   CLName = Translate(CLNAME, '_', '-')
+   PVAL   = Translate(PVAL, ' ', '"')
+/* interpret STRIP(CLNAME) ' = "'Strip(PVAL)'"' */
+   interpret STRIP(CLNAME) " = Strip(PVAL)"
+   Address ISPEXEC "TBSKIP" TBCOL
+end
+
+address ispexec "TBCLOSE" TBCOL
+
+return 0
+
+error: failure: syntax: halt: novalue:
+msg = Errortext(rc)
+Say "RC="RC msg
+say "Fehler in Zeile" sigl
+say SOURCELINE(sigl)
+return
